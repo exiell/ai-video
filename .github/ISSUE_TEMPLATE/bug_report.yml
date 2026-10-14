@@ -1,0 +1,96 @@
+name: 报一个问题
+description: 用的时候发现哪里不对、哪里报错、哪里看不懂
+title: '[问题] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        谢谢反馈。下面的信息能帮我更快定位问题——尤其是**原始报错文本**，
+        它比「报错了」有用一百倍。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么
+      description: 你做了什么操作，然后看到了什么。
+      placeholder: |
+        我在「分镜表」页点了「生成角色卡」，弹出一个红色提示说……
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 你本来期待发生什么
+      placeholder: |
+        我期待它生成三张角色定妆图。
+    validations:
+      required: true
+
+  - type: textarea
+    id: error
+    attributes:
+      label: 原始报错信息（如果有）
+      description: |
+        **请直接粘贴完整文本，不要只写「报错了」。**
+        界面上如果有折叠的「查看原始信息」，请把它展开后一起复制过来。
+        如果有浏览器控制台的报错（按 F12 → Console），也一并贴上。
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: 大概出在哪一块
+      options:
+        - 引导向导 / 写故事
+        - 角色卡
+        - 场景卡
+        - 分镜表
+        - 出图（角色 / 场景 / 关键帧）
+        - 穿帮检查 / 自动修复
+        - 导出
+        - 设置（API Key / 模型选择）
+        - 其他 / 不确定
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - 其他
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: 浏览器
+      description: 例如「Chrome 141」「Edge 141」「Safari 19」
+      placeholder: Chrome 141
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 你用的模型厂商与模型（如果和出图/生成有关）
+      description: 例如「通义千问 qwen-image-2.0-pro」「DeepSeek deepseek-chat」
+      placeholder: 通义千问 qwen-image-2.0-pro
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 还有什么想补充的
+      description: 截图、录屏链接、你试过哪些办法……都可以放这里。
+    validations:
+      required: false

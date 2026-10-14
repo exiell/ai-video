@@ -1,0 +1,56 @@
+name: 提一个建议
+description: 觉得某个功能该有、某个流程别扭、某处文案看不懂
+title: '[建议] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        欢迎提建议。**不用先想好怎么实现**——先说清你卡在哪，实现方式可以一起讨论。
+
+        另外：「我看不懂这个提示」本身也是有效建议。这个工具面向的是不懂技术的创作者，
+        看不懂是文案的问题，不是你的问题。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你遇到的麻烦是什么
+      description: 描述**场景**，而不是直接说方案。这样更容易找到更好的解法。
+      placeholder: |
+        我写到第 5 个镜头的时候忘了前面角色的衣服是什么颜色，
+        得翻回去一页页找，很打断思路。
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: 你希望它怎么解决（可选）
+      placeholder: |
+        能不能在分镜表页旁边固定显示当前角色的外观摘要？
+    validations:
+      required: false
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: 这更像是
+      options:
+        - 新功能
+        - 现有流程改顺一点
+        - 文案说不清楚
+        - 界面不好用
+        - 性能（卡顿、慢）
+        - 其他
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+
+        **关于「加功能」的一点说明**：这个项目的护城河是**轻**，不是全。
+        所以有些建议会被婉拒，理由通常是「加了它就不是新手工具了」。
+
+        这不是不重视你的建议——如果你觉得被拒得没道理，欢迎继续讨论。

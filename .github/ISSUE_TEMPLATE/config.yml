@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 先看看说明书
+    url: https://github.com/exiell/ai-video#readme
+    about: README 里有功能说明、启动方式和「它明确不做什么」——有些问题在那里已经答了。
+
+  - name: 想改代码？先看贡献指南
+    url: https://github.com/exiell/ai-video/blob/main/CONTRIBUTING.md
+    about: 怎么提 PR、这个项目的规矩、以及几个容易踩的坑。
