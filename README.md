@@ -99,13 +99,37 @@ AniGuide 是一个**免注册、纯网页**的工具。它不生成视频，也�
 
 ## 快速开始
 
-### 环境要求
+### 方式一：一键启动（推荐）
 
-- **Node.js 20+**（开发用的是 v24.18.0）
-- **pnpm**（推荐；`npm` 也能装，但本项目按 pnpm 调过配置）
+**Windows** —— 双击项目根目录的 **`start.cmd`**
+
+**macOS / Linux** —— 在项目目录里执行：
 
 ```bash
-node -v            # 确认 >= 20
+chmod +x start.sh    # 只需一次
+./start.sh
+```
+
+脚本会自动完成：找 Node.js（装在 D 盘也能找到）→ 确保 pnpm（没有就用 corepack 或 npm 装）→ 按需安装依赖 → 起开发服务器并打开浏览器。
+
+**它不只是省几条命令**，而是把新手最容易卡住的地方都处理了：
+
+| 情况 | 脚本的行为 |
+|---|---|
+| 没装 Node.js | 给出下载地址，而不是抛一个看不懂的报错 |
+| Node 版本太低 | 明确说「需要 20 或更高」，并说清怎么升级 |
+| 没有 pnpm | 自动用 corepack 或 npm 装上，装不上才让你手动来 |
+| 依赖已装过 | 跳过安装（比对 lockfile 哈希），不白等一分钟 |
+| 端口被占用 | 提示可能已经开着一个了，问你要不要直接打开 |
+| 项目在 OneDrive 等同步盘 | 提醒可能会崩（报 EBUSY），建议换目录 |
+| 某一步失败 | **说清是哪一步、什么原因、下一步怎么办** |
+
+> 唯一的前提是装了 Node.js。这一步没法自动做——静默安装软件是不礼貌的。
+
+### 方式二：手动
+
+```bash
+node -v            # 确认 >= 20（不够就去 https://nodejs.org/zh-cn）
 corepack enable    # 如果 pnpm 不是命令，用 Node 自带的 corepack 启用
 pnpm install
 pnpm dev           # → http://localhost:5173/
@@ -121,6 +145,7 @@ pnpm dev           # → http://localhost:5173/
 ### 常用命令
 
 ```bash
+./start.sh        # 一键启动（macOS / Linux；Windows 双击 start.cmd）
 pnpm dev          # 开发服务器
 pnpm test         # 跑测试（590 条）
 pnpm test:watch   # 测试监听模式

@@ -24,3 +24,6 @@ pnpm-debug.log*
 
 # 本地打包交接说明（不含在公开仓库里）
 打包含说明.md
+
+# 一键启动器的依赖安装标记（记录本机状态，不该入库）
+node_modules/.aniguide-install-stamp
