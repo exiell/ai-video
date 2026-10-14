@@ -1,0 +1,15 @@
+# pnpm 11 的依赖构建脚本白名单。
+#
+# 为什么需要这个文件：pnpm 11 默认拦截依赖的安装脚本，并在 `pnpm install` 结束后
+# 以非零码退出（ERR_PNPM_IGNORED_BUILDS），本地安装和 CI 都会失败。
+#
+# 键名是 allowBuilds —— pnpm 11 从 onlyBuiltDependencies 改名而来，
+# 写在 .npmrc 里已经不起作用。值必须是布尔值 true；
+# 如果保留 pnpm 自动生成的占位字符串 "set this to true or false"，报错会继续。
+#
+# 为什么放行 esbuild 是安全的：它的原生二进制由 optional dependency
+# （@esbuild/win32-x64 等）提供，并不依赖 postinstall 脚本。
+# 放行只是让安装流程干净退出，不引入额外的供应链风险。
+
+allowBuilds:
+  esbuild: true

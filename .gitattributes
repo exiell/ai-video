@@ -1,0 +1,40 @@
+# 统一换行符，避免 Windows / macOS / Linux 协作时整个仓库出现「全文件改动」
+#
+# 背景：Git 在 Windows 上默认会把 LF 转成 CRLF（core.autocrlf=true）。
+# 如果仓库里没有 .gitattributes，同一个人在两台机器上提交就会产生
+# 「每一行都变了」的假 diff，把真正的改动淹没掉。
+#
+# 策略：**仓库里一律存 LF**，检出时按平台处理。
+
+# 默认：所有文本文件按 LF 归一化
+* text=auto eol=lf
+
+# 明确指定文本类型（这几类必须走归一化）
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.json  text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+
+# 二进制文件：不要碰，也不要在 diff 里试图显示
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.zip   binary
+*.woff  binary
+*.woff2 binary
+
+# pnpm 的 lockfile 由工具生成，参与 diff 但没有语义可读性
+pnpm-lock.yaml -diff linguist-generated=true
+
+# 让 GitHub 的语言统计正确：把 CSS 与文档排除在「源码」之外
+src/styles/*.css linguist-vendored=false
+*.md linguist-documentation

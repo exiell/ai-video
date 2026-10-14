@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AniGuide · 跨域实测工具</title>
+    <style>
+      :root {
+        --bg: #0f1115;
+        --card: #1c2029;
+        --border: #2b313d;
+        --text: #e8eaf0;
+        --dim: #a2a9b8;
+        --faint: #6f7787;
+        --ok: #5fd08a;
+        --err: #ff6b6b;
+        --warn: #ffb454;
+        --accent: #5b9dff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 32px 24px 80px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        font-size: 14px;
+        line-height: 1.65;
+      }
+      .wrap { max-width: 860px; margin: 0 auto; }
+      h1 { font-size: 21px; margin: 0 0 6px; }
+      .sub { color: var(--dim); font-size: 13px; margin: 0 0 22px; }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+      }
+      h2 { font-size: 15px; margin: 0 0 10px; }
+      label { display: block; margin-bottom: 12px; }
+      label > span { display: block; font-size: 12px; color: var(--dim); margin-bottom: 4px; }
+      input[type='text'], input[type='password'] {
+        width: 100%;
+        background: var(--bg);
+        color: var(--text);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 7px 10px;
+        font-size: 13px;
+        font-family: inherit;
+      }
+      button {
+        background: #2f5f9e;
+        color: #fff;
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: not-allowed; }
+      .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+      pre {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.6;
+        overflow-x: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 8px 0 0;
+        font-family: SFMono-Regular, Consolas, monospace;
+      }
+      .result { border-left: 3px solid var(--border); padding-left: 12px; margin-top: 14px; }
+      .result.ok { border-left-color: var(--ok); }
+      .result.err { border-left-color: var(--err); }
+      .result.warn { border-left-color: var(--warn); }
+      .badge {
+        display: inline-block;
+        font-size: 11px;
+        padding: 1px 8px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        color: var(--dim);
+        margin-left: 8px;
+      }
+      .badge.ok { color: var(--ok); border-color: #29503a; }
+      .badge.err { color: var(--err); border-color: #5a2c2c; }
+      .badge.warn { color: var(--warn); border-color: #5a4629; }
+      .title { font-weight: 600; font-size: 13.5px; }
+      .advice { font-size: 12.5px; color: var(--dim); margin-top: 4px; }
+      .note { font-size: 12.5px; color: var(--faint); }
+      ol { font-size: 13px; color: var(--dim); padding-left: 20px; }
+      li { margin-bottom: 4px; }
+      a { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>跨域实测工具</h1>
+      <p class="sub">
+        它只做一件事：在**你的浏览器里**发几个真实请求，把「浏览器能不能直连这几家模型厂商」这件事
+        问清楚。结论直接决定 AniGuide 要不要引入一个转发代理。
+      </p>
+
+      <div class="card">
+        <h2>先说结论：这两家已经实测确认可以直连</h2>
+        <p class="note" style="margin: 0 0 10px">
+          在写这个页面之前，已经用服务端响应头做过一次实测（复现方式：<code>node scripts/cors-probe.mjs</code>）：
+        </p>
+        <table style="width: 100%; border-collapse: collapse; font-size: 12.5px">
+          <thead>
+            <tr style="color: var(--faint); text-align: left">
+              <th style="padding: 4px 8px 4px 0">接口</th>
+              <th style="padding: 4px 8px">预检</th>
+              <th style="padding: 4px 8px">allow-origin</th>
+              <th style="padding: 4px 0">实际请求</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="padding: 4px 8px 4px 0">DeepSeek 对话</td>
+              <td style="padding: 4px 8px">200</td>
+              <td style="padding: 4px 8px"><code>回显 Origin</code></td>
+              <td style="padding: 4px 0">401</td>
+            </tr>
+            <tr>
+              <td style="padding: 4px 8px 4px 0">硅基流动 对话 / 文生图</td>
+              <td style="padding: 4px 8px">204</td>
+              <td style="padding: 4px 8px"><code>*</code></td>
+              <td style="padding: 4px 0">401</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="note" style="margin: 10px 0 0">
+          401 反而是好消息：它证明请求<b>真的到达了服务器</b>并把业务错误码返回来了
+          （<code>Token is invalid</code> / <code>Authentication Fails</code>），
+          不是被拦在网络层。既然响应带了允许跨域的头，浏览器就会放行。
+          <br /><br />
+          <b>所以：跨域这一关已经过了，AniGuide 不需要代理。</b>
+          这个页面现在的用处变成了第二步——用你自己的 Key 验证「能不能成功返回内容」。
+        </p>
+      </div>
+
+      <div class="card">
+        <h2>为什么这件事仍然值得你在浏览器里再跑一次</h2>
+        <p class="note" style="margin: 0">
+          响应头是**服务端**说的话，跨域判定规则是公开确定的，所以那份证据已经很硬。
+          但仍有两点只有在浏览器里才能确认：
+        </p>
+        <ol>
+          <li>你的网络环境有没有额外的拦截（公司代理、防火墙、运营商）</li>
+          <li>带上真实 Key 之后，接口能不能真的返回内容——也就是余额、权限、模型名是否都对</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>填 Key（可选）</h2>
+        <label>
+          <span>DeepSeek API Key（不填则只测跨域，不测鉴权）</span>
+          <input id="deepseek-key" type="password" placeholder="sk-..." autocomplete="off" />
+        </label>
+        <label>
+          <span>硅基流动 API Key（不填则只测跨域，不测鉴权）</span>
+          <input id="siliconflow-key" type="password" placeholder="sk-..." autocomplete="off" />
+        </label>
+        <div class="row">
+          <button id="run" type="button">开始实测</button>
+          <span class="note" id="status"></span>
+        </div>
+        <p class="note" style="margin-top: 12px">
+          ⚠️ Key 只留在本页面的输入框里，<b>不写入任何存储、不发往除了厂商之外的任何地址</b>。
+          关闭页面即消失。测完请关掉这个页面。
+        </p>
+      </div>
+
+      <div id="results"></div>
+
+      <div class="card">
+        <h2>结果怎么看</h2>
+        <ol>
+          <li>
+            <b>HTTP 200 拿到了模型回复</b> → 浏览器可以直连，AniGuide 用直连模式即可，不需要代理。
+          </li>
+          <li>
+            <b>被跨域挡住（CORS）</b> → 这家厂商没给浏览器开放接口。两条路：换一家可以直连的，
+            或者给 AniGuide 配一个转发代理。
+          </li>
+          <li>
+            <b>401 / 403 / 402</b> → 跨域是通的，问题出在 Key 或余额上。这其实是好消息：
+            说明直连可行。
+          </li>
+          <li>
+            <b>没填 Key 时的结果</b> → 看状态码就够了。返回 401 说明请求发出去了（跨域通过）；
+            如果连状态码都没有、直接报 Failed to fetch，那就是被跨域挡了。
+          </li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <h2>测完怎么用这个结论</h2>
+        <p class="note" style="margin: 0 0 8px">
+          打开 AniGuide → 设置 → 模型接入：
+        </p>
+        <ol>
+          <li>本来就确认可直连，所以<b>「代理地址」留空即可</b></li>
+          <li>把 Key 填进去，点「测试连接」——它区分「跨域被拦 / 密钥无效 / 余额不足 / 限流」并给出对应做法</li>
+          <li>万一你所在网络环境真的连不上，再填代理地址。网关会自动切换传输方式，业务代码零改动</li>
+        </ol>
+      </div>
+    </div>
+
+    <script type="module">
+      const PROBES = [
+        {
+          id: 'deepseek',
+          name: 'DeepSeek · 对话接口',
+          endpoint: 'https://api.deepseek.com/chat/completions',
+          keyInput: 'deepseek-key',
+          body: {
+            model: 'deepseek-chat',
+            messages: [{ role: 'user', content: '回复两个字：可以' }],
+            max_tokens: 16,
+          },
+        },
+        {
+          id: 'siliconflow-chat',
+          name: '硅基流动 · 对话接口',
+          endpoint: 'https://api.siliconflow.cn/v1/chat/completions',
+          keyInput: 'siliconflow-key',
+          body: {
+            model: 'Qwen/Qwen2.5-7B-Instruct',
+            messages: [{ role: 'user', content: '回复两个字：可以' }],
+            max_tokens: 16,
+          },
+        },
+        {
+          id: 'siliconflow-t2i',
+          name: '硅基流动 · 文生图接口',
+          endpoint: 'https://api.siliconflow.cn/v1/images/generations',
+          keyInput: 'siliconflow-key',
+          body: {
+            model: 'Kwai-Kolors/Kolors',
+            prompt: 'a simple red circle on white background',
+            batch_size: 1,
+          },
+        },
+      ];
+
+      const resultsEl = document.getElementById('results');
+      const runBtn = document.getElementById('run');
+      const statusEl = document.getElementById('status');
+
+      function el(tag, cls, text) {
+        const node = document.createElement(tag);
+        if (cls) node.className = cls;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function renderResult(probe, outcome) {
+        const { status, ok, via, elapsedMs, category, advice, body } = outcome;
+        const box = el('div', 'card');
+        const head = el('div', 'row');
+        head.appendChild(el('span', 'title', probe.name));
+        head.appendChild(
+          el('span', `badge ${ok ? 'ok' : category === 'cors' ? 'err' : 'warn'}`, ok ? '直连可行' : category),
+        );
+        if (status !== undefined) head.appendChild(el('span', 'badge', `HTTP ${status}`));
+        head.appendChild(el('span', 'badge', `${elapsedMs}ms`));
+        head.appendChild(el('span', 'badge', via));
+        box.appendChild(head);
+        box.appendChild(el('div', 'advice', advice));
+        if (body) {
+          const pre = el('pre');
+          pre.textContent = body.slice(0, 800);
+          box.appendChild(pre);
+        }
+        const url = el('div', 'note');
+        url.style.marginTop = '8px';
+        url.textContent = probe.endpoint;
+        box.appendChild(url);
+        resultsEl.appendChild(box);
+      }
+
+      async function probeOne(probe) {
+        const keyEl = document.getElementById(probe.keyInput);
+        const apiKey = keyEl ? keyEl.value.trim() : '';
+        const started = performance.now();
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+        try {
+          const response = await fetch(probe.endpoint, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(probe.body),
+          });
+          const text = await response.text();
+          const elapsedMs = Math.round(performance.now() - started);
+
+          if (response.ok) {
+            return {
+              status: response.status,
+              ok: true,
+              via: apiKey ? '直连 + 鉴权通过' : '直连（未带 Key）',
+              elapsedMs,
+              category: 'ok',
+              advice: apiKey
+                ? '浏览器可以直连这家厂商，而且你的 Key 有效。AniGuide 保持直连模式即可，不需要代理。'
+                : '浏览器可以直连，但你没填 Key，所以没验证鉴权。填上 Key 再测一次可确认。',
+              body: text,
+            };
+          }
+
+          const category =
+            response.status === 401 ? 'auth' : response.status === 404 ? 'not-found' : 'http';
+          const advice =
+            response.status === 401
+              ? '请求成功发出去了，说明**跨域是通的**。401 只是说 Key 无效或没填。这其实是好消息：直连可行。'
+              : response.status === 403 || response.status === 402
+                ? '请求发出去了，跨域通过。403 / 402 通常是权限或余额问题，去厂商控制台看一下。'
+                : `请求发出去了，跨域通过，但厂商返回了 ${response.status}。看下面的原始返回。`;
+          return { status: response.status, ok: false, via: '直连', elapsedMs, category, advice, body: text };
+        } catch (error) {
+          const elapsedMs = Math.round(performance.now() - started);
+          return {
+            status: undefined,
+            ok: false,
+            via: '直连',
+            elapsedMs,
+            category: 'CORS / 网络',
+            advice:
+              '请求根本没发出去。最可能是被浏览器的跨域策略挡住了（也可能是断网）。' +
+              '这一项如果不通，AniGuide 就必须依赖转发代理，或者换一家厂商。原始错误：' +
+              (error && error.message ? error.message : String(error)),
+            body: '',
+          };
+        }
+      }
+
+      runBtn.addEventListener('click', async () => {
+        resultsEl.innerHTML = '';
+        runBtn.disabled = true;
+        for (const probe of PROBES) {
+          statusEl.textContent = `正在测：${probe.name}…`;
+          const outcome = await probeOne(probe);
+          renderResult(probe, outcome);
+          statusEl.textContent = '';
+        }
+        runBtn.disabled = false;
+        const summary = el('div', 'card');
+        summary.appendChild(el('h2', undefined, '实测完成'));
+        summary.appendChild(
+          el(
+            'p',
+            'note',
+            '把上面的结论填进 AniGuide 的设置页。全部「直连可行」→ 代理地址留空；任何一项被 CORS 挡住 → 需要填代理地址。',
+          ),
+        );
+        resultsEl.appendChild(summary);
+      });
+    </script>
+  </body>
+</html>
