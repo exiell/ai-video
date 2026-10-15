@@ -543,31 +543,37 @@ table.simple th {
 
 /* ---------- 对话式改稿侧栏 ---------- */
 
+/*
+  对话栏整体：**横向 flex**（一条窄的切换条 + 正文）。
+
+  为什么不用「面板 + 绝对定位的按钮」：
+  第一版就是这么写的，按钮放在 `left: -30px`（面板外），而面板
+  `overflow: hidden` —— **展开按钮被裁掉，用户没有收起入口**，
+  只能刷新页面。而收起时恰好能看见，是因为给收起态单独设了
+  `overflow: visible`，纯属巧合。
+
+  改成 flex 之后按钮在容器内部，两种状态下都点得到，不依赖溢出行为。
+*/
 .chat-panel {
-  position: relative;
+  display: flex;
+  flex-direction: row;
   background: var(--bg-soft);
   border-left: 1px solid var(--border);
   height: 100%;
   overflow: hidden;
 }
 
-/*
-  收起时不能整栏 display:none —— 那样连展开按钮一起消失了，用户找不回来。
-  所以收起时把宽度压到 0，但给按钮一个绝对定位的「耳朵」露在外面。
-*/
-.chat-panel.collapsed {
-  overflow: visible;
+/* 收起的切换条窄一些：只留那个竖排的「问 AI」 */
+.chat-panel.collapsed .chat-toggle {
+  width: 26px;
 }
 
 .chat-toggle {
-  position: absolute;
-  left: -30px;
-  top: 18px;
+  flex-shrink: 0;
   width: 30px;
-  padding: 10px 0;
-  border: 1px solid var(--border-strong);
-  border-right: none;
-  border-radius: 8px 0 0 8px;
+  padding: 14px 0;
+  border: none;
+  border-right: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text-dim);
   cursor: pointer;
@@ -576,8 +582,7 @@ table.simple th {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  z-index: 5;
+  gap: 8px;
 }
 
 .chat-toggle:hover {
@@ -595,11 +600,18 @@ table.simple th {
   letter-spacing: 2px;
 }
 
+/*
+  正文宽度 = 栅格给对话栏的宽度 − 切换条宽度。
+  之所以要减，是因为切换条现在占的是对话栏**内部**的空间。
+  `max-width` 是保险：万一某个断点下栅格比预期窄，正文也不会把切换条挤掉。
+*/
 .chat-body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  width: 340px;
+  width: calc(var(--chat-w) - 30px);
+  max-width: calc(100vw - 260px);
+  min-width: 0;
 }
 
 .chat-head {

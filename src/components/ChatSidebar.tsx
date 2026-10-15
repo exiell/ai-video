@@ -67,6 +67,16 @@ export function ChatSidebar() {
 
   return (
     <aside className={`chat-panel${open ? '' : ' collapsed'}`}>
+      {/*
+        收起/展开按钮必须**一直在**，而且两种状态下都点得到。
+
+        踩过的坑：第一版把按钮绝对定位到 `left: -30px`（面板外面），
+        而面板是 `overflow: hidden` —— 展开时按钮被裁掉，**用户没有收起入口**，
+        只能刷新页面。收起时之所以看得见，是因为我给收起态单独设了
+        `overflow: visible`。也就是说「能用」纯属巧合，换个状态就废了。
+
+        现在改成 flex 布局：按钮在面板内部，不依赖任何溢出行为。
+      */}
       <button
         type="button"
         className="chat-toggle"
