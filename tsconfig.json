@@ -5,7 +5,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    /*
+      为什么需要 node 类型：测试里要读文件（例如 tests/chatLayout.test.ts
+      直接读 global.css 做布局契约断言 —— jsdom 没有布局引擎，
+      组件测试测不到那种 bug）。
+    */
+    "types": ["vite/client", "node"],
 
     "strict": true,
     "noUnusedLocals": true,
