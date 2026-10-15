@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { useAppStore } from '../store/app';
+import { useChat } from '../store/chat';
+import { ChatSidebar } from './ChatSidebar';
 
 /**
  * 侧边导航（方案.md v0.6 §5.8）
@@ -24,11 +26,12 @@ export function Layout({ children }: { children: ReactNode }) {
   const report = useAppStore((s) => s.report);
   const dirty = useAppStore((s) => s.dirty);
   const saveError = useAppStore((s) => s.saveError);
+  const chatOpen = useChat((s) => s.open);
   const errorCount = report?.counts.error ?? 0;
   const warningCount = report?.counts.warning ?? 0;
 
   return (
-    <div className="app">
+    <div className={`app${chatOpen ? ' chat-open' : ''}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
           <h1>AniGuide</h1>
@@ -103,6 +106,14 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="main">{children}</main>
+
+      {/*
+        对话式改稿侧栏。
+        放在 Layout 而不是各个页面里，是为了让它跨页面保持状态——
+        用户在分镜表问了一半，切去角色设定看个东西再切回来，对话还在。
+        放在页面里就做不到，切页就没了。
+      */}
+      <ChatSidebar />
     </div>
   );
 }
