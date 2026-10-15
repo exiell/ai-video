@@ -89,7 +89,7 @@ export function HelpPage() {
         <h3 className="card-title">一致性是怎么保证的（这是这类工具最容易出错的地方）</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           <RichText>
-            {'一致性不是一个开关，是**四道防线叠起来**的结果。任何一道漏了，都会出现「每张图单独看都挺好，放一起就不像同一部片子」这种最难排查的问题。'}
+            {'一致性不是一个开关，是**五道防线叠起来**的结果。任何一道漏了，都会出现「每张图单独看都挺好，放一起就不像同一部片子」这种最难排查的问题。'}
           </RichText>
         </p>
         <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>

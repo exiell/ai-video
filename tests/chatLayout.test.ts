@@ -93,3 +93,56 @@ describe('对话框的布局契约', () => {
     expect(panel).toContain('flex-direction: row');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 文档数字不能和内容脱节
+// ---------------------------------------------------------------------------
+
+/**
+ * 起因：写变更日志时发现帮助页开头写着「**四**道防线叠起来」，
+ * 而下面实际列了**五**条。翻设计文档才看到，v0.24 有一句
+ * 「帮助页一致性一节从四道防线扩到五道」—— 那次只加了内容，忘了改那句总结。
+ *
+ * 这类问题没人会主动发现：读者看到「四道」会以为自己数错了，
+ * 或者干脆不数。所以让测试来数。
+ */
+describe('帮助页的一致性防线：数字要和列表一致', () => {
+  const help = readFileSync(resolve(__dirname, '../src/pages/HelpPage.tsx'), 'utf8');
+  const readme = readFileSync(resolve(__dirname, '../README.md'), 'utf8');
+
+  /** 数「第N道：」出现到第几 */
+  function highestLayer(text: string): number {
+    const nums = [...text.matchAll(/第([一二三四五六七八九十]+)道/g)].map((m) =>
+      '一二三四五六七八九十'.indexOf(m[1]!) + 1,
+    );
+    return nums.length > 0 ? Math.max(...nums) : 0;
+  }
+
+  const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+
+  it('**帮助页开头写的数字，等于实际列出的条数**', () => {
+    const listed = highestLayer(help);
+    expect(listed, '帮助页一条防线都没找到').toBeGreaterThan(0);
+
+    const m = /是\*\*([一二三四五六七八九十]+)道防线/.exec(help);
+    expect(m, '帮助页开头找不到「N 道防线」这句话').not.toBeNull();
+    const claimed = CN.indexOf(m![1]!);
+
+    expect(claimed, `开头说「${m![1]}道」，实际列了 ${listed} 条`).toBe(listed);
+  });
+
+  it('**README 里的数字与帮助页一致**', () => {
+    const listed = highestLayer(help);
+    const m = /([一二三四五六七八九十]+)道一致性防线/.exec(readme);
+    expect(m, 'README 找不到「N 道一致性防线」').not.toBeNull();
+    expect(CN.indexOf(m![1]!), 'README 与帮助页的说法不一致').toBe(listed);
+  });
+
+  it('README 里表格列出的防线数量对得上', () => {
+    // README 的一致性那张表：每一行是一道防线
+    const section = readme.slice(readme.indexOf('道一致性防线'));
+    const table = section.slice(0, section.indexOf('**几个刻意做对的地方'));
+    const rows = [...table.matchAll(/^\|\s\*\*(.+?)\*\*/gm)];
+    expect(rows.length, 'README 表格里的防线条数与正文说法不一致').toBe(highestLayer(help));
+  });
+});
