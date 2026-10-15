@@ -5,9 +5,15 @@ import { DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID, MODEL_PROFILES } 
  * 设置状态（方案.md v0.6 §3.2 M0 + §0.1 第 4 条 BYOK）
  *
  * 存储策略是刻意分开的：
- *  - **API Key**：默认只存 sessionStorage（关掉浏览器就失效）。
- *    只有用户显式勾选「记住到本机」才写 localStorage。
- *    理由：Key 是用户自己花钱买的东西，默认不该长期躺在磁盘上。
+ *  - **API Key**：**默认存 localStorage**（关掉浏览器仍然保留）。
+ *    不想留在本机，就勾选「不保存到本机」——那时只存 sessionStorage，
+ *    关掉浏览器即失效。
+ *
+ *    【v0.32 反转移默认值】原来是「默认不存、勾选才存」。
+ *    改成「默认就存、勾选不存」的理由是：**每次打开都要重填 Key 是劝退级的摩擦**，
+ *    而它带来的安全收益很有限 —— Key 本来就只在这台机器、这个浏览器里，
+ *    从不离开浏览器。用一个每次都要付出的代价，换一个边际的安全性，不划算。
+ *    真正在意的人可以勾上「不保存到本机」，选择权还在用户手里。
  *  - **偏好项**（默认模型、代理地址等）：存 localStorage，无所谓。
  *
  * 任何情况下都不上传。请求只在「浏览器 → 模型厂商」之间发生；
@@ -20,8 +26,14 @@ const LS_KEYS = 'aniguide:keys';
 const SS_KEYS = 'aniguide:keys:session';
 
 export interface Prefs {
-  /** 用户是否勾选了「记住到本机」 */
-  rememberKeys: boolean;
+  /**
+   * 用户是否勾选了「不保存到本机」。
+   *
+   * 【注意语义是反的】`true` 表示**不落盘**（只用会话存储）。
+   * 字段名也跟着反转，而不是沿用 `rememberKeys` 取反 ——
+   * 一个叫「记住」的字段存着「不要记住」，是以后必然读错的那种坑。
+   */
+  dontSaveKeys: boolean;
   /** 当前默认使用的 LLM 档案 id */
   defaultLlmProfileId: string;
   /** 当前默认使用的文生图档案 id */
@@ -35,7 +47,7 @@ export interface Prefs {
 }
 
 const DEFAULT_PREFS: Prefs = {
-  rememberKeys: false,
+  dontSaveKeys: false,
   // 默认用 flash：生成分镜会反复重来，速度和成本比一次成型的质量更重要。
   // 需要更强的写作能力时，在设置页切回标准版。
   defaultLlmProfileId: 'deepseek-flash',
@@ -56,9 +68,40 @@ function safeParse<T>(raw: string | null, fallback: T): T {
   return fallback;
 }
 
+/**
+ * 读取偏好，并迁移旧的 `rememberKeys`。
+ *
+ * ===========================================================================
+ * 为什么不能直接把 rememberKeys 丢掉
+ * ===========================================================================
+ * 旧语义：`rememberKeys: true` = 用户明确要求**把 Key 留在本机**。
+ * 新默认已经是「保存」，所以这类用户不需要做任何事。
+ *
+ * 但**没勾过**的（字段缺失或 false）在新默认下会从「不保存」变成「保存」——
+ * 那等于把用户当初那个「不长期留在磁盘上」的选择**静默撤销了**。
+ * 安全设置不该被静默放宽，所以这里保守处理：**没明确要保存的，一律视为不要保存。**
+ *
+ * 对老用户来说结果就是：以前怎么用，升级后还是怎么用。
+ * 新用户（没有旧字段）拿到新默认值。
+ */
 function readPrefs(): Prefs {
   if (typeof localStorage === 'undefined') return DEFAULT_PREFS;
-  return safeParse(localStorage.getItem(LS_PREFS), DEFAULT_PREFS);
+  const raw = localStorage.getItem(LS_PREFS);
+  const prefs = safeParse(raw, DEFAULT_PREFS);
+
+  // 只在旧字段真的出现过时才迁移，避免影响全新用户
+  if (raw && raw.includes('"rememberKeys"')) {
+    try {
+      const parsed = JSON.parse(raw) as { rememberKeys?: unknown };
+      if (!('dontSaveKeys' in parsed) || parsed.dontSaveKeys === undefined) {
+        // 旧字段存在 → 意味着这是升级上来的数据
+        prefs.dontSaveKeys = parsed.rememberKeys !== true;
+      }
+    } catch {
+      // 解析失败时保持 safeParse 的结果，不额外处理
+    }
+  }
+  return prefs;
 }
 
 function readOverrides(): Record<string, string> {
@@ -147,7 +190,7 @@ interface SettingsState {
   setKey: (vendorId: string, apiKey: string) => void;
   clearKey: (vendorId: string) => void;
   getKey: (vendorId: string) => string;
-  /** 把当前会话里的 Key 落盘（用户勾选「记住到本机」时调用） */
+  /** 把当前会话里的 Key 落盘（Key 有变化时由 store 内部调用） */
   persistKeys: () => void;
   /** 从磁盘清除全部 Key */
   forgetKeys: () => void;
@@ -169,22 +212,15 @@ export const useSettings = create<SettingsState>((set, get) => ({
       localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
     }
     /**
-     * 「记住到本机」的两个方向都要处理。
+     * 「不保存到本机」勾上时，**立刻把已经落盘的 Key 清掉**。
      *
-     * 【v0.28 修】原来只处理了 `value === false`（取消勾选时清盘），
-     * 而**勾选时该做的事从来没做过**——`persistKeys()` 在全项目里没有调用点。
+     * 不能只记一个偏好、留到下次写入时才生效 —— 用户勾这个框的意思就是
+     * 「现在就把本机上的抹掉」，如果磁盘上还留着，他没得到他要的结果。
      *
-     * 后果很隐蔽：用户按正常顺序「填 Key → 测试连接 → 勾选记住到本机」时，
-     * Key 只写进了 sessionStorage，localStorage 里一个字节都没有。
-     * 关掉浏览器 Key 全没，而 `aniguide:prefs` 已经写入了 `rememberKeys: true`，
-     * 下次打开**复选框还是勾选状态、输入框却是空的**——界面在骗人。
-     *
-     * 测试没抓到是因为它的顺序是先 setPref 再 setKey，
-     * 而真实用户几乎总是反过来。这类「顺序相关」的漏洞只能靠审查发现。
+     * 默认方向（不勾）不需要做任何事：`setKey` 本来就会落盘。
      */
-    if (key === 'rememberKeys') {
-      if (value === true) get().persistKeys();
-      else get().forgetKeys();
+    if (key === 'dontSaveKeys' && value === true) {
+      get().forgetKeys();
     }
   },
 
@@ -199,14 +235,14 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setKey: (profileId, apiKey) => {
     const keys = { ...get().keys, [profileId]: apiKey };
     set({ keys });
-    writeKeys(keys, get().prefs.rememberKeys);
+    writeKeys(keys, !get().prefs.dontSaveKeys);
   },
 
   clearKey: (profileId) => {
     const keys = { ...get().keys };
     delete keys[profileId];
     set({ keys });
-    writeKeys(keys, get().prefs.rememberKeys);
+    writeKeys(keys, !get().prefs.dontSaveKeys);
   },
 
   getKey: (profileId) => get().keys[profileId] ?? '',

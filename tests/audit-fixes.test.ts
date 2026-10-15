@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { useSettings } from '../src/store/settings';
 import { useAppStore, makeEmptyProject } from '../src/store/app';
 import { useImage } from '../src/store/image';
@@ -19,39 +19,65 @@ import { buildMappedImagePayload } from '../src/services/gateway';
  * 它们的共同特征是：**编译不报错、原有测试全绿、但用户会踩到**。
  */
 
-describe('🔴 persistKeys 必须真的被调用', () => {
+describe('🔴 Key 的存储默认值（v0.32 反转过一次）', () => {
+  /*
+    ⚠️ 必须把内存里的 store 一起重置，不能只清存储。
+
+    踩过的坑：只写 `localStorage.clear()` 时，前一条测试设过的
+    `dontSaveKeys = true` 还留在内存里，后面的测试就以「不保存」的状态开始 ——
+    症状是**单条跑通过、整文件跑失败**的 flaky 测试。
+    这类问题最耗时，因为它看起来像被测代码坏了。
+  */
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    useSettings.setState({ prefs: { ...useSettings.getState().prefs, dontSaveKeys: false } });
   });
 
-  it('**先填 Key 再勾「记住到本机」，Key 真的落盘了**', () => {
-    // 这是用户的真实顺序，而原来的测试恰好是反过来的（先勾再填），
-    // 所以从来没测到这个漏洞：persistKeys() 全项目没有调用点。
-    const { setKey, setPref } = useSettings.getState();
-
-    setKey('deepseek', 'sk-real-key');
-    expect(localStorage.getItem('aniguide:keys')).toBeNull(); // 还没勾，不该落盘
-
-    setPref('rememberKeys', true);
-    expect(localStorage.getItem('aniguide:keys')).toContain('sk-real-key');
+  afterEach(() => {
+    // 别把状态留给同文件里后面的测试
+    useSettings.setState({ prefs: { ...useSettings.getState().prefs, dontSaveKeys: false } });
   });
 
-  it('勾选后填的 Key 也会落盘', () => {
+  it('**默认就落盘**（不必再勾任何东西）', () => {
+    // 【语义反转】原来是「默认不存、勾选才存」，用户每次打开都要重填 Key。
+    // 现在默认保存 —— 每次重填是劝退级的摩擦，而 Key 本来就只在这台机器、
+    // 这个浏览器里，从不离开浏览器。
+    const { setKey } = useSettings.getState();
+    setKey('deepseek', 'sk-default');
+    expect(localStorage.getItem('aniguide:keys')).toContain('sk-default');
+  });
+
+  it('**勾「不保存到本机」后，填的 Key 不落盘**', () => {
     const state = useSettings.getState();
-    state.setPref('rememberKeys', true);
-    state.setKey('deepseek', 'sk-later');
-    expect(localStorage.getItem('aniguide:keys')).toContain('sk-later');
+    state.setPref('dontSaveKeys', true);
+    state.setKey('deepseek', 'sk-ephemeral');
+
+    expect(localStorage.getItem('aniguide:keys')).toBeNull();
+    // 但当前会话里还得能用，否则用户填了立刻就没法生成
+    expect(sessionStorage.getItem('aniguide:keys:session')).toContain('sk-ephemeral');
   });
 
-  it('取消勾选仍然会清盘（原有行为不能被改坏）', () => {
+  it('**勾上「不保存」时，已经存下来的 Key 当场清掉**', () => {
+    // 用户勾这个框的意思就是「现在把本机上的抹掉」。
+    // 如果只记一个偏好、等下次写入才生效，他没得到他要的结果。
     const state = useSettings.getState();
-    state.setKey('deepseek', 'sk-x');
-    state.setPref('rememberKeys', true);
+    state.setKey('deepseek', 'sk-existing');
     expect(localStorage.getItem('aniguide:keys')).not.toBeNull();
 
-    state.setPref('rememberKeys', false);
+    state.setPref('dontSaveKeys', true);
     expect(localStorage.getItem('aniguide:keys')).toBeNull();
+  });
+
+  it('取消勾选后，后续写入会重新落盘', () => {
+    const state = useSettings.getState();
+    state.setPref('dontSaveKeys', true);
+    state.setKey('deepseek', 'sk-a');
+    expect(localStorage.getItem('aniguide:keys')).toBeNull();
+
+    state.setPref('dontSaveKeys', false);
+    state.setKey('deepseek', 'sk-b');
+    expect(localStorage.getItem('aniguide:keys')).toContain('sk-b');
   });
 });
 

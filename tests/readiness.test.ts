@@ -18,7 +18,7 @@ function resetSettings(): void {
   sessionStorage.clear();
   useSettings.setState({
     prefs: {
-      rememberKeys: false,
+      dontSaveKeys: false,
       defaultLlmProfileId: 'deepseek-flash',
       defaultT2iProfileId: 'qwen-image',
       defaultReferenceProfileId: 'qwen-image-edit',
@@ -110,26 +110,28 @@ describe('生成上下文组装', () => {
 describe('Key 存储策略', () => {
   beforeEach(resetSettings);
 
-  it('默认只写 sessionStorage，不落磁盘', () => {
+  it('**默认两个存储都写**（关掉浏览器仍然保留，不用重填）', () => {
     useSettings.getState().setKey('deepseek', 'sk-secret');
     expect(sessionStorage.getItem('aniguide:keys:session')).toContain('sk-secret');
-    expect(localStorage.getItem('aniguide:keys')).toBeNull();
-  });
-
-  it('勾选「记住到本机」后才写 localStorage', () => {
-    useSettings.getState().setPref('rememberKeys', true);
-    useSettings.getState().setKey('deepseek', 'sk-secret');
+    // 【v0.32 反转】原来这里断言的是「不该落盘」。
+    // 改成默认落盘，因为每次打开都要重填 Key 是劝退级的摩擦。
     expect(localStorage.getItem('aniguide:keys')).toContain('sk-secret');
   });
 
-  it('取消「记住到本机」时立刻清掉磁盘上的 Key', () => {
-    useSettings.getState().setPref('rememberKeys', true);
+  it('勾「不保存到本机」后只写会话存储', () => {
+    useSettings.getState().setPref('dontSaveKeys', true);
+    useSettings.getState().setKey('deepseek', 'sk-secret');
+    expect(localStorage.getItem('aniguide:keys')).toBeNull();
+    expect(sessionStorage.getItem('aniguide:keys:session')).toContain('sk-secret');
+  });
+
+  it('**中途勾上「不保存」会立刻清掉磁盘上的 Key**', () => {
     useSettings.getState().setKey('deepseek', 'sk-secret');
     expect(localStorage.getItem('aniguide:keys')).not.toBeNull();
 
-    useSettings.getState().setPref('rememberKeys', false);
+    useSettings.getState().setPref('dontSaveKeys', true);
     expect(localStorage.getItem('aniguide:keys')).toBeNull();
-    // 会话里的 Key 仍在，用户不用重填
+    // 但内存里还在，用户当前这次会话不用重填
     expect(useSettings.getState().keys['deepseek']).toBe('sk-secret');
   });
 

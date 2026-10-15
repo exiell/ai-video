@@ -361,14 +361,17 @@ export function SettingsPage() {
             <input
               type="checkbox"
               style={{ width: 'auto' }}
-              checked={prefs.rememberKeys}
-              onChange={(e) => setPref('rememberKeys', e.target.checked)}
+              checked={prefs.dontSaveKeys}
+              onChange={(e) => setPref('dontSaveKeys', e.target.checked)}
             />
-            记住到本机（关掉浏览器后仍然保留）
+            不保存到本机（关掉浏览器就失效）
           </label>
         </div>
         <div className="hint">
-          不勾选时，Key 只存在当前会话里，关掉浏览器就失效——更安全，但每次都要重填。
+          <b>Key 默认会存在这台电脑上</b>，下次打开就不用重填了。
+          <br />
+          如果这台电脑是共用的、或者你只是临时试一下，就勾上上面那个框——
+          那样 Key 只存在当前会话里，关掉浏览器即失效（已经存下来的也会当场清掉）。
           <br />
           不论勾不勾选，Key 都不会离开你的浏览器（除非你自己填了代理地址，见下一栏）。
         </div>

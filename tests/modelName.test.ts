@@ -34,7 +34,7 @@ function resetSettings(): void {
   sessionStorage.clear();
   useSettings.setState({
     prefs: {
-      rememberKeys: false,
+      dontSaveKeys: false,
       defaultLlmProfileId: 'deepseek-flash',
       defaultT2iProfileId: 'qwen-image',
       defaultReferenceProfileId: 'qwen-image-edit',
