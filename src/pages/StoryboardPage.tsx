@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { SummaryBar } from '../components/bits';
+import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
+import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useGeneration } from '../store/generation';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
@@ -104,8 +106,9 @@ function FrameOrderHint({
       <div className="issue warning" style={{ marginBottom: 10 }}>
         <div className="issue-title">建议先出「首帧」</div>
         <div className="issue-line">
-          首帧不只是第一张图，它是**后两帧的构图锚点**——
-          生成动作关键帧和尾帧时会把它当参考图，用来锁住机位、景别和光线方向。
+          <RichText>
+            {'首帧不只是第一张图，它是**后两帧的构图锚点**——生成动作关键帧和尾帧时会把它当参考图，用来锁住机位、景别和光线方向。'}
+          </RichText>
           <br />
           现在后两帧已经出了，它们的机位可能和首帧对不上。建议先出首帧，
           看着不满意再重出后两帧（重出时就会自动拿首帧当锚点）。
@@ -242,6 +245,9 @@ export function StoryboardPage() {
           </button>
         </div>
       </div>
+
+      {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
+      <AiFlowGuide variant="compact" />
 
       <div className="card">
         <h3 className="card-title">生成分镜</h3>

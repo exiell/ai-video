@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails } from '../components/bits';
+import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
+import { AiFlowGuide } from '../components/AiFlowGuide';
 import { TermHint } from '../components/TermHint';
 import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
 import type { StoryScene, TargetPlatform } from '../types/model';
@@ -506,8 +508,9 @@ export function GuidePage() {
           </Field>
 
           <WhyDetails>
-            风格关键词和负向词会被自动附加到**每一镜**的提示词上。这是保证全片风格统一最省力的办法——
-            你不用每一镜都重复写一遍「动漫风、冷色调」。
+            <RichText>
+              {'风格关键词和负向词会被自动附加到**每一镜**的提示词上。这是保证全片风格统一最省力的办法——你不用每一镜都重复写一遍「动漫风、冷色调」。'}
+            </RichText>
             <br />
             <br />
             时长和画幅同理：它们不是给你看的，是给模型看的。不写画幅，模型可能把竖屏短视频给你出成横屏。
@@ -516,62 +519,74 @@ export function GuidePage() {
       ) : null}
 
       {step === 3 ? (
-        <div className="card">
-          <h3 className="card-title">准备工作做完了。接下来按这个顺序走</h3>
-          <p style={{ color: 'var(--text-dim)', marginTop: 0 }}>
-            每一步都写清了**点哪里、会发生什么、做完怎么判断可以往下走**。
-            卡在哪一步就回到这一步看。
-          </p>
+        <>
+          {/*
+            AI 生成路线放在**最前面**。
+            原来这一页只有手动流程（一个一个建场景、建角色、逐条写锁），
+            但实际创作时几乎都会先让模型把场景/角色/分镜拆出来再改。
+            新手照着手动流程做到一半才发现旁边有「① 从故事里拆角色与场景」，
+            然后就不确定该用哪个、已经做的会不会白费。
+          */}
+          <AiFlowGuide />
 
-          <ol style={{ fontSize: 13, paddingLeft: 0, margin: 0, listStyle: 'none' }}>
-            {STEPS_AFTER_GUIDE.map((item, index) => (
-              <li
-                key={item.title}
-                style={{
-                  borderLeft: '3px solid var(--border-strong)',
-                  paddingLeft: 14,
-                  marginBottom: 16,
-                }}
-              >
-                <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                  第 {index + 1} 步 · {item.title}
-                  {item.optional ? <span className="tag" style={{ marginLeft: 8 }}>可选</span> : null}
-                </div>
-                <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                  <b>怎么做：</b>
-                  {item.how}
-                </div>
-                <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                  <b>做完了怎么判断可以往下走：</b>
-                  {item.done}
-                </div>
-                {item.why ? (
-                  <div className="hint" style={{ marginTop: 4 }}>
-                    {item.why}
+          <div className="card">
+            <h3 className="card-title">也可以全程手动：一步步来</h3>
+            <p style={{ color: 'var(--text-dim)', marginTop: 0 }}>
+              <RichText>
+                {'不想让 AI 生成，或者生成结果你不满意想自己重来，就按这个顺序走。每一步都写清了**点哪里、会发生什么、做完怎么判断可以往下走**。卡在哪一步就回到这一步看。'}
+              </RichText>
+            </p>
+
+            <ol style={{ fontSize: 13, paddingLeft: 0, margin: 0, listStyle: 'none' }}>
+              {STEPS_AFTER_GUIDE.map((item, index) => (
+                <li
+                  key={item.title}
+                  style={{
+                    borderLeft: '3px solid var(--border-strong)',
+                    paddingLeft: 14,
+                    marginBottom: 16,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                    第 {index + 1} 步 · {item.title}
+                    {item.optional ? <span className="tag" style={{ marginLeft: 8 }}>可选</span> : null}
                   </div>
-                ) : null}
-                <div className="row" style={{ marginTop: 8 }}>
-                  <button
-                    type="button"
-                    className="btn btn-sm"
-                    onClick={() => navigate(item.route)}
-                  >
-                    去「{item.routeLabel}」
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ol>
+                  <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
+                    <b>怎么做：</b>
+                    <RichText>{item.how}</RichText>
+                  </div>
+                  <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
+                    <b>做完了怎么判断可以往下走：</b>
+                    <RichText>{item.done}</RichText>
+                  </div>
+                  {item.why ? (
+                    <div className="hint" style={{ marginTop: 4 }}>
+                      {item.why}
+                    </div>
+                  ) : null}
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={() => navigate(item.route)}
+                    >
+                      去「{item.routeLabel}」
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
 
-          <div className="row" style={{ marginTop: 6 }}>
-            <button type="button" className="btn btn-primary" onClick={() => navigate('/scenes')}>
-              从第 1 步开始
-            </button>
-            <Link className="btn" to="/help">
-              看帮助与术语
-            </Link>
+            <div className="row" style={{ marginTop: 6 }}>
+              <button type="button" className="btn btn-primary" onClick={() => navigate('/storyboard')}>
+                从 AI 流程第 1 步开始
+              </button>
+              <Link className="btn" to="/help">
+                看帮助与术语
+              </Link>
+            </div>
           </div>
-        </div>
+        </>
       ) : null}
 
       <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>

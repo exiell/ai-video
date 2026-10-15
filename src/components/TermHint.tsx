@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CAMERA_MOVE_GUIDE, SHOT_SIZE_GUIDE, findTerm } from '../domain/help/terms';
 import type { CameraMove, ShotSize } from '../types/model';
+import { RichText } from './bits';
 
 /**
  * 术语内联提示
@@ -69,11 +70,15 @@ export function TermHint({ term }: { term: string }) {
           <b style={{ fontSize: 12.5 }}>
             {entry.zh} · {entry.en}
           </b>
-          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>{entry.summary}</div>
-          <div style={{ fontSize: 12, marginTop: 6, lineHeight: 1.6 }}>{entry.whenToUse}</div>
+          <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>
+            <RichText>{entry.summary}</RichText>
+          </div>
+          <div style={{ fontSize: 12, marginTop: 6, lineHeight: 1.6 }}>
+            <RichText>{entry.whenToUse}</RichText>
+          </div>
           {entry.example ? (
             <div className="hint" style={{ marginTop: 6 }}>
-              例：{entry.example}
+              例：<RichText>{entry.example}</RichText>
             </div>
           ) : null}
           <div style={{ marginTop: 8 }}>
@@ -94,7 +99,7 @@ export function TermHint({ term }: { term: string }) {
 export function ShotSizeHint({ value }: { value: ShotSize }) {
   return (
     <div className="hint" style={{ marginTop: 4 }}>
-      {SHOT_SIZE_GUIDE[value]}
+      <RichText>{SHOT_SIZE_GUIDE[value]}</RichText>
     </div>
   );
 }
@@ -103,7 +108,7 @@ export function ShotSizeHint({ value }: { value: ShotSize }) {
 export function CameraMoveHint({ value }: { value: CameraMove }) {
   return (
     <div className="hint" style={{ marginTop: 4 }}>
-      {CAMERA_MOVE_GUIDE[value]}
+      <RichText>{CAMERA_MOVE_GUIDE[value]}</RichText>
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { SCHEMA_VERSION, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
+import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
 
 /**
@@ -84,6 +85,9 @@ export function ScenesPage() {
           + 加一个场景
         </button>
       </div>
+
+      {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
+      <AiFlowGuide variant="compact" />
 
       <div className="card">
         <h3 className="card-title">场景一致性靠什么保证？</h3>

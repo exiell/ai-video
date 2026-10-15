@@ -12,6 +12,7 @@ import {
 import { newId } from '../services/storage';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
+import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
 
 /**
@@ -98,6 +99,9 @@ export function CharactersPage() {
           + 加一个角色
         </button>
       </div>
+
+      {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
+      <AiFlowGuide variant="compact" />
 
       <div className="card">
         <h3 className="card-title">为什么需要「连续性锁」？</h3>

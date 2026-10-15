@@ -5,6 +5,7 @@ import { useSettings } from '../store/settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { consistencyAdvice } from '../domain/image/prompts';
 import { ASSET_KIND_LABEL } from '../types/model';
+import { RichText } from './bits';
 import type { Asset } from '../types/model';
 import { ImageLightbox, type LightboxState } from './ImageLightbox';
 
@@ -130,7 +131,7 @@ export function ImagePanel({
             .filter((o) => o.hint)
             .map((o, index) => (
               <div key={index}>
-                <b>{o.label}</b>：{o.hint}
+                <b>{o.label}</b>：<RichText>{o.hint}</RichText>
               </div>
             ))}
         </div>

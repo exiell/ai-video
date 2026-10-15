@@ -3,6 +3,7 @@ import { useImage } from '../store/image';
 import { useAppStore } from '../store/app';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { useSettings } from '../store/settings';
+import { RichText, stripRichMarks } from './bits';
 
 /**
  * 批量出图按钮 + 进度
@@ -105,7 +106,8 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             className="btn"
             disabled={batch !== null || !hasImageKey || counts[task] === 0}
             onClick={() => run(task)}
-            title={TASK_HINT[task]}
+            // 原生 title 属性只收字符串，不能放 JSX —— 所以这里只去掉标记
+            title={stripRichMarks(TASK_HINT[task])}
           >
             {TASK_LABEL[task]}（{counts[task]}）
           </button>
@@ -115,7 +117,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
       <div style={{ marginTop: 8 }}>
         {tasks.map((task) => (
           <div key={task} className="hint" style={{ marginTop: 2 }}>
-            <b>{TASK_LABEL[task]}</b>：{TASK_HINT[task]}
+            <b>{TASK_LABEL[task]}</b>：<RichText>{TASK_HINT[task]}</RichText>
           </div>
         ))}
       </div>

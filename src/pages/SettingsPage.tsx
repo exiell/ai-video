@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Field, WhyDetails } from '../components/bits';
+import { RichText } from '../components/bits';
 import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
 import { Link } from 'react-router-dom';
@@ -138,8 +139,9 @@ export function SettingsPage() {
       <div className="card">
         <h3 className="card-title">第二步：默认模型</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          先选你要用哪家的哪个模型。**Key 在下一节按厂商填**——
-          同一个厂商的对话模型与出图模型共用一个 Key，所以只填一次。
+          <RichText>
+            {'先选你要用哪家的哪个模型。**Key 在下一节按厂商填**——同一个厂商的对话模型与出图模型共用一个 Key，所以只填一次。'}
+          </RichText>
         </p>
 
         <div className="row" style={{ marginBottom: 12 }}>
@@ -181,8 +183,9 @@ export function SettingsPage() {
         </div>
 
         <div className="hint">
-          「生成画面」这一个选择同时决定了两件事：**默认用哪个模型出图**，
-          以及**用哪个模型做参考图锚定**（一致性最好）。所以这里列的是「带参考图能力」的那一档。
+          <RichText>
+            {'「生成画面」这一个选择同时决定了两件事：**默认用哪个模型出图**，以及**用哪个模型做参考图锚定**（一致性最好）。所以这里列的是「带参考图能力」的那一档。'}
+          </RichText>
           <br />
           不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。
         </div>
@@ -301,8 +304,9 @@ export function SettingsPage() {
                     </div>
                   ))}
                   <div className="hint">
-                    留空就用上面显示的默认名。厂商会下架旧模型、上架新模型——
-                    **报「模型名不被接受」时，把错误信息里列出的名字填到这里即可**，不用等工具更新。
+                    <RichText>
+                      {'留空就用上面显示的默认名。厂商会下架旧模型、上架新模型——**报「模型名不被接受」时，把错误信息里列出的名字填到这里即可**，不用等工具更新。'}
+                    </RichText>
                     <br />
                     接口地址：<code>{preferred.endpoint}</code>
                   </div>

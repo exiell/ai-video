@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { RichText } from '../components/bits';
 import {
   searchTerms,
   TERMS,
@@ -87,8 +88,9 @@ export function HelpPage() {
       <div className="card">
         <h3 className="card-title">一致性是怎么保证的（这是这类工具最容易出错的地方）</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          一致性不是一个开关，是**四道防线叠起来**的结果。任何一道漏了，都会出现
-          「每张图单独看都挺好，放一起就不像同一部片子」这种最难排查的问题。
+          <RichText>
+            {'一致性不是一个开关，是**四道防线叠起来**的结果。任何一道漏了，都会出现「每张图单独看都挺好，放一起就不像同一部片子」这种最难排查的问题。'}
+          </RichText>
         </p>
         <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
           <li style={{ marginBottom: 10 }}>
@@ -261,11 +263,15 @@ export function HelpPage() {
             </b>
             <span className="tag">{TERM_CATEGORY_LABEL[term.category]}</span>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>{term.summary}</div>
-          <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.7 }}>{term.whenToUse}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-dim)' }}>
+            <RichText>{term.summary}</RichText>
+          </div>
+          <div style={{ fontSize: 13, marginTop: 8, lineHeight: 1.7 }}>
+            <RichText>{term.whenToUse}</RichText>
+          </div>
           {term.example ? (
             <div className="hint" style={{ marginTop: 8 }}>
-              例：{term.example}
+              例：<RichText>{term.example}</RichText>
             </div>
           ) : null}
         </div>
