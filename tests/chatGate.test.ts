@@ -77,12 +77,30 @@ describe('一次能带多少条改动', () => {
 });
 
 describe('闸门与白名单是两道独立的关', () => {
-  it('**白名单仍然有效**：用户点同意也不能改引用关系', () => {
-    // 取消 auto 档不等于放松白名单 —— 两者管的是不同的事：
-    // 闸门决定「要不要问用户」，白名单决定「问过也不准改什么」。
+  it('内容字段可改', () => {
     expect(isEditable('shot', 'action')).toBe(true);
-    expect(isEditable('shot', 'sceneId')).toBe(false);
-    expect(isEditable('shot', 'characterIds')).toBe(false);
+    expect(isEditable('scene', 'fixedElements')).toBe(true);
+  });
+
+  it('**引用字段可改**（v0.36 反转：能力问题不该用「不给能力」绕过）', () => {
+    /*
+      原来这里排除 sceneId / characterIds，理由是「改错了会挂到不存在的场景上」。
+      那个理由经不起推敲：「让模型改引用」和「防止悬空引用」不冲突 ——
+      前者是能力，后者是校验。我当时用「干脆不给能力」绕过了校验该做的事。
+
+      代价很快暴露：用户让 AI 大改剧情，AI 新建了场景却无法挂到镜头上，
+      于是「场景建了但没生效」。
+
+      现在的做法是给能力 + 校验（validateFieldValue 检查目标存在）。
+    */
+    expect(isEditable('shot', 'sceneId')).toBe(true);
+    expect(isEditable('shot', 'characterIds')).toBe(true);
+  });
+
+  it('**id 本身仍然不可改**（改它会让所有引用一起断掉）', () => {
+    expect(isEditable('shot', 'id')).toBe(false);
+    expect(isEditable('character', 'id')).toBe(false);
     expect(isEditable('character', 'shotIds')).toBe(false);
+    expect(isEditable('shot', 'activeLockIds')).toBe(false);
   });
 });

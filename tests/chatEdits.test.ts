@@ -52,14 +52,21 @@ describe('字段白名单', () => {
     }
   });
 
-  it('**引用关系一律不可改**（改了会把分镜挂到不存在的场景上）', () => {
-    for (const f of ['id', 'sceneId', 'characterIds', 'activeLockIds', 'variantIds', 'sourceSceneId']) {
+  it('**id 与结构字段不可改**（改它们会让引用一起断掉）', () => {
+    for (const f of ['id', 'activeLockIds', 'variantIds', 'sourceSceneId']) {
       expect(isEditable('shot', f), `shot.${f} 不该可改`).toBe(false);
     }
     for (const f of ['variants', 'continuityLocks', 'shotIds']) {
       expect(isEditable('character', f), `character.${f} 不该可改`).toBe(false);
       expect(isEditable('scene', f), `scene.${f} 不该可改`).toBe(false);
     }
+  });
+
+  it('**引用字段可改**（v0.36 反转：给了能力，另加校验防悬空）', () => {
+    // 见 tests/chatCreateDelete.test.ts 里的「引用校验」一组 ——
+    // 那里验的是「指向不存在的对象会被跳过」，这才是防悬空的正确位置。
+    expect(isEditable('shot', 'sceneId')).toBe(true);
+    expect(isEditable('shot', 'characterIds')).toBe(true);
   });
 
   it('编造的字段名不可改', () => {
@@ -345,7 +352,7 @@ describe('项目上下文', () => {
     const p = freshProject();
     const one = p.shots[0]!;
     p.shots = Array.from({ length: 60 }, (_, i) => ({ ...one, id: `s${i}`, number: i + 1 }));
-    const ctx = buildProjectContext(p, 40);
+    const ctx = buildProjectContext(p, null, 40);
     expect(ctx).toContain('其余 20 镜省略');
   });
 

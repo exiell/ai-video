@@ -147,7 +147,9 @@ export const useChat = create<ChatState>((set, get) => ({
       notice: null,
     }));
 
-    const context = buildProjectContext(project);
+    // 把穿帮检查的结论也带上 —— 用户会直接问「哪里会穿帮」，
+    // 而那是引擎算出来的确定性结论，比让模型自己读分镜猜准得多
+    const context = buildProjectContext(project, useAppStore.getState().report);
     const messages = buildChatMessages(context, history, text);
     const outcome = await askModel(gen.ctx, messages, project);
 

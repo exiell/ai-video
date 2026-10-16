@@ -1,4 +1,11 @@
-import type { CharacterCard, Project, SceneCard, Shot, Story } from '../../types/model';
+import type {
+  CharacterCard,
+  CheckReport,
+  Project,
+  SceneCard,
+  Shot,
+  Story,
+} from '../../types/model';
 
 /**
  * 对话式改稿（方案.md §7.6.20）
@@ -115,7 +122,7 @@ export interface ChatReply {
 // 字段白名单
 // ---------------------------------------------------------------------------
 
-type FieldType = 'text' | 'enum' | 'number' | 'stringArray';
+type FieldType = 'text' | 'enum' | 'number' | 'stringArray' | 'ref' | 'refArray';
 
 interface FieldSpec {
   type: FieldType;
@@ -125,17 +132,33 @@ interface FieldSpec {
   /** 数值范围 */
   min?: number;
   max?: number;
+  /** ref / refArray 用：被引用的对象是哪一类 */
+  refKind?: 'scene' | 'character';
 }
 
 /**
  * 允许 AI 改的字段。
  *
- * **故意不包含** `id` / `sceneId` / `characterIds` / `activeLockIds` / `shotIds` ——
- * 这些是对象之间的引用关系。让模型改引用，它会把分镜挂到不存在的场景上，
- * 而且这类错误在界面上不一定看得见（检查引擎会报「场景缺失」，
- * 但用户不知道是 AI 干的）。
+ * ===========================================================================
+ * 引用关系为什么**现在可以改**了（v0.36 的一次认知修正）
+ * ===========================================================================
+ * 原来这里明确排除 `sceneId` / `characterIds`，理由是「让模型改引用，
+ * 它会把分镜挂到不存在的场景上」。
  *
- * 改引用关系应该通过界面上的下拉框，那是人做的决定。
+ * 那个理由经不起推敲 —— **「让模型改引用」和「防止悬空引用」不冲突**：
+ * 前者是能力问题，后者是校验问题。我当时把校验该做的事，
+ * 用「干脆不给能力」绕过去了。
+ *
+ * 代价很快就暴露了：用户让 AI 大改剧情，AI 新建了场景，
+ * 却**没有任何办法把它挂到镜头上**，于是新场景建出来是空的，
+ * 镜头仍指向旧场景。用户看到的是「场景建了但没生效」。
+ *
+ * 现在改成：允许改，但 `validateFieldValue` 会检查被引用的对象
+ * **确实存在**。模型指错了就跳过那一条并说明原因，
+ * 而不是让悬空引用进项目。
+ *
+ * 仍然**不可改**的是 `id` 本身 —— 改标识符会让所有指向它的引用一起断掉，
+ * 那是结构性破坏，不是编辑。
  */
 export const EDITABLE_FIELDS: Record<EditTarget['kind'], Record<string, FieldSpec>> = {
   shot: {
@@ -160,6 +183,9 @@ export const EDITABLE_FIELDS: Record<EditTarget['kind'], Record<string, FieldSpe
       options: ['static', 'pan', 'tilt', 'dolly', 'zoom', 'handheld', 'crane'],
     },
     transitionType: { type: 'enum', label: '与上一镜的转场类型', options: ['continuation', 'cut'] },
+    // 引用字段：值必须是**已存在的**场景 / 角色 id（校验在 validateFieldValue 里做）
+    sceneId: { type: 'ref', label: '所属场景', refKind: 'scene' },
+    characterIds: { type: 'refArray', label: '出镜角色', refKind: 'character' },
   },
   character: {
     name: { type: 'text', label: '名字' },
@@ -228,6 +254,11 @@ export function validateFieldValue(
   kind: EditTarget['kind'],
   field: string,
   raw: unknown,
+  /**
+   * 当前项目。**只有引用类字段需要它** —— 校验被引用的对象确实存在。
+   * 其它字段不传也能工作（测试里就只传三个参数）。
+   */
+  project?: Project,
 ): ValidationOutcome {
   const spec = EDITABLE_FIELDS[kind][field];
   if (!spec) return { reason: `「${field}」不是可修改的字段` };
@@ -271,6 +302,46 @@ export function validateFieldValue(
         .slice(0, 12);
       if (cleaned.length === 0) return { reason: '至少要有一个短语' };
       return { value: cleaned };
+    }
+    case 'ref': {
+      /**
+       * 引用单个对象。**必须校验目标存在** ——
+       * 这是「允许模型改引用」的前提：给了能力，就得有对应的校验。
+       */
+      if (typeof raw !== 'string') return { reason: '必须是一个对象的 id' };
+      const id = raw.trim();
+      if (!id) return { value: '' }; // 清空引用是合法的（表示「未指定」）
+      if (project && spec.refKind === 'scene' && !project.scenes.some((x) => x.id === id)) {
+        return { reason: '这个场景不存在（可能是模型记错了 id）' };
+      }
+      if (project && spec.refKind === 'character' && !project.characters.some((x) => x.id === id)) {
+        return { reason: '这个角色不存在（可能是模型记错了 id）' };
+      }
+      return { value: id };
+    }
+    case 'refArray': {
+      const arr = Array.isArray(raw)
+        ? raw
+        : typeof raw === 'string'
+          ? // 容忍 "char-1, char-2" 这种写法
+            raw.split(/[,，;；\n]/)
+          : null;
+      if (!arr) return { reason: '必须是 id 列表' };
+      const ids = [...new Set(arr.map((x) => String(x).trim()).filter(Boolean))];
+
+      if (project && spec.refKind === 'character') {
+        const missing = ids.filter((id) => !project.characters.some((c) => c.id === id));
+        if (missing.length > 0) {
+          return { reason: `有 ${missing.length} 个角色不存在（可能是模型记错了 id）` };
+        }
+      }
+      if (project && spec.refKind === 'scene') {
+        const missing = ids.filter((id) => !project.scenes.some((s) => s.id === id));
+        if (missing.length > 0) {
+          return { reason: `有 ${missing.length} 个场景不存在` };
+        }
+      }
+      return { value: ids };
     }
     default:
       return { reason: '未知的字段类型' };
@@ -502,7 +573,9 @@ export function applyChatEdits(project: Project, edits: ChatEditProposal[]): App
       skippedReasons.push(`「${edit.title}」没说是改哪个字段`);
       continue;
     }
-    const check = validateFieldValue(edit.target.kind, field, edit.after);
+    // 传 next 而不是原 project：同一批里先 create 出来的对象，
+    // 后面的 set 应该能引用到它（模型一次给全，顺序是先建后挂）
+    const check = validateFieldValue(edit.target.kind, field, edit.after, next);
     if (check.value === undefined) {
       skippedReasons.push(`「${edit.title}」没通过校验：${check.reason ?? '格式不对'}`);
       continue;
@@ -602,6 +675,21 @@ function applyCreate(
         ...stamp(),
       };
       project.scenes.push(s);
+
+      /**
+       * 新建场景后，**自动把它挂到「还没挂场景」的镜头上**。
+       *
+       * 【为什么要自动挂】模型无法引用同一批里刚新建的对象（id 由程序生成），
+       * 所以它没办法自己完成「建场景 → 挂镜头」这个动作。
+       * 如果什么都不做，新场景建出来是空的、镜头仍指向旧场景 ——
+       * 用户看到的是「场景建了但没生效」。
+       *
+       * 只挂 `sceneId` 为空的。**故意不覆盖已有场景的镜头** ——
+       * 那些镜头本来就有归属，改它们等于替用户做创作判断。
+       */
+      for (const shot of project.shots) {
+        if (!shot.sceneId) shot.sceneId = s.id;
+      }
       return { ok: true };
     }
 
@@ -732,7 +820,11 @@ function applyDelete(
  *
  * 同时**给出 id**，因为模型要在回复里指明「改哪一镜」。
  */
-export function buildProjectContext(project: Project, maxShots = 40): string {
+export function buildProjectContext(
+  project: Project,
+  report?: CheckReport | null,
+  maxShots = 40,
+): string {
   const lines: string[] = [];
 
   lines.push('# 故事（可改字段：body 正文、charactersNote 人物、setting 背景、conflict 冲突、ending 结局）');
@@ -759,7 +851,7 @@ export function buildProjectContext(project: Project, maxShots = 40): string {
     for (const c of project.characters) {
       lines.push(`## ${c.name}（id=${c.id}）`);
       // 逐字段输出白名单里允许改的内容 —— 模型看不到的字段它改不了
-      lines.push(readableFields('character', c));
+      lines.push(readableFields('character', c, project));
       if (c.continuityLocks.length > 0) {
         lines.push(`  连续性锁：${c.continuityLocks.map((l) => l.phrase).join('、')}（改锁面需在界面操作）`);
       }
@@ -771,7 +863,7 @@ export function buildProjectContext(project: Project, maxShots = 40): string {
     lines.push('# 场景');
     for (const s of project.scenes) {
       lines.push(`## ${s.name}（id=${s.id}）`);
-      lines.push(readableFields('scene', s));
+      lines.push(readableFields('scene', s, project));
       if (s.continuityLocks.length > 0) {
         lines.push(`  连续性锁：${s.continuityLocks.map((l) => l.phrase).join('、')}（改锁面需在界面操作）`);
       }
@@ -783,18 +875,48 @@ export function buildProjectContext(project: Project, maxShots = 40): string {
     lines.push(`# 分镜（共 ${project.shots.length} 镜）`);
     const shown = project.shots.slice(0, maxShots);
     for (const s of shown) {
-      const scene = project.scenes.find((x) => x.id === s.sceneId);
-      const cast = project.characters
-        .filter((c) => s.characterIds.includes(c.id))
-        .map((c) => c.name)
-        .join('、');
       lines.push(`## 第 ${s.number} 镜（id=${s.id}）`);
-      lines.push(`  场景：${scene?.name ?? '（未指定）'}｜出镜：${cast || '（无）'}`);
-      // 同样逐字段输出 —— 机位、转场、声音原来都漏了，导致模型「不知道有这些字段」
-      lines.push(readableFields('shot', s));
+      // 逐字段输出（含场景 / 出镜的引用），机位、转场、声音原来都漏了
+      lines.push(readableFields('shot', s, project));
     }
     if (project.shots.length > shown.length) {
       lines.push(`（其余 ${project.shots.length - shown.length} 镜省略）`);
+    }
+  }
+
+  /**
+   * 把穿帮检查的结论也交给模型。
+   *
+   * 【为什么要给】用户会直接问「有哪些地方可能出穿帮」。
+   * 检查结果是**纯本地逻辑算出来的确定性结论**，比让模型自己读分镜猜要准得多
+   * —— 实测它自己读也能找出问题，但会漏、而且不稳定。
+   *
+   * 给了它之后，两件事变好：
+   *  1. 用户问「有什么问题」时，它报的是引擎的实际结果，不是自己的印象
+   *  2. 它提修改方案时能顺带把这些问题一起修掉
+   */
+  if (report && report.issues.length > 0) {
+    lines.push('');
+    lines.push(`# 穿帮检查结果（共 ${report.issues.length} 条，本地引擎算出来的，可信）`);
+    lines.push(
+      `必须修 ${report.counts.error} 条，建议修 ${report.counts.warning} 条，看一眼 ${report.counts.info} 条`,
+    );
+    const show = report.issues.slice(0, 30);
+    for (const issue of show) {
+      const loc =
+        issue.location.kind === 'shot'
+          ? `第 ${project.shots.find((x) => x.id === issue.location.id)?.number ?? '?'} 镜`
+          : issue.location.kind === 'character'
+            ? `角色「${project.characters.find((x) => x.id === issue.location.id)?.name ?? '?'}」`
+            : issue.location.kind === 'scene'
+              ? `场景「${project.scenes.find((x) => x.id === issue.location.id)?.name ?? '?'}」`
+              : '整体';
+      lines.push(`- [${issue.severity}] ${loc}${issue.location.field ? `·${issue.location.field}` : ''}：${issue.title}`);
+      lines.push(`    为什么：${issue.why}`);
+      lines.push(`    建议：${issue.suggestion}`);
+    }
+    if (report.issues.length > show.length) {
+      lines.push(`（其余 ${report.issues.length - show.length} 条省略）`);
     }
   }
 
@@ -819,11 +941,35 @@ export function buildProjectContext(project: Project, maxShots = 40): string {
  * 现在从 `EDITABLE_FIELDS` 直接生成，**加字段会自动出现在上下文里**，
  * 结构上不可能再脱节。测试里还有一条专门守这个不变量。
  */
-function readableFields(kind: EditTarget['kind'], obj: unknown): string {
+function readableFields(
+  kind: EditTarget['kind'],
+  obj: unknown,
+  project?: Project | null,
+): string {
   const spec = EDITABLE_FIELDS[kind];
   const parts: string[] = [];
   for (const [field, def] of Object.entries(spec)) {
     const value = readPath(obj, field);
+
+    /**
+     * 引用类字段渲染成「名字（id）」。
+     *
+     * 模型要能改引用，就必须同时知道两件事：**现在挂的是谁**、
+     * **可以挂成谁**。只给 id 它不知道那是哪个场景；
+     * 只给名字它写不回 id。所以两个都给。
+     */
+    if (def.type === 'ref' || def.type === 'refArray') {
+      const ids = Array.isArray(value) ? value.map(String) : value ? [String(value)] : [];
+      const names = ids.map((id) => refName(def.refKind, id, project));
+      const text = names.filter(Boolean).join('、');
+      parts.push(
+        text
+          ? `${def.label}（${field}）= ${text}`
+          : `${def.label}（${field}）= 空（可选：${refOptions(def.refKind, project)}）`,
+      );
+      continue;
+    }
+
     const text = Array.isArray(value)
       ? value.join('、')
       : value === undefined || value === null
@@ -843,6 +989,30 @@ function readableFields(kind: EditTarget['kind'], obj: unknown): string {
   return `  ${parts.join('｜')}`;
 }
 
+
+/** 把引用 id 换成人能读的名字 */
+function refName(refKind: string | undefined, id: string, project?: Project | null): string {
+  if (!project || !id) return id;
+  if (refKind === 'scene') {
+    const s = project.scenes.find((x) => x.id === id);
+    return s ? `${s.name}（${id}）` : `（已失效的 id：${id}）`;
+  }
+  if (refKind === 'character') {
+    const c = project.characters.find((x) => x.id === id);
+    return c ? `${c.name}（${id}）` : `（已失效的 id：${id}）`;
+  }
+  return id;
+}
+
+/** 列出可选项，让模型知道能挂成哪些 */
+function refOptions(refKind: string | undefined, project?: Project | null): string {
+  if (!project) return '无';
+  const list =
+    refKind === 'scene'
+      ? project.scenes.map((x) => `${x.name}（${x.id}）`)
+      : project.characters.map((x) => `${x.name}（${x.id}）`);
+  return list.length > 0 ? list.join('、') : '（一个都没有）';
+}
 
 function truncate(text: string, max: number): string {
   const t = text.trim();
