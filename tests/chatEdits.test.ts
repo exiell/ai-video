@@ -32,6 +32,7 @@ import type { Project } from '../src/types/model';
 function edit(partial: Partial<ChatEditProposal> & { target: ChatEditProposal['target'] }): ChatEditProposal {
   return {
     id: 'e1',
+    op: 'set',
     title: '测试改动',
     reason: '',
     before: '',
@@ -270,7 +271,7 @@ describe('模型返回的解析与权限过滤', () => {
     });
     const out = normalizeChatReply(parsed);
     expect(out.reply.edits).toHaveLength(0);
-    expect(out.rejectedReasons[0]).toContain('没说是改哪一个');
+    expect(out.rejectedReasons[0]).toContain('没说是哪一个');
   });
 
   it('story / brief 不需要 id', () => {
@@ -353,7 +354,16 @@ describe('项目上下文', () => {
     p.story.body = '啊'.repeat(5000);
     const ctx = buildProjectContext(p);
     expect(ctx).toContain('已截断');
-    expect(ctx.length).toBeLessThan(6000);
+    /**
+     * 上限从 6000 提到 20000：v0.35 之后上下文改成**白名单驱动**，
+     * 每个可改字段都要输出当前值（原来手写字段列表时漏了一大半）。
+     * 上下文变长是这个修复的代价，换来的是「模型能改它看得见的东西」。
+     *
+     * 这里的断言目的不是卡死长度，而是**防止有人把整个故事原文塞进去**
+     * —— 那才是真正会让输入爆掉的做法。
+     */
+    expect(ctx.length).toBeLessThan(20000);
+    expect(ctx).not.toContain('啊'.repeat(3000));
   });
 
   it('空项目也能构造上下文，不崩', () => {

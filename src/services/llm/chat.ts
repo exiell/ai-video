@@ -29,24 +29,30 @@ import type { Project } from '../../types/model';
 // ---------------------------------------------------------------------------
 
 export const chatEditSchema = z.object({
-  /** 改哪个对象 */
+  /** 做什么：改 / 新建 / 删除。缺省视为「改」，兼容模型偶尔漏写 */
+  op: z.enum(['set', 'create', 'delete']).default('set'),
   target: z.object({
     kind: z.enum(['shot', 'character', 'scene', 'story', 'brief']),
+    /** set / delete 必填；create 时留空 */
     id: z.string().optional(),
-    field: z.string().min(1),
+    /** 仅 set 用 */
+    field: z.string().optional(),
   }),
   /** 一句话说明改什么（给人看，不要字段名） */
   title: z.string().min(1),
   /** 为什么这么改 */
   reason: z.string().default(''),
-  /** 修改后的**完整内容**，不是「把 X 改成 Y」这种说明 */
-  after: z.union([z.string(), z.number(), z.array(z.string())]),
+  /** 修改后的**完整内容**（set 用）。create 时留空，内容放 createFields */
+  after: z.union([z.string(), z.number(), z.array(z.string())]).optional(),
+  /** 新建时的字段内容（create 用）；**不要给 id**，程序会生成 */
+  createFields: z.record(z.string(), z.unknown()).optional(),
   /** 可能的副作用 */
   sideEffect: z.string().optional(),
 });
 
 export const chatReplySchema = z.object({
   reply: z.string().min(1),
+  /** 这次改动是单点还是牵动多处 —— 只用于界面上的措辞 */
   scope: z.enum(['single', 'related']).default('single'),
   edits: z.array(chatEditSchema).default([]),
 });
@@ -83,54 +89,78 @@ function renderFieldList(): string {
 export function buildChatSystemPrompt(): string {
   return `你是一个动漫分镜的改稿助手。用户是**完全的新手**，他不熟悉专业术语，
 也不知道该怎么填表格。你的任务是：听懂他想改什么，用大白话解释你的理解，
-然后给出**具体到字段的修改**。
+然后给出**完整、可直接应用的方案**。
 
-# 你的回答分两部分
+# 三种操作你都能做
 
-1. **reply**：用大白话回答他。先说你怎么理解他的意思，再说你打算怎么改、为什么。
-   不要用「景别」「运镜」这类术语来回答，除非他自己用了。说「把镜头拉近一点」
-   比说「改成 close-up」对他有用得多。
+| op | 做什么 | 需要给的字段 |
+|---|---|---|
+| \`set\` | 改已有对象的某个字段 | target（含 id 与 field）、after |
+| \`create\` | **新建**一个角色 / 场景 / 镜头 | target.kind、createFields（内容） |
+| \`delete\` | **删除**一个角色 / 场景 / 镜头 | target.kind、target.id |
 
-2. **edits**：具体的修改，每条包含：
-   - target：改哪个对象的哪个字段
-   - title：一句话说明改什么（给人看，例：「让第 3 镜的动作更有张力」）
-   - reason：为什么这么改（例：「你说太平，主要问题是动作只有'走进来'，没有阻力」）
-   - after：**修改后的完整内容**，不是「把 X 改成 Y」这种说明
-   - sideEffect：可选，这个改动可能带来的连带影响
+新建时**不要给 id** —— 程序会生成。你只负责内容。
+删除 story / brief 是不允许的（它们是固定的，不能删）。
 
-# 三条硬规则
+# 五条硬规则
 
-**1. 默认只改用户问到的那一处。**
-用户问「第三镜太平」，你只改第三镜。**不要顺手把第 4、5 镜也改了**——
-改动范围一大，用户就没法逐条审阅，只能盲目全信或全部拒绝，两边都是坏结果。
+**1. 用户说改就改，不要推脱。**
+不要说「这个需要在界面上手动操作」。新建角色、新建场景、拆镜头、
+删除多余的角色 —— 这些你都能做，直接给出方案。
 
-只有当用户**明确要求**联动时才扩大范围（例如他说「连带相关的镜头一起改」），
-这时把 scope 设为 "related"。
+**2. 一次性给全，不要挤牙膏。**
+用户要改情节，可能牵动十几个镜头。**就在这一次回复里把所有要改的都列出来**，
+不要只给第一条然后说「要不要继续」。用户会一次性看到全部方案再决定。
 
-**2. 绝对不能改引用关系。**
+反例：用户说「把结局改成主角牺牲」，你只改了 story.ending，
+然后说「第 9~12 镜也需要调整，要我改吗？」
+正例：同一次回复里给出 story.ending + 第 9~12 镜的 action / endState / mood 等全部改动。
+
+**3. 用户要求「全面改」「重写这一镜」时，就把这个对象的全部相关字段都重写。**
+不要只改动作和起终点。一个镜头的完整画面包含：
+起点、动作、终点、时长、景别、运镜、机位、情绪、台词、声音、衔接说明。
+用户说「全面改第 3 镜」，这些**都要重新给**。
+
+**4. 绝对不能改引用关系。**
 不要改 id、sceneId、characterIds、activeLockIds、shotIds、variants、continuityLocks。
-这些是对象之间的连接，改错了会把分镜挂到不存在的场景上，而且界面上不一定看得见。
+这些是对象之间的连接，改错了会把分镜挂到不存在的场景上，而界面上不一定看得见。
 挂哪个场景、谁出镜，是用户在界面上用下拉框做的决定，不是你的。
 
-**3. after 必须是完整可替换的内容。**
+**5. after 必须是完整可替换的内容。**
 反例：「让动作更有张力」—— 这不是内容，用户拿到它没有任何用。
 正例：「他推开门，手停在门把上没松开」—— 这是可以直接替换进字段的东西。
 
+# 关于范围
+
+改动大小**不设限**：从改一个词到重写整段情节都可以，一次最多 40 条。
+但**每一条都要能单独看懂** —— 用户会逐条审阅、逐条勾选，
+所以 title 要说清「这一条在改什么」，reason 要说清「为什么」。
+涉及多个镜头时，按镜头顺序排列，让用户能顺着读下来。
+
 # 风格要求
 
-- 说话简短。用户是新手，一次说太多他会更糊涂。
-- 一次最多给 5 条修改。超过 5 条说明这个改动太大了，应该先问清楚。
+- 说话简短。用户是新手，一次说太多他会更糊涂。reply 里不要复述 edits 的细节。
 - 如果用户只是在提问（比如「这个工具能做什么」「为什么要锁角色」），
   就只回答，edits 返回空数组。**不要为了显示自己能干而硬凑修改。**
-- 如果他的要求你做不到（例如「帮我生成图片」），直说做不到，并告诉他去哪里做。
+- 如果他的要求确实做不到（例如「帮我生成图片」「帮我配乐」），直说做不到，
+  并告诉他去哪里做 —— 但先想清楚是不是真的做不到。
 - 中文回答。
 
 # 你可以修改的字段
 
 ${renderFieldList()}
 
-注意：**不在这份清单里的字段你不能改。** 如果你想改的东西不在清单里，
-在 reply 里告诉用户「这个需要在界面上手动改」，而不是编一个字段名。
+不在这份清单里的字段你改不了。但**新建对象**不受这份清单限制 ——
+新建时按下面的字段名给内容即可。
+
+# 新建时用哪些字段
+
+- 角色：name、identity.summary（中文概述）、identity.summaryEn（英文描述，给模型看）、
+  identity.face、identity.hair、identity.bodyType、identity.ageRange
+- 场景：name、identity.summary、identity.summaryEn、identity.placeType、
+  identity.spatialStructure、lightDirection、mainColor、fixedElements（英文短语数组）
+- 镜头：startState、action、endState、duration、shotSize、cameraMove、
+  cameraPosition、mood、dialogue、sound、continuityNote
 
 # 输出格式
 
@@ -141,11 +171,30 @@ ${renderFieldList()}
   "scope": "single",
   "edits": [
     {
+      "op": "set",
       "target": { "kind": "shot", "id": "镜头的 id", "field": "action" },
       "title": "让第 3 镜的动作更有张力",
       "reason": "你说太平，主要问题是动作只有'走进来'，没有阻力",
-      "after": "他推开门，手停在门把上没松开",
-      "sideEffect": "这会让这一镜的时长需要更长一点"
+      "after": "他推开门，手停在门把上没松开"
+    },
+    {
+      "op": "create",
+      "target": { "kind": "character" },
+      "title": "新增一个反派角色",
+      "reason": "你要求增加一个对手",
+      "createFields": {
+        "name": "周薄森",
+        "identity.summary": "三十余岁的地方武官",
+        "identity.summaryEn": "a local military officer in his thirties, sharp eyes",
+        "identity.face": "窄脸，薄唇，眉压得低"
+      }
+    },
+    {
+      "op": "delete",
+      "target": { "kind": "shot", "id": "要删的镜头 id" },
+      "title": "删掉多余的第 5 镜",
+      "reason": "它和前一镜说的是同一件事",
+      "sideEffect": "后面镜头的编号会自动前移"
     }
   ]
 }`;
@@ -211,24 +260,78 @@ export function normalizeChatReply(parsed: GeneratedChatReply, project?: Project
 
   parsed.edits.forEach((raw, index) => {
     const { kind, id, field } = raw.target;
+    const baseId = `chat-edit-${index}-${Date.now().toString(36)}`;
 
-    // 除了 story / brief，其余都必须给出 id
-    if (kind !== 'story' && kind !== 'brief' && !id) {
-      rejectedReasons.push(`「${raw.title}」没说是改哪一个${kind === 'shot' ? '镜头' : '对象'}`);
+    // ---------- 新建 ----------
+    if (raw.op === 'create') {
+      if (kind !== 'character' && kind !== 'scene' && kind !== 'shot') {
+        rejectedReasons.push(`「${raw.title}」想新建的东西不支持（只能新建角色 / 场景 / 镜头）`);
+        return;
+      }
+      const fields = raw.createFields ?? {};
+      if (Object.keys(fields).length === 0) {
+        rejectedReasons.push(`「${raw.title}」没说新建的内容`);
+        return;
+      }
+      edits.push({
+        id: baseId,
+        op: 'create',
+        title: raw.title,
+        reason: raw.reason,
+        target: { kind },
+        before: '（新建）',
+        after: summarizeCreate(kind, fields),
+        createFields: fields,
+        ...(raw.sideEffect ? { sideEffect: raw.sideEffect } : {}),
+      });
       return;
     }
 
+    // set 与 delete 都必须指明对象
+    if (kind !== 'story' && kind !== 'brief' && !id) {
+      rejectedReasons.push(`「${raw.title}」没说是哪一个${kind === 'shot' ? '镜头' : '对象'}`);
+      return;
+    }
+
+    // ---------- 删除 ----------
+    if (raw.op === 'delete') {
+      if (kind === 'story' || kind === 'brief') {
+        rejectedReasons.push(`「${raw.title}」想删的东西不能删（故事与规格是固定的）`);
+        return;
+      }
+      edits.push({
+        id: baseId,
+        op: 'delete',
+        title: raw.title,
+        reason: raw.reason,
+        target: { kind, ...(id ? { id } : {}) },
+        before: project ? describeTarget(project, kind, id ?? '') : '',
+        after: '',
+        ...(raw.sideEffect ? { sideEffect: raw.sideEffect } : {}),
+      });
+      return;
+    }
+
+    // ---------- 改字段 ----------
+    if (!field) {
+      rejectedReasons.push(`「${raw.title}」没说是改哪个字段`);
+      return;
+    }
     const spec = EDITABLE_FIELDS[kind][field];
     if (!spec) {
       rejectedReasons.push(
-        `「${raw.title}」想改的字段「${field}」不在可修改范围内（需要在界面上手动改）`,
+        `「${raw.title}」想改的字段「${field}」不在可修改范围内`,
       );
+      return;
+    }
+    if (raw.after === undefined) {
+      rejectedReasons.push(`「${raw.title}」没给出要改成什么`);
       return;
     }
 
     // 值本身也校验一遍：类型不对、超长、枚举不匹配都在这里挡掉。
-    // 放在 domain 的 validateFieldValue 里，这里只做一次预检是为了
-    // 能在界面上**当场**告诉用户哪条被挡了，而不是等他点了确认才发现。
+    // 这里做一次预检是为了能在界面上**当场**告诉用户哪条被挡了，
+    // 而不是等他点了确认才发现。
     const typeOk =
       spec.type === 'text'
         ? typeof raw.after === 'string'
@@ -244,13 +347,16 @@ export function normalizeChatReply(parsed: GeneratedChatReply, project?: Project
 
     const target: ChatEditProposal['target'] = { kind, ...(id ? { id } : {}), field };
     /**
-     * 记下「生成提议那一刻」的值，供确认时做冲突检测。
-     * 不记的话，用户在提议之后的手改会被静默覆盖。
+     * 记下「生成提议那一刻」的值，供两处用：
+     *  1. 确认时做冲突检测（用户在提议之后手改过就不覆盖）
+     *  2. 界面上显示「改前」—— 这是唯一正确的来源，
+     *     因为应用之后从项目里读到的已经是新值了
      */
     const beforeAtProposal = project ? readField(project, target) : undefined;
 
     edits.push({
-      id: `chat-edit-${index}-${Date.now().toString(36)}`,
+      id: baseId,
+      op: 'set',
       title: raw.title,
       reason: raw.reason,
       target,
@@ -271,6 +377,35 @@ export function normalizeChatReply(parsed: GeneratedChatReply, project?: Project
     rejected: rejectedReasons.length,
     rejectedReasons,
   };
+}
+
+/** 把新建的内容摘要成一行，供界面显示「新增了什么」 */
+function summarizeCreate(kind: string, fields: Record<string, unknown>): string {
+  const pick = (...keys: string[]): string => {
+    for (const k of keys) {
+      const v = fields[k];
+      if (typeof v === 'string' && v.trim()) return v.trim();
+      if (Array.isArray(v) && v.length > 0) return v.map(String).join('、');
+    }
+    return '';
+  };
+  if (kind === 'character') return `新角色：${pick('name', 'identity.summary') || '（未命名）'}`;
+  if (kind === 'scene') return `新场景：${pick('name', 'identity.summary') || '（未命名）'}`;
+  return `新镜头：${pick('action', 'startState') || '（未填内容）'}`;
+}
+
+/** 描述一个即将被删除的对象，供界面显示「删掉的是什么」 */
+function describeTarget(project: Project, kind: string, id: string): string {
+  if (kind === 'character') {
+    const c = project.characters.find((x) => x.id === id);
+    return c ? `角色「${c.name}」${c.identity.summary ? `（${c.identity.summary}）` : ''}` : '（已不存在）';
+  }
+  if (kind === 'scene') {
+    const s = project.scenes.find((x) => x.id === id);
+    return s ? `场景「${s.name}」` : '（已不存在）';
+  }
+  const shot = project.shots.find((x) => x.id === id);
+  return shot ? `第 ${shot.number} 镜：${shot.action || shot.startState || '（未填内容）'}` : '（已不存在）';
 }
 
 /** 从模型原始输出里解析出对话回复 */

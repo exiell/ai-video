@@ -1,99 +1,88 @@
 import { describe, expect, it } from 'vitest';
 import {
-  AUTO_APPLY_MAX_EDITS,
+  MAX_EDITS,
   decideGate,
   isEditable,
 } from '../src/domain/chat/edits';
 
 /**
- * 闸门分级（方案.md §7.6.20）
+ * 闸门：**一律确认，不再有自动应用**（方案.md §7.6.25）
  *
  * ===========================================================================
- * 为什么这个逻辑值得单独测
+ * 这组测试记录了一次设计反转，以及它为什么不矛盾
  * ===========================================================================
- * 它是「AI 要不要先问用户」的唯一判据。判错了有两个方向的坏结果：
+ * v0.31 时我把「定点小改」改成直接应用，依据是 Anthropic 公布的数据：
+ * 用户对确认框的批准率是 **93%**，也就是说「每条都问 ≈ 没问」，
+ * 安全性交给「可撤销」更实在。
  *
- *  - 太松：AI 一口气改十几个地方不问 → 用户失去掌控感，而这正是
- *    「AI 改稿」这类功能最常见的投诉
- *  - 太严：每改一句话都弹确认框 → 用户开始无脑点同意。
- *    Anthropic 的实测数字是**批准率 93%**，也就是说确认框此时
- *    提供的安全感是假的
+ * v0.35 用户明确要求改回「无论什么规模都要先确认」，并且说明了理由：
+ * 这是创作工具，每次改动直接决定要花钱生成的成品，他确实会逐条看。
  *
- * 所以规则必须**可预测、可解释**：用户看完理由应该能猜到
- * 「下次它会不会问我」。测的就是这条。
+ * **两条都不算错，因为场景不同**：
+ *  - Anthropic 那条数据来自开发者 CLI —— 操作频繁、多数无害、
+ *    批量处理是常态，所以逐条问会变成噪音
+ *  - 这里是创作场景 —— 改动次数少、每条都影响成品、用户愿意细看
+ *
+ * 所以现在的取舍是：**宁可多问，不可擅自改**。
+ * 测试钉住的是「当前的决定」，不是「这个决定永远对」。
  */
 
-describe('闸门分级', () => {
-  it('**单点小改直接应用**（这是默认路径，也是省事的关键）', () => {
-    const d = decideGate({ editCount: 1, scope: 'single', touchedTargets: 1 });
-    expect(d.gate).toBe('auto');
-    expect(d.why).toContain('可以撤销');
-  });
-
-  it('两三处、同一对象 → 仍然直接应用', () => {
-    const d = decideGate({ editCount: 3, scope: 'single', touchedTargets: 1 });
-    expect(d.gate).toBe('auto');
-  });
-
-  it(`超过 ${AUTO_APPLY_MAX_EDITS} 处 → 要求确认`, () => {
-    const d = decideGate({ editCount: AUTO_APPLY_MAX_EDITS + 1, scope: 'single', touchedTargets: 1 });
+describe('闸门：一律确认', () => {
+  it('**单条改动也要确认**（这就是 v0.35 的反转点）', () => {
+    const d = decideGate({ editCount: 1 });
     expect(d.gate).toBe('confirm');
-    expect(d.why).toContain('条数比较多');
+    expect(d.why).toBeTruthy();
   });
 
-  it('**改到多个不同对象 → 要求确认**（哪怕只有两条）', () => {
-    const d = decideGate({ editCount: 2, scope: 'single', touchedTargets: 2 });
-    expect(d.gate).toBe('confirm');
-    expect(d.why).toContain('2 个不同的地方');
-  });
-
-  it('**模型自称要联动改 → 一律要求确认**', () => {
-    // 联动改动之间有关联，逐条看反而会漏掉整体效果，
-    // 所以哪怕只有一条也要给用户过目
-    const d = decideGate({ editCount: 1, scope: 'related', touchedTargets: 1 });
-    expect(d.gate).toBe('confirm');
-    expect(d.why).toContain('连带影响');
-  });
-
-  it('联动 + 多条 → 依然是确认（不会因为条数少就放行）', () => {
-    const d = decideGate({ editCount: 2, scope: 'related', touchedTargets: 2 });
-    expect(d.gate).toBe('confirm');
-  });
-
-  it('只要不是联动且范围小，理由里都会说明「为什么这次不问你」', () => {
-    // 用户应该永远知道「它这次没问我是有理由的」，而不是觉得它偷偷改了
-    for (const n of [1, 2, 3]) {
-      const d = decideGate({ editCount: n, scope: 'single', touchedTargets: 1 });
-      expect(d.gate, `${n} 处`).toBe('auto');
-      expect(d.why, `${n} 处`).toBeTruthy();
-      expect(d.why).toMatch(/撤销|直接改/);
+  it('多条改动同样确认', () => {
+    for (const n of [2, 5, 20, MAX_EDITS]) {
+      expect(decideGate({ editCount: n }).gate, `${n} 条`).toBe('confirm');
     }
   });
 
-  it('要确认时，理由说清是哪一条规则触发的', () => {
-    const cases = [
-      decideGate({ editCount: 9, scope: 'single', touchedTargets: 1 }),
-      decideGate({ editCount: 2, scope: 'single', touchedTargets: 3 }),
-      decideGate({ editCount: 1, scope: 'related', touchedTargets: 1 }),
-    ];
-    for (const d of cases) {
-      expect(d.gate).toBe('confirm');
-      expect(d.why.length, '理由不能是一句空话').toBeGreaterThan(5);
+  it('**没有任何输入能让它变成自动应用**', () => {
+    // 这条断言看着笨，但它钉住的正是「取消 auto 档」这件事：
+    // 以后若有人想恢复自动应用，必须显式改掉这个测试，
+    // 从而会看到上面那段「为什么改回来了」的说明。
+    for (const n of [1, 2, 3, 10, 40, 100]) {
+      expect(decideGate({ editCount: n }).gate).not.toBe('auto');
     }
   });
 
-  it('零改动不会走到这里（调用方负责拦住），但也不该崩', () => {
-    expect(() => decideGate({ editCount: 0, scope: 'single', touchedTargets: 0 })).not.toThrow();
+  it('零改动也不崩（调用方会拦住，但函数本身要安全）', () => {
+    expect(() => decideGate({ editCount: 0 })).not.toThrow();
+    expect(decideGate({ editCount: 0 }).gate).toBe('confirm');
+  });
+
+  it('理由要说清是「给你过目」而不是空话', () => {
+    const one = decideGate({ editCount: 1 });
+    const many = decideGate({ editCount: 12 });
+    expect(one.why.length).toBeGreaterThan(5);
+    expect(many.why).toContain('12');
+    // 多条时要让用户先知道规模
+    expect(many.why).toMatch(/过目|确认/);
+  });
+});
+
+describe('一次能带多少条改动', () => {
+  it('**上限放宽到 40**（原来 5 条，改情节根本表达不出来）', () => {
+    // 用户要求支持「大段改情节，涉及多个镜头」，那天然会牵动十几条。
+    // 5 条的上限会让这类需求没法表达 —— AI 只能挤牙膏式地给。
+    expect(MAX_EDITS).toBeGreaterThanOrEqual(20);
+  });
+
+  it('上限仍然存在（防止模型失控输出几百条）', () => {
+    expect(MAX_EDITS).toBeLessThanOrEqual(100);
   });
 });
 
 describe('闸门与白名单是两道独立的关', () => {
-  it('**白名单与闸门互不替代**：一条改动可以先过闸门、再被白名单挡住', () => {
-    // 闸门决定「要不要问用户」，白名单决定「准不准改」。
-    // 两者都必须存在：只靠闸门，用户点同意就能改坏结构；
-    // 只靠白名单，用户会被问烦。
+  it('**白名单仍然有效**：用户点同意也不能改引用关系', () => {
+    // 取消 auto 档不等于放松白名单 —— 两者管的是不同的事：
+    // 闸门决定「要不要问用户」，白名单决定「问过也不准改什么」。
     expect(isEditable('shot', 'action')).toBe(true);
-    // 这是个引用字段 —— 即便用户点了同意也不该能改
     expect(isEditable('shot', 'sceneId')).toBe(false);
+    expect(isEditable('shot', 'characterIds')).toBe(false);
+    expect(isEditable('character', 'shotIds')).toBe(false);
   });
 });

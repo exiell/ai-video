@@ -113,6 +113,7 @@ describe('对话栏', () => {
           edits: [
             {
               id: 'e1',
+              op: 'set',
               title: '让动作更具体',
               reason: '原来太笼统',
               target: { kind: 'shot', id: shot.id, field: 'action' },
@@ -291,6 +292,162 @@ describe('收起对话栏的入口', () => {
     expect(panelIdx).toBeGreaterThanOrEqual(0);
     expect(toggleIdx).toBeGreaterThan(panelIdx);
     expect(bodyIdx).toBeGreaterThan(toggleIdx);
+    unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 分批显示：改情节时一次二十几条，必须能读
+// ---------------------------------------------------------------------------
+
+describe('改动按对象分组显示', () => {
+  beforeEach(() => {
+    useAppStore.setState({ project: sampleProject });
+    useChat.setState({
+      open: true,
+      bubbles: [],
+      pending: false,
+      draft: '',
+      activeBubbleId: null,
+      selected: new Set(),
+      undoStack: [],
+      lastApplied: null,
+      notice: null,
+    });
+  });
+
+  function bubbleWith(edits: unknown[]): void {
+    useChat.setState({
+      activeBubbleId: 'b1',
+      selected: new Set(edits.map((e) => (e as { id: string }).id)),
+      bubbles: [{ id: 'b1', role: 'assistant', content: '改好了。', edits: edits as never }],
+    });
+  }
+
+  it('**同一个镜头的多条改动归到一组**', () => {
+    const id = sampleProject.shots[0]!.id;
+    bubbleWith([
+      { id: 'e1', op: 'set', title: '改动作', reason: '', target: { kind: 'shot', id, field: 'action' }, before: 'a', beforeAtProposal: 'a', after: 'b' },
+      { id: 'e2', op: 'set', title: '改时长', reason: '', target: { kind: 'shot', id, field: 'duration' }, before: '3', beforeAtProposal: '3', after: '2' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    // 两条同一镜 → 只有一组
+    expect((html.match(/chat-group-head/g) ?? []).length).toBe(1);
+    unmount();
+  });
+
+  it('**不同镜头的改动分成不同组**', () => {
+    const a = sampleProject.shots[0]!.id;
+    const b = sampleProject.shots[1]!.id;
+    bubbleWith([
+      { id: 'e1', op: 'set', title: '改第 1 镜', reason: '', target: { kind: 'shot', id: a, field: 'action' }, before: '', beforeAtProposal: '', after: 'x' },
+      { id: 'e2', op: 'set', title: '改第 2 镜', reason: '', target: { kind: 'shot', id: b, field: 'action' }, before: '', beforeAtProposal: '', after: 'y' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    expect((html.match(/chat-group-head/g) ?? []).length).toBe(2);
+    unmount();
+  });
+
+  it('**一条改动都不丢**（分组不能吃掉内容）', () => {
+    const id = sampleProject.shots[0]!.id;
+    bubbleWith([
+      { id: 'e1', op: 'set', title: '甲', reason: '', target: { kind: 'shot', id, field: 'action' }, before: '', beforeAtProposal: '', after: 'x' },
+      { id: 'e2', op: 'set', title: '乙', reason: '', target: { kind: 'shot', id, field: 'mood' }, before: '', beforeAtProposal: '', after: 'y' },
+      { id: 'e3', op: 'create', title: '丙', reason: '', target: { kind: 'character' }, before: '（新建）', after: '新角色：甲' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    // 只数卡片本身 —— 原来用 /class="chat-edit/ 会把 chat-edits、chat-edits-head
+    // 和 chat-edit-danger 一起数进去，得到虚高的数字
+    expect((html.match(/class="chat-edit[ "]/g) ?? []).length).toBe(3);
+    unmount();
+  });
+
+  it('**删除有独立的视觉标记**（它比改字段重得多）', () => {
+    const id = sampleProject.shots[1]!.id;
+    bubbleWith([
+      { id: 'e1', op: 'delete', title: '删掉这一镜', reason: '', target: { kind: 'shot', id }, before: '第 2 镜', after: '' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    expect(html).toContain('chat-edit-danger');
+    expect(html).toContain('将删除');
+    unmount();
+  });
+
+  it('新增显示「将新增」而不是前后对照', () => {
+    bubbleWith([
+      { id: 'e1', op: 'create', title: '加个反派', reason: '', target: { kind: 'character' }, before: '（新建）', after: '新角色：周薄森' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    expect(html).toContain('将新增');
+    expect(html).not.toContain('改前');
+    unmount();
+  });
+
+  it('**「改前」用提议时的快照，不是当前值**（这是那个显示相同的 bug）', () => {
+    // 关键：beforeAtProposal 与项目里的当前值不同，
+    // 界面必须显示 beforeAtProposal（提议时的值），而不是被改过的当前值。
+    const id = sampleProject.shots[0]!.id;
+    bubbleWith([
+      {
+        id: 'e1',
+        op: 'set',
+        title: '改动作',
+        reason: '',
+        target: { kind: 'shot', id, field: 'action' },
+        before: '原始动作内容',
+        beforeAtProposal: '原始动作内容',
+        after: '改后的动作内容',
+      },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    expect(html).toContain('原始动作内容');
+    expect(html).toContain('改后的动作内容');
+    // 两栏不能是同一个值
+    expect(html).not.toMatch(/改前<\/span><span[^>]*>改后的动作内容/);
+    unmount();
+  });
+
+  it('改动多的组会折叠起来（不然一屏铺满没法读）', () => {
+    const id = sampleProject.shots[0]!.id;
+    const many = ['action', 'mood', 'dialogue', 'sound', 'cameraPosition'].map((f, i) => ({
+      id: `e${i}`,
+      op: 'set',
+      title: `改 ${f}`,
+      reason: '',
+      target: { kind: 'shot', id, field: f },
+      before: '',
+      beforeAtProposal: '',
+      after: `新值 ${i}`,
+    }));
+    bubbleWith(many);
+    const { html, unmount } = render(<ChatSidebar />);
+    // 5 条 > 3 → 应该折叠
+    expect(html).toContain('<details');
+    expect(html).toContain('展开看这 5 处');
+    unmount();
+  });
+
+  it('摘要说明涉及几个对象、有没有增删', () => {
+    const id = sampleProject.shots[0]!.id;
+    bubbleWith([
+      { id: 'e1', op: 'set', title: '改', reason: '', target: { kind: 'shot', id, field: 'action' }, before: '', beforeAtProposal: '', after: 'x' },
+      { id: 'e2', op: 'delete', title: '删', reason: '', target: { kind: 'shot', id: sampleProject.shots[1]!.id }, before: '', after: '' },
+      { id: 'e3', op: 'create', title: '增', reason: '', target: { kind: 'scene' }, before: '（新建）', after: '新场景：破庙' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    expect(html).toContain('新增 1 个');
+    expect(html).toContain('删除 1 个');
+    unmount();
+  });
+
+  it('渲染结果里没有字面星号', () => {
+    const id = sampleProject.shots[0]!.id;
+    bubbleWith([
+      { id: 'e1', op: 'set', title: '改', reason: '', target: { kind: 'shot', id, field: 'action' }, before: '', beforeAtProposal: '', after: 'x' },
+      { id: 'e2', op: 'delete', title: '删', reason: '', target: { kind: 'shot', id: sampleProject.shots[1]!.id }, before: '', after: '' },
+    ]);
+    const { html, unmount } = render(<ChatSidebar />);
+    expect(html).not.toContain('**');
     unmount();
   });
 });

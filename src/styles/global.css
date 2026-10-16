@@ -863,3 +863,46 @@ table.simple th {
   background: rgba(95, 208, 138, 0.14);
   cursor: help;
 }
+/*
+  一批改动按对象分组。
+  分组的意义不只是好看：改情节时一次二十几条，平铺会让人直接点「全选」，
+  确认就失去意义了。分组 + 组头摘要让用户先看规模，再决定要不要细看。
+*/
+.chat-group {
+  margin-bottom: 10px;
+  border-left: 2px solid var(--border-strong);
+  padding-left: 8px;
+}
+
+.chat-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: var(--text-dim);
+}
+
+/*
+  删除类改动用红色左边框标出来。
+  删除比改字段重得多 —— 而且如果删的对象没有被引用，撤销栈也可能
+  在几次操作后被顶掉。所以它必须在视觉上就不一样。
+*/
+.chat-edit-danger {
+  border-color: rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.05);
+}
+
+.chat-edit-danger.checked {
+  border-color: var(--error);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.chat-diff-danger {
+  border-color: rgba(255, 107, 107, 0.35);
+}
+
+.chat-diff-danger .chat-diff-row:first-child {
+  background: rgba(255, 107, 107, 0.1);
+}

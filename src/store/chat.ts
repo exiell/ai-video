@@ -51,6 +51,8 @@ export interface ChatBubble {
   detail?: string;
   /** 这一批提议是否已经被应用或放弃 */
   resolved?: 'applied' | 'discarded';
+  /** 为什么这批要你确认（给界面用一句话说清） */
+  gateWhy?: string;
 }
 
 interface ChatState {
@@ -166,44 +168,23 @@ export const useChat = create<ChatState>((set, get) => ({
         bubble.rejectedReasons = rejectedReasons;
       }
 
-      // 按闸门分流
-      const gate = decideGate({
-        editCount: reply.edits.length,
-        scope: reply.scope,
-        touchedTargets: new Set(reply.edits.map((e) => `${e.target.kind}:${e.target.id ?? ''}`)).size,
-      });
-
       if (reply.edits.length === 0) {
         return { bubbles: [...s.bubbles, bubble], pending: false, lastApplied: null };
       }
 
-      /**
-       * auto 档：直接应用。
-       *
-       * 这不是「减少确认次数」的偷懒，而是基于一个实测数字：
-       * 用户对确认框的批准率是 93%（Anthropic 官方数据），
-       * 也就是说**每条都问 ≈ 没问**。安全性由「可撤销」保证更实在。
-       */
-      if (gate.gate === 'auto') {
-        const current = useAppStore.getState().project;
-        if (!current) return { bubbles: [...s.bubbles, bubble], pending: false };
+      const gate = decideGate({ editCount: reply.edits.length });
 
-        const result = applyChatEdits(current, reply.edits);
-        if (result.applied > 0) {
-          useAppStore.getState().setProject(result.project);
-          bubble.resolved = 'applied';
-          return {
-            bubbles: [...s.bubbles, bubble],
-            pending: false,
-            undoStack: [...s.undoStack, current],
-            lastApplied: { count: result.applied, gate: 'auto', why: gate.why },
-            notice:
-              `改了 ${result.applied} 处：${reply.edits.map((e) => e.title).join('；')}。` +
-              (result.skipped > 0 ? `另有 ${result.skipped} 处没改成：${result.skippedReasons.join('；')}。` : ''),
-          };
-        }
-        // 一条都没应用成功（例如全被冲突检测挡了）→ 退回让人过目
-      }
+      /**
+       * 【v0.35 取消 auto 档】一律走确认，不再直接应用。
+       *
+       * 原来是「定点小改直接改」，依据是 Anthropic 那条「确认框批准率 93%，
+       * 每条都问 ≈ 没问」。用户明确要求改成全部确认，理由也成立：
+       * 这是创作工具，每次改动直接决定要花钱生成的成品，用户确实会逐条看。
+       *
+       * 所以现在 `gate.gate` 恒为 'confirm'，这里不做分流。
+       * 保留 `gate` 变量是为了把「为什么让你确认」这句话带给界面。
+       */
+      bubble.gateWhy = gate.why;
 
       return {
         bubbles: [...s.bubbles, bubble],

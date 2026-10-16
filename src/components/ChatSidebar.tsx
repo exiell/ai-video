@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChat, type ChatBubble } from '../store/chat';
 import { useAppStore } from '../store/app';
-import { fieldLabel, readField, type ChatEditProposal } from '../domain/chat/edits';
+import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
 import { currentLlmName } from '../services/llm/readiness';
 import { RichText } from './bits';
+import type { Project } from '../types/model';
 
 /**
  * 对话式改稿侧栏（方案.md §7.6.20）
@@ -46,7 +47,6 @@ export function ChatSidebar() {
   const notice = useChat((s) => s.notice);
   const clearNotice = useChat((s) => s.clearNotice);
   const undoStack = useChat((s) => s.undoStack);
-  const lastApplied = useChat((s) => s.lastApplied);
   const undo = useChat((s) => s.undo);
   const reset = useChat((s) => s.reset);
 
@@ -143,11 +143,6 @@ export function ChatSidebar() {
           {notice ? (
             <div className="chat-notice">
               <span>
-                {lastApplied?.gate === 'auto' ? (
-                  <b className="chat-auto-tag" title={lastApplied.why}>
-                    已自动应用
-                  </b>
-                ) : null}
                 {notice}
               </span>
               {undoStack.length > 0 ? (
@@ -203,13 +198,275 @@ export function ChatSidebar() {
 
 // ---------------------------------------------------------------------------
 
-function Bubble({ bubble }: { bubble: ChatBubble }) {
-  const activeBubbleId = useChat((s) => s.activeBubbleId);
+/**
+ * 一批改动的审阅区。
+ *
+ * ===========================================================================
+ * 为什么要按对象分组、且可折叠
+ * ===========================================================================
+ * 改情节时一次可能有二十几条改动。平铺成二十几张卡片有兩個问题：
+ *  - 用户根本读不完，只会直接点「全选 → 应用」，确认就失去意义了
+ *  - 看不出「这些改动之间的关系」—— 第 3~7 镜是一组连贯的调整，
+ *    平铺会把这个整体感打散
+ *
+ * 所以按对象分组、组内可折叠、组头给一行摘要。
+ * 用户先看规模（改了几个镜头、有没有删除），再决定要不要逐条细看。
+ */
+function EditBatch({ bubble, isActive }: { bubble: ChatBubble; isActive: boolean }) {
+  const selected = useChat((s) => s.selected);
+  const edits = bubble.edits ?? [];
+
+  const groups = groupEdits(edits);
+  const deletes = edits.filter((e) => e.op === 'delete').length;
+  const creates = edits.filter((e) => e.op === 'create').length;
+  const checkedCount = edits.filter((e) => selected.has(e.id)).length;
+
+  return (
+    <div className="chat-edits">
+      <div className="chat-edits-head">
+        <b>
+          建议改动 {edits.length} 处
+          {bubble.resolved === 'applied' ? '（已应用）' : ''}
+          {bubble.resolved === 'discarded' ? '（已放弃）' : ''}
+        </b>
+        {isActive ? (
+          <span className="hint" style={{ marginTop: 0 }}>
+            已勾选 {checkedCount}/{edits.length}
+          </span>
+        ) : null}
+      </div>
+
+      {/*
+        规模摘要：让用户先判断「这次改动有多大」再决定要不要细看。
+        删除单独标出来，因为它比改字段重得多。
+      */}
+      <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
+        {/*
+          ⚠️ 这里的文案必须走 RichText —— JSX 不解析 Markdown。
+          我自己在这里犯过一次「写了 ** 却没包 RichText」的错，
+          结果是用户看到字面的星号。测试里有专门一条守这个。
+        */}
+        <RichText>
+          {`涉及 ${groups.length} 个对象` +
+            (creates > 0 ? `｜新增 ${creates} 个` : '') +
+            (deletes > 0 ? `｜**删除 ${deletes} 个**` : '') +
+            (isActive ? '｜应用后可整体撤销' : '')}
+        </RichText>
+      </div>
+
+      {bubble.gateWhy && isActive ? (
+        <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
+          {bubble.gateWhy}
+        </div>
+      ) : null}
+
+      {groups.map((group) => (
+        <EditGroup key={group.key} group={group} isActive={isActive} />
+      ))}
+
+      {isActive ? (
+        <div className="row" style={{ marginTop: 8 }}>
+          <ApplyButton />
+          <DiscardButton />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ApplyButton() {
+  const applySelected = useChat((s) => s.applySelected);
+  return (
+    <button type="button" className="btn btn-primary btn-sm" onClick={applySelected}>
+      应用勾选的改动
+    </button>
+  );
+}
+
+function DiscardButton() {
+  const discardActive = useChat((s) => s.discardActive);
+  return (
+    <button type="button" className="btn btn-sm" onClick={discardActive}>
+      都不要
+    </button>
+  );
+}
+
+/** 一个对象下的一组改动。超过 3 条时默认折叠，避免一屏铺满。 */
+function EditGroup({ group, isActive }: { group: EditGroupData; isActive: boolean }) {
+  const selected = useChat((s) => s.selected);
+  const checked = group.edits.filter((e) => selected.has(e.id)).length;
+  const collapsible = group.edits.length > 3;
+
+  const body = (
+    <>
+      {group.edits.map((edit) => (
+        <EditCard key={edit.id} edit={edit} isActive={isActive} />
+      ))}
+    </>
+  );
+
+  return (
+    <div className="chat-group">
+      <div className="chat-group-head">
+        <b>{group.label}</b>
+        <span className="hint" style={{ marginTop: 0 }}>
+          {group.edits.length} 处
+          {isActive ? `（已勾选 ${checked}）` : ''}
+        </span>
+      </div>
+      {collapsible ? (
+        <details className="why">
+          <summary>展开看这 {group.edits.length} 处具体改什么</summary>
+          <div className="why-body">{body}</div>
+        </details>
+      ) : (
+        body
+      )}
+    </div>
+  );
+}
+
+/** 单条改动。三种操作外观不同：改=前后对照，新增=预览，删除=警示 */
+function EditCard({ edit, isActive }: { edit: ChatEditProposal; isActive: boolean }) {
   const selected = useChat((s) => s.selected);
   const toggleEdit = useChat((s) => s.toggleEdit);
-  const applySelected = useChat((s) => s.applySelected);
-  const discardActive = useChat((s) => s.discardActive);
-  const project = useAppStore((s) => s.project);
+  const checked = selected.has(edit.id);
+  const isDelete = edit.op === 'delete';
+
+  return (
+    <label
+      className={`chat-edit${isActive && checked ? ' checked' : ''}${isDelete ? ' chat-edit-danger' : ''}`}
+    >
+      <input
+        type="checkbox"
+        checked={isActive && checked}
+        disabled={!isActive}
+        onChange={() => toggleEdit(edit.id)}
+        style={{ marginTop: 3, flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: 12.5 }}>
+          {edit.op === 'create' ? '＋ ' : isDelete ? '－ ' : ''}
+          {edit.title}
+        </div>
+        <div className="hint" style={{ marginTop: 2 }}>
+          {whereLabel(edit)}
+        </div>
+
+        {/*
+          三种操作显示方式不同：
+          - 改：前后对照（这是判断「改得对不对」的唯一依据）
+          - 新增：只显示要加进去的内容
+          - 删除：显示会被删掉的是什么，并明确警示
+        */}
+        {edit.op === 'set' ? (
+          <div className="chat-diff">
+            <div className="chat-diff-row">
+              <span className="chat-diff-tag before">改前</span>
+              <span className="chat-diff-text before">
+                {/*
+                  「改前」必须用**提议生成时**的快照，不能从当前项目重读。
+                  原实现是从 project 里读的，而应用之后项目已经变了 ——
+                  两栏显示同一个值，用户完全没法判断动了什么。
+                */}
+                {edit.beforeAtProposal || edit.before || <i>（原本是空的）</i>}
+              </span>
+            </div>
+            <div className="chat-diff-row">
+              <span className="chat-diff-tag after">改后</span>
+              <span className="chat-diff-text after">{edit.after}</span>
+            </div>
+          </div>
+        ) : (
+          <div className={`chat-diff${isDelete ? ' chat-diff-danger' : ''}`}>
+            <div className="chat-diff-row">
+              <span className="chat-diff-tag before">{isDelete ? '将删除' : '将新增'}</span>
+              <span className={`chat-diff-text ${isDelete ? 'before' : 'after'}`}>
+                {isDelete ? edit.before : edit.after}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {edit.reason ? (
+          <div className="hint" style={{ marginTop: 4 }}>
+            {edit.reason}
+          </div>
+        ) : null}
+        {edit.sideEffect ? (
+          <div className="hint" style={{ marginTop: 2, color: 'var(--warning)' }}>
+            副作用：{edit.sideEffect}
+          </div>
+        ) : null}
+        {isDelete && !edit.sideEffect ? (
+          <div className="hint" style={{ marginTop: 2, color: 'var(--warning)' }}>
+            删除比改字段重，请确认这一条确实该删。
+          </div>
+        ) : null}
+      </div>
+    </label>
+  );
+}
+
+interface EditGroupData {
+  key: string;
+  label: string;
+  edits: ChatEditProposal[];
+}
+
+/**
+ * 把一批改动按对象分组，并排好顺序。
+ *
+ * 顺序规则刻意固定：**新增 → 修改 → 删除**，组内按镜头顺序。
+ * 不按模型给的顺序原样排 —— 那样用户读起来是乱的，
+ * 也看不出「先加了角色、再改镜头、最后删掉多余的一镜」这个逻辑。
+ */
+function groupEdits(edits: ChatEditProposal[]): EditGroupData[] {
+  const project = useAppStore.getState().project;
+  const byKey = new Map<string, EditGroupData>();
+
+  for (const edit of edits) {
+    const { kind, id } = edit.target;
+    // 新建时还没有 id，用「新增的角色」这一类作为分组键
+    const key = edit.op === 'create' ? `create:${kind}` : `${kind}:${id ?? ''}`;
+    if (!byKey.has(key)) {
+      byKey.set(key, { key, label: groupLabel(edit, project), edits: [] });
+    }
+    byKey.get(key)!.edits.push(edit);
+  }
+
+  const opRank = (e: ChatEditProposal): number => (e.op === 'create' ? 0 : e.op === 'set' ? 1 : 2);
+
+  return [...byKey.values()].sort((a, b) => {
+    const ra = Math.min(...a.edits.map(opRank));
+    const rb = Math.min(...b.edits.map(opRank));
+    if (ra !== rb) return ra - rb;
+    return a.label.localeCompare(b.label, 'zh');
+  });
+}
+
+function groupLabel(edit: ChatEditProposal, project: Project | null): string {
+  const { kind, id } = edit.target;
+  if (edit.op === 'create') {
+    return kind === 'character' ? '新增角色' : kind === 'scene' ? '新增场景' : '新增镜头';
+  }
+  if (kind === 'shot') {
+    const shot = project?.shots.find((x) => x.id === id);
+    return `第 ${shot?.number ?? '?'} 镜`;
+  }
+  if (kind === 'character') {
+    return `角色「${project?.characters.find((x) => x.id === id)?.name ?? '?'}」`;
+  }
+  if (kind === 'scene') {
+    return `场景「${project?.scenes.find((x) => x.id === id)?.name ?? '?'}」`;
+  }
+  if (kind === 'story') return '故事';
+  return '整体规格';
+}
+
+function Bubble({ bubble }: { bubble: ChatBubble }) {
+  const activeBubbleId = useChat((s) => s.activeBubbleId);
 
   if (bubble.role === 'user') {
     return (
@@ -252,92 +509,7 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
         </div>
       ) : null}
 
-      {edits.length > 0 ? (
-        <div className="chat-edits">
-          <div className="chat-edits-head">
-            <b>
-              建议改 {edits.length} 处
-              {bubble.resolved === 'applied' ? '（已应用）' : ''}
-              {bubble.resolved === 'discarded' ? '（已放弃）' : ''}
-            </b>
-            {isActive ? (
-              <span className="hint" style={{ marginTop: 0 }}>
-                已勾选 {edits.filter((e) => selected.has(e.id)).length}/{edits.length}
-              </span>
-            ) : null}
-          </div>
-
-          {/*
-            确认文案的第四栏：「怎么撤销」。
-            调研里的公开数据是——用户对权限确认的批准率高达 93%，
-            大多数人不会细看。所以**必须让他知道这一步是可逆的**，
-            否则他只有两个选择：盲目相信，或者全部拒绝。两条路都不好。
-          */}
-          {isActive ? (
-            <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              应用后这一批改动**可以整体撤销**，不会动到别的镜头。
-            </div>
-          ) : null}
-
-          {edits.map((edit) => {
-            const checked = selected.has(edit.id);
-            const before = project ? readField(project, edit.target) : '';
-            return (
-              <label
-                key={edit.id}
-                className={`chat-edit${isActive && checked ? ' checked' : ''}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={isActive && checked}
-                  disabled={!isActive}
-                  onChange={() => toggleEdit(edit.id)}
-                  style={{ marginTop: 3, flexShrink: 0 }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 12.5 }}>{edit.title}</div>
-                  <div className="hint" style={{ marginTop: 2 }}>
-                    改的是：{whereLabel(edit)}
-                  </div>
-                  <div className="chat-diff">
-                    <div className="chat-diff-row">
-                      <span className="chat-diff-tag before">改前</span>
-                      <span className="chat-diff-text before">
-                        {before || <i>（原本是空的）</i>}
-                      </span>
-                    </div>
-                    <div className="chat-diff-row">
-                      <span className="chat-diff-tag after">改后</span>
-                      <span className="chat-diff-text after">{edit.after}</span>
-                    </div>
-                  </div>
-                  {edit.reason ? (
-                    <div className="hint" style={{ marginTop: 4 }}>
-                      {edit.reason}
-                    </div>
-                  ) : null}
-                  {edit.sideEffect ? (
-                    <div className="hint" style={{ marginTop: 2, color: 'var(--warning)' }}>
-                      副作用：{edit.sideEffect}
-                    </div>
-                  ) : null}
-                </div>
-              </label>
-            );
-          })}
-
-          {isActive ? (
-            <div className="row" style={{ marginTop: 8 }}>
-              <button type="button" className="btn btn-primary btn-sm" onClick={applySelected}>
-                应用勾选的修改
-              </button>
-              <button type="button" className="btn btn-sm" onClick={discardActive}>
-                都不要
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+      {edits.length > 0 ? <EditBatch bubble={bubble} isActive={isActive} /> : null}
     </div>
   );
 }
@@ -346,7 +518,25 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
 function whereLabel(edit: ChatEditProposal): string {
   const project = useAppStore.getState().project;
   const { kind, id, field } = edit.target;
-  const what = fieldLabel(kind, field);
+
+  // 新建与删除没有「字段」这个概念，说法也不一样
+  if (edit.op === 'create') {
+    return kind === 'character' ? '新增一个角色' : kind === 'scene' ? '新增一个场景' : '新增一个镜头';
+  }
+  if (edit.op === 'delete') {
+    if (kind === 'character') {
+      const c = project?.characters.find((x) => x.id === id);
+      return `删除角色「${c?.name ?? '?'}」`;
+    }
+    if (kind === 'scene') {
+      const sc = project?.scenes.find((x) => x.id === id);
+      return `删除场景「${sc?.name ?? '?'}」`;
+    }
+    const sh = project?.shots.find((x) => x.id === id);
+    return `删除第 ${sh?.number ?? '?'} 镜`;
+  }
+
+  const what = field ? fieldLabel(kind, field) : '内容';
 
   if (!project) return what;
   if (kind === 'shot') {
