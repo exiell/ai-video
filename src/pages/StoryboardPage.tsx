@@ -107,11 +107,8 @@ function FrameOrderHint({
         <div className="issue-title">建议先出「首帧」</div>
         <div className="issue-line">
           <RichText>
-            {'首帧不只是第一张图，它是**后两帧的构图锚点**——生成动作关键帧和尾帧时会把它当参考图，用来锁住机位、景别和光线方向。'}
+            {'首帧是**后两帧的构图锚点**，现在后两帧已经出了，机位可能对不上。建议先出首帧，再重出后两帧。'}
           </RichText>
-          <br />
-          现在后两帧已经出了，它们的机位可能和首帧对不上。建议先出首帧，
-          看着不满意再重出后两帧（重出时就会自动拿首帧当锚点）。
         </div>
       </div>
     );
@@ -120,8 +117,7 @@ function FrameOrderHint({
   if (hasFirstFrame && !hasActionPeak && !hasEndFrame) {
     return (
       <div className="hint" style={{ marginBottom: 8 }}>
-        首帧有了。接下来按平台需要出：做首尾帧视频就出<b>尾帧</b>；
-        想让动作更有力度就再出<b>动作关键帧</b>。两者都会自动拿首帧当构图锚点。
+        首帧有了。接着出<b>尾帧</b>（做首尾帧视频用）或<b>动作关键帧</b>（加大动作力度）。
       </div>
     );
   }
@@ -220,10 +216,7 @@ export function StoryboardPage() {
       <div className="page-head">
         <div>
           <h2>分镜表</h2>
-          <p>
-            每一镜只做一件事。写清「起点 → 动作 → 终点」——起点是这一镜的第一格画面，
-            终点是最后一格，也是下一镜的接续点。
-          </p>
+          <p>一镜只做一件事：起点 → 动作 → 终点。</p>
         </div>
         <div className="row">
           <button
@@ -251,10 +244,6 @@ export function StoryboardPage() {
 
       <div className="card">
         <h3 className="card-title">生成分镜</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          先有<b>角色</b>和<b>场景</b>，模型才能把镜头挂到正确的地方，也才知道哪些连续性锁要在哪一镜生效。
-          所以建议按「角色与场景 → 分镜」的顺序来。
-        </p>
         <GenerateBar
           task="assets"
           label="① 从故事里拆角色与场景"
@@ -502,8 +491,7 @@ export function StoryboardPage() {
                         placeholder="例：略低角度，与桌面齐平"
                       />
                       <div className="hint">
-                        机位比运镜更重要：与视线齐平是平等，略低角度仰拍是压迫，略高角度俯拍是弱小。
-                        同一句台词，换个机位就是完全不同的意思。
+                        与视线齐平是平等，仰拍是压迫，俯拍是弱小。
                       </div>
                     </div>
 
@@ -534,8 +522,7 @@ export function StoryboardPage() {
                         onChange={(e) => patch(shot, { transition: e.target.value })}
                       />
                       <div className="hint">
-                        转场属于剪辑阶段的事，<b>不会写进生成提示词</b>。
-                        这一栏是提醒你自己拼接时怎么处理。大部分镜头之间用硬切就好。
+                        剪辑阶段用，<b>不进生成提示词</b>。多数镜头用硬切就好。
                       </div>
                     </div>
 
@@ -583,8 +570,7 @@ export function StoryboardPage() {
                           <>这是第一镜，无需承接。</>
                         ) : (
                           <>
-                            选「承接」时，出这一镜首帧会<b>自动拿上一镜尾帧当锚点</b>，
-                            两镜就真的接得住。「跳切」时不会用——那会把两个不该相连的镜头焊在一起。
+                            「承接」会自动拿上一镜尾帧当锚点，两镜才接得住。「跳切」不用。
                             {inferred ? <><br />（按上一镜的衔接说明推断为「{inferred === 'continuation' ? '承接' : '跳切'}」，你可以直接改。）</> : null}
                           </>
                         )}
@@ -602,7 +588,7 @@ export function StoryboardPage() {
                         placeholder="例：他保持这个姿势不动，下一镜从同一机位推进；或：直接切到第二天早上"
                       />
                       <div className="hint">
-                        这一栏管三件事：<b>尾帧图该画成什么样</b>、视频提示词里的转场怎么写、剪辑时的落点在哪。
+                        <b>下一镜要从这里接</b>。写清这一镜结束时画面停在哪。
                         {next ? (
                           <>
                             <br />

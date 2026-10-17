@@ -102,9 +102,7 @@ export function ExportPage() {
         <div>
           <h2>导出</h2>
           <p>
-            导出的压缩包既是你的成品交付物，也是<b>唯一的备份</b>。
-            所有数据都在你浏览器的本地存储里，而浏览器清理磁盘或隐私数据时可能把它整个清空——
-            文本还能靠复制粘贴留存，图片不行。请养成随手导出的习惯。
+            这个包既是成品，也是<b>唯一的备份</b>。图片只在这个浏览器里，清了就没了。
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={download}>
@@ -130,8 +128,7 @@ export function ExportPage() {
         <div className="card">
           <h3 className="card-title">现在还没有图片</h3>
           <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-            包里暂时只有文本资产（分镜表、设定卡、提示词、检查单、进度表）。
-            等你生成了角色形象图或关键帧之后，它们会一起被打进图包。
+            等你生成了角色形象图或关键帧，它们会一起进图包。
           </p>
           <Link className="btn" to="/characters">
             去生成角色形象图
@@ -198,9 +195,7 @@ export function ExportPage() {
               </table>
             </div>
             <div className="hint">
-              文件名格式：<code>对象名_生成时间.png</code>。
-              例如 <code>图包/角色/头部特写/林冲_2026-10-12_18-30-00.png</code>——
-              打开文件夹就知道哪张是谁的、什么时候生成的。
+              文件名是<code>对象名_生成时间.png</code>，打开文件夹就知道哪张是谁的。
             </div>
           </>
         ) : null}
@@ -230,8 +225,7 @@ export function ExportPage() {
             </table>
           </div>
           <div className="hint">
-            导出包里会附一份<b>一致性总览.md</b>，逐张记录每张图当时锁了什么、用了哪张参考图。
-            以后发现某张图脸不对时，翻那份表就能看出问题出在哪。
+            包里附一份<b>一致性总览.md</b>，逐张记录锁了什么、用了哪张参考图。
           </div>
         </div>
       ) : null}
@@ -255,10 +249,7 @@ export function ExportPage() {
       <div className="card">
         <h3 className="card-title">导入项目文件</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          导入之前导出的「项目数据.json」，可以把项目迁移到另一台电脑或另一个浏览器。
-          <br />
-          <b>注意</b>：项目数据里<b>不含图片</b>。图片在图包里，导入后需要自己对照查看。
-          之所以不把图片塞进 JSON，是因为那样文件会大到无法处理。
+          迁移到另一台电脑用。注意：<b>不含图片</b>，图片在图包里。
         </p>
         <input
           type="file"

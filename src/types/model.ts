@@ -538,6 +538,15 @@ export interface VendorDefinition {
   /** 申请 Key 的控制台地址 */
   consoleUrl: string;
   corsDirect: 'yes' | 'no' | 'unknown';
+  /**
+   * 直连的**实测证据**。
+   *
+   * 和 `notes` 分开放的原因：证据是给开发者和自己看的（"POST 401 + ACAO 回显 Origin"
+   * 对普通用户毫无意义），而 `notes` 是界面上给用户看的一句话。
+   * 混在一起会逼着二选一——要么界面充满测试细节，要么丢掉证据。
+   */
+  corsEvidence?: string;
+  /** 界面上给用户看的一句话说明。**保持一句**，不要塞测试细节。 */
   notes?: string;
 }
 

@@ -90,10 +90,7 @@ export function CharactersPage() {
       <div className="page-head">
         <div>
           <h2>角色设定</h2>
-          <p>
-            每个角色分三层：<b>身份</b>（跨集不变）、<b>变体</b>（随剧情变）、
-            <b>连续性锁</b>（必须跨镜保持）。锁面会被原样写进每一镜的提示词，这是角色不走样的关键。
-          </p>
+          <p>角色分三层：身份 / 变体 / 连续性锁。</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={add}>
           + 加一个角色
@@ -104,13 +101,8 @@ export function CharactersPage() {
       <AiFlowGuide variant="compact" />
 
       <div className="card">
-        <h3 className="card-title">为什么需要「连续性锁」？</h3>
+        <h3 className="card-title">连续性锁怎么写</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          跨镜穿帮多数不是脸变了，而是这些变了：<b>服装颜色、伤口位置、手里的东西、湿没湿</b>。
-          这些在剧情里会变，所以不能锁死在一张定妆图里；又必须在相邻镜头里保持，所以不能每镜随手写。
-          连续性锁就是专门记「哪些可见事实现在必须保持」的地方。
-        </p>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
           写法要求：<b>一条能直接贴进提示词的短语</b>。中文英文都可以，但英文通常更稳。
           <br />
           例：<code>pine-green lapel service jacket</code>、<code>a long wooden spear with a tarnished steel head</code>
@@ -348,8 +340,7 @@ export function CharactersPage() {
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>③ 变体（随剧情变）</h4>
                 <p className="hint" style={{ marginTop: 0 }}>
-                  「换了件外套」是变体，不是新角色；「教室被打碎了窗户」是变体，不是新场景。
-                  登记变体之后，检查引擎就知道这些变化是你有意安排的，不会再报冲突。
+                  「换了件外套」是变体，不是新角色。登记后检查引擎会豁免对应冲突。
                 </p>
                 {character.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>

@@ -289,8 +289,7 @@ export function GuidePage() {
             场次拆分
           </h3>
           <p style={{ fontSize: 12.5, color: 'var(--text-dim)', marginTop: 0 }}>
-            把故事按地点或时间切成几场。这一栏的作用是：写完之后，工具会检查每一场是不是都有镜头在拍它——
-            新手最常犯的错就是漏拍一整场戏。
+            按地点或时间切场，防止漏拍一整场。
           </p>
           {story.scenes.length === 0 ? (
             <div className="empty">还没有场次。可以先不分，等写完分镜再回来补。</div>
@@ -421,9 +420,7 @@ export function GuidePage() {
             选一个风格（决定全片质感的就是它）
           </div>
           <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
-            下面是几个现成的。点一下即可——每个都配好了英文风格词，
-            <b>角色形象图、场景参考板、每一镜的关键帧都会用同一套词</b>，
-            全片才会像同一部片子。
+            点一下整套风格词都配好，全片共用同一套。
           </p>
           <div className="row" style={{ marginBottom: 12 }}>
             {STYLE_PRESETS.map((preset) => {

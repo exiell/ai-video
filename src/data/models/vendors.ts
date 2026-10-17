@@ -28,75 +28,65 @@ export const VENDORS: VendorDefinition[] = [
     id: 'deepseek',
     name: 'DeepSeek',
     consoleUrl: 'https://platform.deepseek.com/api_keys',
-    // 直连证据：POST 401 + ACAO 回显 Origin（scripts/provider-probe.mjs）
     corsDirect: 'yes',
-    notes: '国内可直连，按 token 计费。用于生成故事与分镜。',
+    corsEvidence: 'POST 401 + ACAO 回显 Origin（scripts/provider-probe.mjs）',
+    notes: '按 token 计费，用来写故事和分镜。',
   },
   {
     id: 'dashscope',
     name: '阿里云百炼（通义千问）',
     consoleUrl: 'https://bailian.console.aliyun.com/',
     corsDirect: 'yes',
-    notes:
-      '出图主力。走 DashScope 原生接口（千问图像不支持 OpenAI 兼容模式）。' +
-      '浏览器直连已实测确认（预检 200 + ACAO 回显 Origin，allow-headers 含 x-dashscope-async）。' +
-      '⚠️ 返回的图片链接 24 小时后失效，工具会立刻下载留存。',
+    corsEvidence: '预检 200 + ACAO 回显 Origin，allow-headers 含 x-dashscope-async',
+    notes: '出图主力。⚠️ 返回的图片链接 24 小时后失效，工具会立刻下载留存。',
   },
   {
     id: 'zhipu',
     name: '智谱 AI（GLM）',
     consoleUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
     corsDirect: 'yes',
-    notes:
-      '对话与出图共用同一个 Key。' +
-      '浏览器直连已实测确认（对话 POST 401 + ACAO 回显 Origin；出图同为 401 + ACAO）。',
+    corsEvidence: '对话 POST 401 + ACAO 回显 Origin；出图同为 401 + ACAO',
+    notes: '对话和出图共用一个 Key。',
   },
   {
     id: 'moonshot',
     name: '月之暗面（Kimi）',
     consoleUrl: 'https://platform.kimi.com/console/account',
     corsDirect: 'yes',
-    notes:
-      '长上下文强项，适合把整段故事与角色设定一起给它。没有文生图。' +
-      '浏览器直连已实测确认（POST 401 + ACAO 回显 Origin）。',
+    corsEvidence: 'POST 401 + ACAO 回显 Origin',
+    notes: '长上下文强项，没有文生图。',
   },
   {
     id: 'minimax',
     name: 'MiniMax',
     consoleUrl: 'https://platform.minimax.cn/',
     corsDirect: 'yes',
-    notes:
-      '对话与出图共用同一个 Key。' +
-      '浏览器直连已实测确认（对话与出图均为 POST 200 + ACAO 回显 Origin）。' +
-      '⚠️ base URL 是 `api.minimax.cn`——旧教程里的 `api.minimax.chat` 已不是当前用法。',
+    corsEvidence: '对话与出图均为 POST 200 + ACAO 回显 Origin',
+    notes: '⚠️ 地址是 api.minimax.cn，不是旧教程里的 .chat。',
   },
   {
     id: 'stepfun',
     name: '阶跃星辰（StepFun）',
     consoleUrl: 'https://platform.stepfun.com/interface-key',
     corsDirect: 'yes',
-    notes:
-      '⚠️ 这家的文生图已全线关停（2026-10-10），所以只有对话模型。' +
-      '浏览器直连已实测确认（POST 401 + ACAO `*`）。',
+    corsEvidence: 'POST 401 + ACAO `*`',
+    notes: '⚠️ 文生图已全线关停，只有对话模型。',
   },
   {
     id: 'siliconflow',
     name: '硅基流动（SiliconFlow）',
     consoleUrl: 'https://cloud.siliconflow.cn/account/ak',
     corsDirect: 'yes',
-    notes:
-      '聚合平台，一个 Key 可用多家模型。对话与出图共用。' +
-      '浏览器直连已实测确认（对话与出图均为 POST 401 + ACAO `*`）。',
+    corsEvidence: '对话与出图均为 POST 401 + ACAO `*`',
+    notes: '聚合平台，一个 Key 能用多家模型。',
   },
   {
     id: 'qianfan',
     name: '百度智能云千帆',
     consoleUrl: 'https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application',
     corsDirect: 'yes',
-    notes:
-      '浏览器直连已实测确认（POST 401 + ACAO `*`）。' +
-      '⚠️ 官方文档是动态渲染的，抓不到当前可用的模型名，所以模型那一栏默认是空的，' +
-      '需要自己去控制台查一个填上。路由已实测存活（无效 Key 返回 401 invalid_iam_token）。',
+    corsEvidence: 'POST 401 + ACAO `*`；无效 Key 返回 401 invalid_iam_token',
+    notes: '⚠️ 模型名默认空着，要去控制台查一个填上。',
   },
 ];
 

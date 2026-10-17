@@ -111,10 +111,6 @@ export function SettingsPage() {
       <div className="page-head">
         <div>
           <h2>设置</h2>
-          <p>
-            这个工具免注册、无账号。<b>你的 API Key 只存在你自己的浏览器里</b>，
-            除了模型厂商自己，不会发给任何第三方。
-          </p>
         </div>
         <a className="btn" href="./cors-check.html" target="_blank" rel="noreferrer">
           先做跨域实测 →
@@ -124,12 +120,7 @@ export function SettingsPage() {
       <div className="card">
         <h3 className="card-title">第一步：确认能不能直连</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          跨域（CORS）是<b>浏览器</b>的安全策略，命令行和 Postman 都绕过了它——
-          所以「命令行能通」不代表浏览器里能通。这一步必须在浏览器里做。
-        </p>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)' }}>
-          打开旁边这个实测页面，点一下按钮，它会告诉你 DeepSeek 和硅基流动能不能从浏览器直连。
-          结论直接决定下面「代理」那一栏要不要填。
+          点开测一下能不能直连。通就不用管下面「代理」那一栏。
         </p>
         <a className="btn btn-primary" href="./cors-check.html" target="_blank" rel="noreferrer">
           打开跨域实测工具
@@ -183,10 +174,6 @@ export function SettingsPage() {
         </div>
 
         <div className="hint">
-          <RichText>
-            {'「生成画面」这一个选择同时决定了两件事：**默认用哪个模型出图**，以及**用哪个模型做参考图锚定**（一致性最好）。所以这里列的是「带参考图能力」的那一档。'}
-          </RichText>
-          <br />
           不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。
         </div>
       </div>
@@ -194,9 +181,7 @@ export function SettingsPage() {
       <div className="card">
         <h3 className="card-title">第三步：按厂商填 API Key</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          一个厂商一个 Key。填好后点「测试连接」，它会当场告诉你
-          <b>跨域被拦 / 密钥无效 / 余额不足 / 模型名不对</b>，不用自己猜。
-          只需要填你打算用的那几家。
+          一个厂商一个 Key，只填你要用的那几家。
         </p>
 
         {vendorCards.map(({ vendor, models, cors }) => {
@@ -368,12 +353,7 @@ export function SettingsPage() {
           </label>
         </div>
         <div className="hint">
-          <b>Key 默认会存在这台电脑上</b>，下次打开就不用重填了。
-          <br />
-          如果这台电脑是共用的、或者你只是临时试一下，就勾上上面那个框——
-          那样 Key 只存在当前会话里，关掉浏览器即失效（已经存下来的也会当场清掉）。
-          <br />
-          不论勾不勾选，Key 都不会离开你的浏览器（除非你自己填了代理地址，见下一栏）。
+          Key 会存在这台电脑上，下次打开不用重填。共用电脑就勾上面那个框。
         </div>
       </div>
 
@@ -383,9 +363,7 @@ export function SettingsPage() {
           {prefs.proxyBaseUrl.trim() ? <span className="tag tag-warning">已启用</span> : null}
         </h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          如果实测发现某家厂商不允许浏览器直连，就在这里填一个转发地址。
-          填了之后，所有模型请求都会经过它转发；留空则直连。
-          <b>业务逻辑不需要任何改动。</b>
+          直连不通时才需要。填了之后所有模型请求都经过它转发。
         </p>
         <Field
           label="代理地址"
@@ -406,11 +384,8 @@ export function SettingsPage() {
           />
         </Field>
         <WhyDetails>
-          代理的要求写在方案里：<b>只转发、不落库、不记录请求体与密钥、无状态，并带域名白名单</b>。
-          <br />
-          <br />
-          如果你想自己搭一个，Cloudflare Workers 免费版每天 10 万次请求，个人用完全够。
-          它本身就是设计成「可插拔」的：这一栏填上就启用，清空就回到直连。
+          想自己搭一个的话，Cloudflare Workers 免费版每天 10 万次请求够个人用。
+          这一栏填上就启用，清空就回到直连。
         </WhyDetails>
       </div>
 
@@ -422,10 +397,6 @@ export function SettingsPage() {
             <option value="zh">简体中文</option>
           </select>
         </Field>
-        <div className="hint">
-          提示词正文另有语言设置：默认输出<b>英文</b>（模型理解更稳），
-          界面上始终提供中文对照和逐项说明。见「提示词」页。
-        </div>
       </div>
 
       <div className="card">
@@ -436,19 +407,14 @@ export function SettingsPage() {
           ) : null}
         </h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          文本资产还能靠复制粘贴留存，<b>图片不行</b>——它们只存在于这个浏览器的本地存储里。
-          浏览器清理磁盘或隐私数据时可能把它整个清空，几十张图一次就没了，
-          而每一张都是真金白银生成的。
+          图片只在这个浏览器里，清缓存就没了。
         </p>
         {imageStats && imageStats.count > 0 ? (
           <div className="issue warning" style={{ marginBottom: 12 }}>
             <div className="issue-title">
               当前项目有 {imageStats.count} 张图，共 {formatBytes(imageStats.bytes)}
             </div>
-            <div className="issue-line">
-              建议现在就导出一份。导出的压缩包里有完整图包，以及一份「一致性总览.md」，
-              逐张记录每张图当时锁了什么、用了哪张参考图。
-            </div>
+            <div className="issue-line">建议现在就导出一份。</div>
             <div className="row" style={{ marginTop: 8 }}>
               <Link className="btn btn-primary btn-sm" to="/export">
                 去导出备份
@@ -491,18 +457,12 @@ export function SettingsPage() {
           <div className="hint">这个浏览器不支持查看存储用量。</div>
         )}
         <WhyDetails>
-          项目数据与生成的图片都存在浏览器的 IndexedDB 里。图片以 base64 存放，
-          体积大约是原图的 1.33 倍——一张 2K 图大约几百 KB 到 1 MB，出几十张就要几十 MB。
+          图片必须存在本地，因为平台返回的是<b>24 小时后失效</b>的临时链接。
+          只存链接的话，图库第二天会集体变成裂图。
           <br />
           <br />
-          <b>为什么必须存在本地，而不是记住平台的链接？</b>
-          因为阿里云返回的是临时链接，<b>24 小时后就会失效</b>。只存链接的话，
-          图库第二天会集体变成裂图。所以本工具在拿到图的当下就把它下载回来存好——
-          你看到的每一张图都是真正属于你的。
-          <br />
-          <br />
-          <b>最重要的一条：浏览器可能在清理磁盘或隐私数据时清空本地存储。</b>
-          请养成定期导出的习惯——导出的压缩包就是你的备份。
+          代价是占空间（一张 2K 图几百 KB 到 1 MB）。浏览器清缓存时会一并清空，
+          所以养成定期导出的习惯。
         </WhyDetails>
       </div>
     </>

@@ -74,8 +74,7 @@ export function HomePage() {
         <div className="card">
           <h3 className="card-title">先看一个做完了的例子</h3>
           <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 0 }}>
-            不用配置任何 API Key，直接打开示例项目，看看分镜表、设定卡、提示词和穿帮检查单长什么样。
-            里面有 7 个镜头和一个真实的风雪山神庙短片方案。
+            不用配 API Key，直接看一份做完的方案长什么样。
           </p>
           <button type="button" className="btn btn-primary" onClick={() => void openSample()}>
             打开示例项目
@@ -85,8 +84,7 @@ export function HomePage() {
         <div className="card">
           <h3 className="card-title">从零开始做一个</h3>
           <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 0 }}>
-            引导向导会一次只问你一个问题，每个问题都说明为什么问。
-            不知道该选什么就按默认值走，随时可以回来改。
+            
           </p>
           <button type="button" className="btn" onClick={openBlank}>
             新建空项目
@@ -157,9 +155,7 @@ export function HomePage() {
       <div className="card" style={{ marginTop: 24 }}>
         <h3 className="card-title">关于你的数据</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', margin: 0 }}>
-          免注册，没有账号，数据全部存在你浏览器的 IndexedDB 里，不会上传到任何服务器。
-          但请注意：<b>浏览器在清理磁盘或隐私数据时可能清空本地存储</b>。
-          请养成定期「导出」的习惯，导出的压缩包就是你的备份。
+          数据只在这个浏览器里。浏览器清缓存时可能清空，请定期导出备份。
         </p>
       </div>
     </>

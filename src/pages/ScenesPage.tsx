@@ -77,8 +77,7 @@ export function ScenesPage() {
         <div>
           <h2>场景设定</h2>
           <p>
-            场景和角色一样分三层。<b>固定元素</b>是观众用来认出「这是同一个地方」的依据——
-            不写下来，模型每个镜头都会重新布置一遍这个空间，看起来就像换了个地方。
+            <b>固定元素</b>是「这是同一个地方」的依据。
           </p>
         </div>
         <button type="button" className="btn btn-primary" onClick={add}>
@@ -92,7 +91,7 @@ export function ScenesPage() {
       <div className="card">
         <h3 className="card-title">场景一致性靠什么保证？</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          三个字段就够了，但都要写成<b>能直接贴进提示词的短语</b>：
+          三个字段，都要写成<b>能直接贴进提示词的短语</b>：
         </p>
         <table className="simple">
           <thead>
@@ -386,8 +385,7 @@ export function ScenesPage() {
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>⑤ 变体（随剧情变）</h4>
                 <p className="hint" style={{ marginTop: 0 }}>
-                  「教室被打碎了窗户」「时间从白天到了晚上」都属于变体。
-                  登记之后，检查引擎会豁免对应的光线/色调冲突——因为那是你<i>有意</i>安排的。
+                  「被打碎了窗户」是变体，不是新场景。登记后检查引擎会豁免对应冲突。
                 </p>
                 {scene.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>

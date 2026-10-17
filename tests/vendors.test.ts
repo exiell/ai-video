@@ -84,11 +84,31 @@ describe('厂商级直连结论', () => {
   });
 
   it('所有厂商的直连结论都写明了证据', () => {
+    /*
+      【v0.37】证据从 `notes` 挪到了 `corsEvidence`。
+
+      原因：`notes` 是**界面上给用户看的那一句话**，而「POST 401 + ACAO 回显 Origin」
+      对普通用户毫无意义 —— 8 个厂商合计 314 字，全是在界面上占地方的测试细节。
+      但证据本身不能丢：它是「可直连」这个结论的依据。
+
+      所以分成两个字段：`notes` 给用户看（保持一句话），`corsEvidence` 留证据。
+      这条测试跟着改查 `corsEvidence` —— 约束本身没放松，只是换了正确的字段。
+    */
     for (const vendor of VENDORS) {
       if (vendor.corsDirect !== 'yes') continue;
-      expect(vendor.notes ?? '', `${vendor.id} 标了可直连却没写证据`).toMatch(
+      expect(vendor.corsEvidence ?? '', `${vendor.id} 标了可直连却没写证据`).toMatch(
         /实测|预检|ACAO|可直连/,
       );
+    }
+  });
+
+  it('**界面文案要保持一句话**（证据不能写回 notes）', () => {
+    // 这条是防回归的：以后有人想补证据，应该加到 corsEvidence，
+    // 而不是把测试细节重新塞回界面上。
+    for (const vendor of VENDORS) {
+      const notes = vendor.notes ?? '';
+      expect(notes, `${vendor.id} 的 notes 塞了测试细节`).not.toMatch(/ACAO|预检|实测确认/);
+      expect(notes.length, `${vendor.id} 的 notes 太长了（超过 40 字）`).toBeLessThanOrEqual(40);
     }
   });
 });
