@@ -4,7 +4,7 @@ import type {
   PromptLine,
   TargetPlatform,
 } from '../../types/model';
-import { PLATFORM_LABEL, SHOT_SIZE_LABEL } from '../../types/model';
+import { PLATFORM_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
 import {
   buildCharacterSheetSpec,
   type CharacterSheetKind,
@@ -216,9 +216,8 @@ export function buildScenePlatePrompt(
 }
 
 /**
- * 镜头三帧的提示词。
+ * 镜头三帧。
  *
- * 【v0.19 重写】原来只有一种「关键帧」，实际画的是首帧，命名还把概念带偏了。
  * 三种帧在画面内容上是**不同**的，不能只换个名字：
  *
  *  - **首帧 first-frame**：只画起点那一瞬间。终点才出现的动作、姿态、道具状态必须排除，
@@ -230,38 +229,16 @@ export function buildScenePlatePrompt(
  */
 export type FrameKind = 'first-frame' | 'action-peak' | 'end-frame';
 
-export interface BuildFramePromptOptions {
-  /**
-   * 参考图里是否含本镜首帧。
-   *
-   * 它决定了一件事：**要不要在文字里重描角色的外观**。
-   * 见下方 anchoredToFirstFrame 处的说明——这是社区实测里最反直觉、
-   * 但机制解释最自洽的一条。
-   */
-  hasFirstFrameAnchor?: boolean;
-  /**
-   * 参考图里是否含**上一镜的尾帧**。
-   *
-   * 它管的是「跨镜连续」：这一镜是接着上一镜演的，空间、光线、
-   * 主体位置都必须延续。与 hasFirstFrameAnchor（管本镜内部构图）是两件事。
-   */
-  hasPreviousEndAnchor?: boolean;
-  /** 参考图里是否含角色形象图（头部特写/全身多视图） */
-  hasCharacterSheet?: boolean;
-}
-
 export function buildFramePrompt(
   project: BuildImagePromptOptions['project'],
   shotId: string,
   kind: FrameKind,
-  options: BuildFramePromptOptions = {},
 ): ImagePromptInput | null {
   const shot = project.shots.find((s) => s.id === shotId);
   if (!shot) return null;
 
   const scene = project.scenes.find((s) => s.id === shot.sceneId);
   const characters = project.characters.filter((c) => shot.characterIds.includes(c.id));
-  void options;
 
   // 只取「本镜声明生效」的锁
   const locks: { phrase: string; appliesTo: string }[] = [];
@@ -348,22 +325,6 @@ export function buildFramePrompt(
     });
   }
 
-  /**
-   * ===========================================================================
-   * 有了锚点就不要重描外观 —— 这是最反直觉、但机制解释最自洽的一条
-   * ===========================================================================
-   * 参考图是「身份锚点」，而文字是「生成指令」。如果文字里又写一遍
-   * 「一个瘦小的白狗，黑色纽扣鼻，蓬松白尾巴」，模型会**按文字重新画一个**，
-   * 再拿参考图去修色——结果就是「像参考图，但不是参考图」。
-   *
-   * 所以分工要干净：
-   *   参考图 = 身份冻结（外观一个字都不说）
-   *   文字   = 行为变量（景别、机位、这一帧画什么）
-   *
-   * 但**没有外观锚点时必须写**：只有场景板的时候，不描述角色等于让他自由发挥。
-   * 连续性锁短语始终保留——它们是用户明确要求跨镜一致的特征，
-   * 而且通常很短（服装/道具），不会触发整身重画。
-   */
   /**
    * ===========================================================================
    * 角色外观：**永远注入**，不再因为「有参考图」而整体丢弃
@@ -481,7 +442,9 @@ export function buildFramePrompt(
     scene && scene.fixedElements.length > 0
       ? 'fixed objects keep the same size relative to the character as in other shots of this scene'
       : '',
-    shot.shotSize,
+    // 景别用自然英文（``extreme wide establishing shot``），
+    // 不再注入枚举值 ``extreme-wide`` —— 后者不是英语，还带连字符
+    SHOT_SIZE_EN[shot.shotSize as keyof typeof SHOT_SIZE_EN] ?? shot.shotSize,
     shot.cameraPosition,
     framing.content,
     ...project.brief.styleTags,
@@ -491,9 +454,9 @@ export function buildFramePrompt(
 
   return {
     subjectLabel: `第 ${shot.number} 镜${FRAME_LABEL[kind]}`,
-    // shot.shotSize 存的就是英文枚举值（extreme-wide / medium …），
-    // SHOT_SIZE_LABEL 只是给人看的中文标签
-    shotSizeEn: shot.shotSize,
+    // 这里要给下游（参考图职责说明）用的也是**自然英文**，
+    // 因为它会被嵌进 “This shot is framed as …” 这类句子里
+    shotSizeEn: SHOT_SIZE_EN[shot.shotSize as keyof typeof SHOT_SIZE_EN] ?? shot.shotSize,
     ...(shot.cameraPosition ? { cameraPositionEn: shot.cameraPosition } : {}),
     positive,
     negative: project.brief.negativePrompt,

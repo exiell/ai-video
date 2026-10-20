@@ -368,3 +368,113 @@ describe('风格预设', () => {
     expect(matchStylePreset([preset.tags[0]!])).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// v0.39：同名锁不能被串到别的角色身上
+// ---------------------------------------------------------------------------
+
+describe('锁解析 · 按出场角色限定范围', () => {
+  /**
+   * 修的是一个静默失效：
+   * 两个角色都有叫「外套」的锁时，扁平 Map 里后写的覆盖先写的，
+   * 于是所有镜头引用「外套」都挂到后一个角色的锁上，前一个角色的锁从此不生效。
+   * 界面上完全看不出来，只有出图时那个角色会变样。
+   */
+  const generated = {
+    characters: [
+      {
+        slug: 'a',
+        name: '甲',
+        role: 'protagonist' as const,
+        identity: { face: '', hair: '', bodyType: '', ageRange: '', summary: '', summaryEn: '' },
+        continuityLocks: [
+          { label: '外套', phrase: 'a red coat', appliesTo: 'look' as const },
+        ],
+        variants: [],
+      },
+      {
+        slug: 'b',
+        name: '乙',
+        role: 'supporting' as const,
+        identity: { face: '', hair: '', bodyType: '', ageRange: '', summary: '', summaryEn: '' },
+        continuityLocks: [
+          { label: '外套', phrase: 'a blue coat', appliesTo: 'look' as const },
+        ],
+        variants: [],
+      },
+    ],
+    scenes: [],
+  };
+
+  const mapping = assetsFromGenerated(generated);
+  const idA = mapping.characterIdBySlug.get('a')!;
+  const idB = mapping.characterIdBySlug.get('b')!;
+
+  it('**两个角色可以各有一条同名的锁，id 不同**', () => {
+    const lockOfA = mapping.characters.find((c) => c.id === idA)!.continuityLocks[0]!;
+    const lockOfB = mapping.characters.find((c) => c.id === idB)!.continuityLocks[0]!;
+    expect(lockOfA.phrase).toBe('a red coat');
+    expect(lockOfB.phrase).toBe('a blue coat');
+    expect(lockOfA.id).not.toBe(lockOfB.id);
+  });
+
+  it('**限定范围后，解析到的是本人那条**', () => {
+    // 这是修复的核心：同一个 label「外套」，在甲的镜头里必须解析成甲的锁
+    expect(resolveLockReference(mapping, '外套', [idA])).toBe(
+      mapping.characters.find((c) => c.id === idA)!.continuityLocks[0]!.id,
+    );
+    expect(resolveLockReference(mapping, '外套', [idB])).toBe(
+      mapping.characters.find((c) => c.id === idB)!.continuityLocks[0]!.id,
+    );
+  });
+
+  it('用锁面（phrase）也能按范围解析', () => {
+    expect(resolveLockReference(mapping, 'a red coat', [idA])).toBe(
+      mapping.characters.find((c) => c.id === idA)!.continuityLocks[0]!.id,
+    );
+  });
+
+  it('范围里没有这条锁时退回全局匹配（不因为 scope 传错就全挂）', () => {
+    // 甲的场景里引用了乙的锁名——范围里没有，但全局有，仍然解析得到
+    expect(resolveLockReference(mapping, 'a blue coat', [idA])).toBeDefined();
+  });
+
+  it('不传范围时行为与旧版一致', () => {
+    expect(resolveLockReference(mapping, '外套')).toBeDefined();
+  });
+
+  it('**镜头解析时自动带上它自己的出场角色**', () => {
+    const { shots } = shotsFromGenerated(
+      {
+        shots: [
+          {
+            duration: 3,
+            shotSize: 'medium',
+            cameraPosition: '正面',
+            cameraMove: 'static',
+            startState: '甲站在门口',
+            action: '他抬手',
+            endState: '手停在半空',
+            dialogue: '',
+            sound: '',
+            mood: '',
+            transition: '',
+            continuityNote: '',
+            transitionType: 'cut',
+            sceneSlug: '',
+            characterSlugs: ['a'],
+            activeLockLabels: ['外套'],
+            activeVariantLabels: [],
+            offscreenCharacters: [],
+            sourceSceneIndex: 0,
+          },
+        ],
+      },
+      // 只给甲出镜
+      { ...mapping, sceneIdBySlug: new Map() },
+      [],
+    );
+    const lockIdOfA = mapping.characters.find((c) => c.id === idA)!.continuityLocks[0]!.id;
+    expect(shots[0]!.activeLockIds).toContain(lockIdOfA);
+  });
+});

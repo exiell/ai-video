@@ -45,6 +45,9 @@ export const RULE_LABEL: Record<string, string> = {
   'continuity-light-mismatch': '光线方向冲突',
   'continuity-long-chain': '承接链偏长',
   'continuity-untyped-transition': '未标转场类型',
+  'adjacent-same-shot-size': '相邻镜同景别',
+  'pronoun-in-visual': '提示词里用了代词',
+  'abstract-emotion': '情绪写成抽象词',
 };
 
 export function runChecks(project: Project): CheckReport {

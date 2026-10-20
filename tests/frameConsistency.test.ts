@@ -5,6 +5,15 @@ import {
   pickSceneReference,
 } from '../src/domain/image/characterSheet';
 import { withReferenceInstruction } from '../src/services/gateway/dashscope';
+/*
+  【v0.39】buildFramePrompt 去掉了第 4 个参数。
+
+  那几个参数（hasFirstFrameAnchor / hasPreviousEndAnchor / hasCharacterSheet）
+  在实现里是 `void options` —— 收下就丢，从未生效过。而「有图时要不要重描外观」
+  这件事，实际策略是**永远注入**：锁里没有头饰时，一旦不写外观，那顶帽子就会
+  在相邻镜头之间凭空消失。这一组测试断言的正是这个行为，所以参数删掉之后
+  断言反而更强：它现在无条件成立。
+*/
 import { buildFramePrompt } from '../src/domain/image/prompts';
 import { checkContinuity } from '../src/domain/checks/continuity';
 import { checkCharacters } from '../src/domain/checks/characters';
@@ -217,9 +226,7 @@ describe('预算分配的取舍', () => {
     // 重复只是让模型在两个版本之间摇；缺失是让模型自己编。
     const project = structuredClone(sampleProject);
     const shot = project.shots.find((s) => s.characterIds.length > 0)!;
-    const withSheet = buildFramePrompt(project, shot.id, 'first-frame', {
-      hasCharacterSheet: true,
-    })!;
+    const withSheet = buildFramePrompt(project, shot.id, 'first-frame')!;
     // 身份描述里的关键外观（帽子）必须在
     expect(withSheet.positive).toContain('felt hat');
     // 而且不能因此产生重复
@@ -231,9 +238,7 @@ describe('预算分配的取舍', () => {
     const project = structuredClone(sampleProject);
     for (const shot of project.shots) {
       if (shot.characterIds.length === 0) continue;
-      const prompt = buildFramePrompt(project, shot.id, 'first-frame', {
-        hasCharacterSheet: true,
-      })!;
+      const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
       expect(prompt.positive, `第 ${shot.number} 镜缺了帽子`).toContain('felt hat');
     }
   });
@@ -241,9 +246,7 @@ describe('预算分配的取舍', () => {
   it('连续性锁的内容**始终保留**——它们是用户明确要求跨镜一致的特征', () => {
     const project = structuredClone(sampleProject);
     const shot = project.shots.find((s) => s.activeLockIds.length > 0)!;
-    const withSheet = buildFramePrompt(project, shot.id, 'first-frame', {
-      hasCharacterSheet: true,
-    })!;
+    const withSheet = buildFramePrompt(project, shot.id, 'first-frame')!;
     // 锁面按短语逐个核对：整体串可能因为与身份描述去重而少了重复的那一段，
     // 但**每一个短语**都必须还在——去重删的是重复，不是内容。
     const covered = (phrase: string): boolean => {
@@ -269,7 +272,7 @@ describe('预算分配的取舍', () => {
     const project = structuredClone(sampleProject);
     const shot = project.shots.find((s) => s.sceneId)!;
     const scene = project.scenes.find((s) => s.id === shot.sceneId)!;
-    const prompt = buildFramePrompt(project, shot.id, 'first-frame', { hasCharacterSheet: true })!;
+    const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
     expect(prompt.positive).toContain(scene.identity.summaryEn);
     for (const el of scene.fixedElements) {
       expect(prompt.positive).toContain(el);
@@ -579,9 +582,7 @@ describe('高显著度特征不能被丢掉', () => {
     const shotsWithCharacter = project.shots.filter((s) => s.characterIds.length > 0);
     expect(shotsWithCharacter.length).toBeGreaterThan(0);
     for (const shot of shotsWithCharacter) {
-      const prompt = buildFramePrompt(project, shot.id, 'first-frame', {
-        hasCharacterSheet: true,
-      })!;
+      const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
       expect(prompt.positive, `第 ${shot.number} 镜缺了帽子`).toContain('felt hat');
     }
   });
@@ -590,7 +591,7 @@ describe('高显著度特征不能被丢掉', () => {
     const project = structuredClone(sampleProject);
     const shot = project.shots.find((s) => s.characterIds.length > 0)!;
     for (const kind of ['first-frame', 'action-peak', 'end-frame'] as const) {
-      const prompt = buildFramePrompt(project, shot.id, kind, { hasCharacterSheet: true })!;
+      const prompt = buildFramePrompt(project, shot.id, kind)!;
       expect(prompt.positive, `${kind} 缺了帽子`).toContain('felt hat');
     }
   });

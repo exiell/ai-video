@@ -106,31 +106,31 @@ export function checkCharacters(project: Project): CheckIssue[] {
       );
     }
 
-    // 规则：文案里出现的变体标签，没有被登记
-    // （例：第 7、9 镜都写了「受伤的左手」，但没有任何角色登记这个变体）
-    const allVariantLabels = [
-      ...project.characters.flatMap((c) => c.variants.map((v) => ({ label: v.label, owner: c.name }))),
-      ...project.scenes.flatMap((s) => s.variants.map((v) => ({ label: v.label, owner: s.name }))),
-    ];
-    const registeredLabels = new Set(allVariantLabels.map((v) => v.label));
-    for (const character of project.characters) {
-      for (const variant of character.variants) {
-        // 变体已登记但没分配给任何镜头 → 提示（不阻断）
-        if (variant.shotIds.length === 0) {
-          issues.push(
-            makeIssue({
-              ruleId: 'variant-not-owned',
-              severity: 'info',
-              title: `变体「${variant.label}」已创建，但还没有分配给任何镜头`,
-              why: '没有分配镜头的变体不会出现在任何提示词里，等于白建。',
-              suggestion: `如果第 ${shot.number} 镜确实用得上它，就在该镜勾选；用不上可以删掉，保持设定干净。`,
-              location: { kind: 'character', id: character.id },
-            }),
-          );
-        }
-      }
+  }
+
+  // -------------------------------------------------------------------------
+  // 已登记但没有分配给任何镜头的变体
+  // -------------------------------------------------------------------------
+  // 【v0.39 修】原来这段嵌在 `for (const shot of project.shots)` 里，
+  // 于是「7 个镜头 × 2 个未分配变体」会报出 14 条一模一样的问题，
+  // 而且文案里写着「如果第 N 镜确实用得上它」——N 跟这个变体毫无关系。
+  // 重复发报比不报更糟：用户会学会跳过整份检查单。
+  //
+  // 现在移出循环，每个变体只报一次，并且不指向任何具体镜头。
+  for (const character of project.characters) {
+    for (const variant of character.variants) {
+      if (variant.shotIds.length > 0) continue;
+      issues.push(
+        makeIssue({
+          ruleId: 'variant-not-owned',
+          severity: 'info',
+          title: `变体「${variant.label}」已创建，但还没有分配给任何镜头`,
+          why: '没有分配镜头的变体不会出现在任何提示词里，等于白建。',
+          suggestion: `如果它确实用得上，去分镜表里勾选对应镜头；用不上可以删掉，保持设定干净。`,
+          location: { kind: 'character', id: character.id },
+        }),
+      );
     }
-    void registeredLabels;
   }
 
   // 规则：角色已登记但在全片中没有出镜

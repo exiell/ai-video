@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+﻿import { describe, expect, it } from 'vitest';
 import {
   checkContinuity,
   continuitySheetMarkdown,
@@ -292,7 +292,7 @@ describe('衔接表导出', () => {
 
   it('跨场景的切换会被标出来', () => {
     const md = continuitySheetMarkdown(twoScenes(['他走出去', '他走进院子']));
-    expect(md).toContain('⚠️ 换到');
+    expect(md).toContain('注意： 换到');
   });
 
   it('没写衔接说明时如实显示「未写」，不假装有内容', () => {
@@ -318,8 +318,24 @@ describe('衔接信息要进视频提示词', () => {
     shot.continuityNote = '他保持这个姿势，下一镜从同一机位推进';
     const line = buildShotPrompt(project, shot, 'jimeng');
     expect(line.en).toContain('他保持这个姿势');
-    expect(line.en).toContain('ending so that');
+    /*
+      【v0.39】中文衔接用标签式 `ending:`，不再拼英文从句。
+
+      原来无论中英都写 `ending so that ${note}`，于是中文项目里出现
+      `ending so that 他保持这个姿势不动` —— 中英夹生，英文那半截
+      对模型没有意义，还可能干扰它理解这是「收尾指令」。
+    */
+    expect(line.en).toContain('ending:');
+    expect(line.en).not.toContain('ending so that');
     expect(line.zh).toContain('他保持这个姿势');
+  });
+
+  it('**英文**衔接说明仍然用自然从句（修中文不为牺牲英文质量）', () => {
+    const project = structuredClone(sampleProject);
+    const shot = project.shots[0]!;
+    shot.continuityNote = 'he holds the pose while the camera pushes in';
+    const line = buildShotPrompt(project, shot, 'jimeng');
+    expect(line.en).toContain('ending so that he holds the pose');
   });
 
   it('labelled 形态（seedance）用 Transition 一行表示', () => {
@@ -338,6 +354,7 @@ describe('衔接信息要进视频提示词', () => {
     const line = buildShotPrompt(project, shot, 'seedance');
     expect(line.en).not.toContain('Transition:');
     expect(line.en).not.toContain('ending so that');
+    expect(line.en).not.toContain('ending:');
   });
 });
 
@@ -354,3 +371,4 @@ describe('衔接工具函数', () => {
     expect(nextShot(sampleProject, last.id)).toBeUndefined();
   });
 });
+

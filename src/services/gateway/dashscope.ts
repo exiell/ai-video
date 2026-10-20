@@ -228,9 +228,13 @@ export function withReferenceInstruction(
         'Keep the same location: the same objects in the same places at the same relative sizes, ' +
         'and the same direction and colour temperature of light. ' +
         'Continue the action from that exact point. ' +
-        `This shot uses a ${input.shotSizeEn || 'different'} framing${
-          input.cameraPositionEn ? `, ${input.cameraPositionEn}` : ''
-        } — change the camera distance and angle accordingly, without moving the location.`,
+        // 用「标签 + 值」而不是 “a XX framing”：
+        // shotSizeEn 现在是 “extreme wide establishing shot” 这样的名词短语，
+        // 塞进 “a … framing” 会变成 “a extreme wide establishing shot framing”，
+        // 既是冠词错误，也重复了 shot。
+        `Framing: ${input.shotSizeEn || 'different from the previous shot'}${
+          input.cameraPositionEn ? `; ${input.cameraPositionEn}` : ''
+        }. Change the camera distance and angle accordingly, without moving the location.`,
     );
   }
 

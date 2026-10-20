@@ -6,10 +6,9 @@ import type {
   PromptNote,
   SceneCard,
   Shot,
-  ShotSize,
   TargetPlatform,
 } from '../../types/model';
-import { PLATFORM_LABEL, SHOT_SIZE_LABEL } from '../../types/model';
+import { CAMERA_MOVE_EN, PLATFORM_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
 
 /**
  * 提示词适配引擎（方案.md v0.6 §3.2 M5）
@@ -22,16 +21,6 @@ import { PLATFORM_LABEL, SHOT_SIZE_LABEL } from '../../types/model';
  * 关键机制：被连续性锁点名的条目，锁面**原样**出现在正文里，
  * 不因为「参考图会交代」而省略（方案.md §6.3）。
  */
-
-/** 景别的英文词 */
-const SHOT_SIZE_EN: Record<ShotSize, string> = {
-  'extreme-wide': 'extreme wide establishing shot',
-  wide: 'wide shot',
-  full: 'full shot',
-  medium: 'medium shot',
-  'close-up': 'close-up',
-  'extreme-close-up': 'extreme close-up',
-};
 
 /** 平台的正文组织方式 */
 type PromptStyle = 'prose' | 'labelled';
@@ -58,6 +47,8 @@ interface AssembledFacts {
   locks: { label: string; phrase: string; owner: string }[];
   shotSizeEn: string;
   cameraMoveEn: string;
+  /** 机位（用户写的中文），决定观众站在哪看 */
+  cameraPosition: string;
   startState: string;
   action: string;
   endState: string;
@@ -109,6 +100,7 @@ export function assembleFacts(input: AssembleInput): AssembledFacts {
     locks,
     shotSizeEn: SHOT_SIZE_EN[shot.shotSize],
     cameraMoveEn: cameraMoveEn(shot.cameraMove),
+    cameraPosition: (shot.cameraPosition ?? '').trim(),
     startState: shot.startState.trim(),
     action: shot.action.trim(),
     endState: shot.endState.trim(),
@@ -121,24 +113,15 @@ export function assembleFacts(input: AssembleInput): AssembledFacts {
   };
 }
 
+/** 文本里是否含中日韩字符。用来决定要不要把用户原文塞进英文句式里。 */
+function hasCjk(text: string): boolean {
+  return /[\u3400-\u9fff\uf900-\ufaff]/.test(text);
+}
+
 /** 运镜英文，从 model.ts 的词表取，集中在这里便于替换成平台专有说法 */
 function cameraMoveEn(move: CameraMove): string {
-  // 避免循环依赖：这里直接内联，与 CAMERA_MOVE_EN 保持一致
-  const table: Record<CameraMove, string> = {
-    static: 'static camera, minimal movement',
-    'push-in': 'camera slowly pushes in towards subject',
-    'pull-out': 'camera pulls back revealing wider scene',
-    'pan-left': 'camera pans left following subject',
-    'pan-right': 'camera pans right following subject',
-    'tilt-up': 'camera tilts up',
-    'tilt-down': 'camera tilts down',
-    orbit: 'camera orbits around subject',
-    tracking: 'camera tracks alongside subject',
-    'crane-up': 'camera cranes up to reveal',
-    'crane-down': 'camera descends from above',
-    handheld: 'subtle handheld camera shake',
-  };
-  return table[move];
+  // 用 model.ts 里的共享表，不再内联一份（内联的那份会和共享表逐渐分叉）
+  return CAMERA_MOVE_EN[move];
 }
 
 /**
@@ -165,14 +148,33 @@ export function buildShotPrompt(
   for (const lock of facts.locks) {
     bodyParts.push(lock.phrase);
   }
-  // 3. 镜头（景别 + 运镜）
+  // 3. 镜头：景别 + **机位** + 运镜
+  //
+  // 【v0.39 补机位】机位原来只进了出图提示词，视频提示词里一个字都没有。
+  // 而项目自己的说明写着「机位比运镜更重要」——机位决定观众站在哪看，
+  // 同一句台词换个机位就是完全不同的意思。它比运镜更该出现在视频提示词里，
+  // 运镜只是让这个机位在时间上动起来。
   bodyParts.push(`${facts.shotSizeEn}, ${facts.cameraMoveEn}`);
+  if (facts.cameraPosition) bodyParts.push(`camera angle: ${facts.cameraPosition}`);
   // 4. 画面内容：起点 → 动作 → 终点
   if (facts.startState) bodyParts.push(facts.startState);
   if (facts.action) bodyParts.push(facts.action);
   if (facts.endState) bodyParts.push(facts.endState);
-  // 5. 收尾方式（衔接说明）——告诉模型这一镜该怎么结束
-  if (shot.continuityNote) bodyParts.push(`ending so that ${shot.continuityNote}`);
+  /**
+   * 5. 收尾方式（衔接说明）——告诉模型这一镜该怎么结束。
+   *
+   * 【v0.39】不再硬拼英文从句。用户用中文写衔接时，
+   * `ending so that 他保持这个姿势不动` 这种中英夹生句里，
+   * 英文那半截对模型没有意义，还可能干扰它理解这是「收尾指令」。
+   * 中文用标签式（`ending: ...`），英文保留自然从句。
+   */
+  if (shot.continuityNote) {
+    bodyParts.push(
+      hasCjk(shot.continuityNote)
+        ? `ending: ${shot.continuityNote}`
+        : `ending so that ${shot.continuityNote}`,
+    );
+  }
   // 6. 风格
   for (const tag of facts.styleTags) bodyParts.push(tag);
   // 7. 画幅
@@ -186,7 +188,9 @@ export function buildShotPrompt(
       [...facts.characterEn, ...facts.locks.map((l) => l.phrase)].join(', '),
       facts.startState,
       `Motion: ${facts.action || 'subtle movement'}`,
-      `Camera: ${facts.shotSizeEn}, ${facts.cameraMoveEn}`,
+      `Camera: ${facts.shotSizeEn}, ${facts.cameraMoveEn}${
+        facts.cameraPosition ? `, ${facts.cameraPosition}` : ''
+      }`,
       `Duration: ${shot.duration}s`,
       // 衔接说明要进视频提示词：它告诉模型这一镜该如何收尾，
       // 才能被下一个镜头接住。不加这一行，衔接就只存在于分镜表里、出视频时用不上。
@@ -220,7 +224,10 @@ function buildChineseMirror(
       `【锁定】${facts.locks.map((l) => `${l.owner}·${l.label} → \`${l.phrase}\``).join('；')}`,
     );
   }
-  lines.push(`【镜头】${facts.shotSizeZh}，${shot.cameraMove === 'static' ? '固定镜头' : '有运镜'}，${shot.duration} 秒`);
+  lines.push(
+    `【镜头】${facts.shotSizeZh}，${shot.cameraMove === 'static' ? '固定镜头' : '有运镜'}，${shot.duration} 秒`,
+  );
+  if (facts.cameraPosition) lines.push(`【机位】${facts.cameraPosition}`);
   if (facts.startState) lines.push(`【起点】${facts.startState}`);
   if (facts.action) lines.push(`【动作】${facts.action}`);
   if (facts.endState) lines.push(`【终点】${facts.endState}`);
@@ -251,6 +258,16 @@ function buildNotes(facts: AssembledFacts, platform: TargetPlatform): PromptNote
     reason:
       '景别决定观众离人物多远。近景看情绪，全景看环境。写清楚景别，模型才不会自己决定把镜头推近还是拉远。',
   });
+
+  if (facts.cameraPosition) {
+    notes.push({
+      fragment: facts.cameraPosition,
+      label: '机位',
+      reason:
+        '机位决定观众站在哪看：与视线齐平是平等，略低角度仰拍是压迫，略高角度俯拍是弱小。' +
+        '同一句台词换个机位就是完全不同的意思，而运镜只是让这个机位动起来。',
+    });
+  }
 
   notes.push({
     fragment: facts.cameraMoveEn,

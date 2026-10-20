@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { Asset, ModelProfile } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
@@ -395,23 +395,22 @@ export const useImage = create<ImageState>((set, get) => ({
       ...(prompt.cameraPositionEn ? { cameraPositionEn: prompt.cameraPositionEn } : {}),
     };
 
-    // 带锚点信息重建提示词：**有外观锚点时不再在文字里重描角色**——
-    // 文字一旦描述身体，就等于给模型下了一道「按文字重画」的指令，
-    // 参考图的身份锚定会被污染，结果是「像参考图但不是参考图」。
-    const promptWithAnchors = buildFramePrompt(project, shotId, kind, {
-      hasFirstFrameAnchor: frameRole.hasFirstFrameAnchor,
-      hasPreviousEndAnchor: frameRole.hasPreviousEndAnchor,
-      hasCharacterSheet: referenceRoles.includes('character-sheet'),
-    });
+    /*
+      【v0.39 修】这里原来算了第二次 buildFramePrompt，并把三个「锚点」参数传进去。
+      但那个函数里是 `void options` —— 参数被丢弃，所以**两次结果完全相同**，
+      第二次纯属白算。跟着一起删掉的还有一段说明「有锚点时不再重描角色」的注释，
+      它与函数里「角色外观永远注入」的实现相反，会误导后续修改。
 
+      实际策略只有一个：外观**始终**注入。原因记在 prompts.ts 的对应位置。
+    */
     await runGeneration({
       key,
-      prompt: promptWithAnchors ?? prompt,
+      prompt,
       draft: {
         projectId: project.id,
         kind,
         refId: shotId,
-        promptSnapshot: (promptWithAnchors ?? prompt).positive,
+        promptSnapshot: prompt.positive,
         lockPhrases: prompt.lockPhrases,
         referenceCount: referenceImages.length,
         frameRole,
@@ -565,7 +564,7 @@ async function runBatch(
   /**
    * 标记「开始做下一张」。
    *
-   * ⚠️ 这里曾经写成 `Math.min(done + 1, total)`，而 `done` 是一个永远为 0 的局部变量
+   * 注意： 这里曾经写成 `Math.min(done + 1, total)`，而 `done` 是一个永远为 0 的局部变量
    * —— 于是进度永远停在 1/N，直到整批结束才跳到 N。这是闭包固化的经典错误。
    * 正确做法是**基于状态里的当前值自增**，而不是基于一个捕获的常量。
    */
@@ -628,3 +627,4 @@ export function imageCapabilityHint(): { ready: boolean; reason?: string; level:
   const level = caps.referenceImage ? 'L3' : caps.seed ? 'L2' : 'L1';
   return { ready: true, level };
 }
+

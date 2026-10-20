@@ -406,18 +406,27 @@ describe('参考图说明 · 逐张写明职责', () => {
     // 保什么
     expect(prompt).toContain('same objects in the same places at the same relative sizes');
     expect(prompt).toContain('same direction and colour temperature of light');
-    // 可以改什么，而且用肯定句明说本镜的取景
-    expect(prompt).toContain('medium framing');
+    /*
+      可以改什么，而且用肯定句明说本镜的取景。
+
+      【v0.39】句式从 “This shot uses a medium framing” 改成 “Framing: medium”。
+      原因：景别现在传进来的是自然英文名词短语（“extreme wide establishing shot”），
+      塞进 “a … framing” 会变成 “a extreme wide establishing shot framing” ——
+      既是冠词错误，也重复了 shot。改成「标签: 值」对任何短语都成立。
+    */
+    expect(prompt).toContain('Framing: medium');
     expect(prompt).toContain('without moving the location');
   });
 
-  it('不写景别时不说「medium framing」，但保空间那句仍在', () => {
+  it('不写景别时不给具体取景，但保空间那句仍在', () => {
     const prompt = withReferenceInstruction('x', {
       referenceCount: 1,
       hasFirstFrameAnchor: false,
       hasPreviousEndAnchor: true,
     });
-    expect(prompt).not.toContain('medium framing');
+    expect(prompt).not.toContain('Framing: medium');
+    // 没有景别时给的是「与上一镜不同」，仍然是一句明确指令而不是空白
+    expect(prompt).toContain('Framing:');
     expect(prompt).toContain('same objects in the same places');
   });
 

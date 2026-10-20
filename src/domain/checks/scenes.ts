@@ -38,12 +38,44 @@ const LIGHT_QUALITY: Record<string, string[]> = {
   harsh: ['顶光', '硬光', '直射', '烈日', '刺眼', 'harsh light', 'direct sunlight', 'harsh sun'],
 };
 
-const COLOR_WORDS = [
-  '冷灰蓝', '暖橙', '暖黄', '雪白', '青灰',
-  '金', '橙', '红', '绿', '蓝', '青', '紫', '灰', '棕', '白', '黑',
-  'golden', 'orange', 'red', 'green', 'blue', 'cyan', 'purple', 'grey', 'gray',
-  'brown', 'white', 'black', 'teal', 'amber',
+/**
+ * 颜色词表。
+ *
+ * ===========================================================================
+ * v0.39：中文颜色词最短两个字符，英文按词边界匹配
+ * ===========================================================================
+ * 原来这份表里有「白」「黑」「红」「灰」这样的单字，用 `text.includes()` 匹配。
+ * 结果是把大量**非颜色**的词判成了颜色：
+ *
+ *   他**明白**了 → 命中「白」
+ *   **白天**的光 → 命中「白」
+ *   **黑夜**里 → 命中「黑」
+ *   英文 hun**dred** → 命中「red」，blue**tooth** → 命中「blue」
+ *
+ * 于是「这一镜的色调与场景不一致」这条**在正常文本上就会误报**，
+ * 而误报会训练用户跳过整份检查单——比不检查更糟。
+ *
+ * 修法：中文一律用两字及以上的词（单字在中文里不是词，只是词素）；
+ * 英文用 `\b` 词边界。代价是「墙是白的」这种写法不再命中，
+ * 但那本来就该写成「白色」。
+ */
+const COLOR_WORDS_ZH = [
+  // 复合色（带修饰字）
+  '冷灰蓝', '暖橙', '暖黄', '雪白', '青灰', '灰绿', '米白', '灰蓝',
+  '墨绿', '藏青', '靛蓝', '暗红', '土黄', '米黄', '乳白', '银白',
+  '血红', '漆黑', '惨白', '深蓝', '浅蓝', '淡黄',
+  // 基本色
+  '白色', '黑色', '红色', '绿色', '蓝色', '青色', '紫色', '灰色',
+  '棕色', '金色', '银色', '橙色', '粉色', '黄色', '褐色',
 ];
+
+/** 英文颜色词，按词边界匹配（`hundred` 里没有 red，`bluetooth` 里没有 blue） */
+const COLOR_WORDS_EN = [
+  'golden', 'orange', 'red', 'green', 'blue', 'cyan', 'purple',
+  'grey', 'gray', 'brown', 'white', 'black', 'teal', 'amber', 'crimson', 'indigo',
+];
+
+const COLOR_WORDS = COLOR_WORDS_ZH;
 
 function shotVisualText(shot: Shot): string {
   return [shot.startState, shot.action, shot.endState, shot.mood, shot.cameraPosition].join(' ');
@@ -62,7 +94,9 @@ function findColorWords(text: string): string[] {
   // 保留所有命中，不做「最长匹配优先」的互斥处理。
   // 复合色由 overlaps() 用包含关系判定：「暖橙」既是暖橙也是橙。
   // 如果在这里就把「暖橙」吃掉，「橙」永远匹配不到，相交判定会假阳性。
-  return COLOR_WORDS.filter((c) => text.includes(c));
+  const zh = COLOR_WORDS_ZH.filter((c) => text.includes(c));
+  const en = COLOR_WORDS_EN.filter((c) => new RegExp(`\\b${c}\\b`, 'i').test(text));
+  return [...zh, ...en];
 }
 
 /** 两个颜色词是否指向同一种颜色（支持复合色包含关系） */
@@ -253,4 +287,4 @@ export function checkScenes(project: Project): CheckIssue[] {
   return issues;
 }
 
-export { findTerms, findColorWords, TIME_WORDS, LIGHT_QUALITY, COLOR_WORDS };
+export { findTerms, findColorWords, TIME_WORDS, LIGHT_QUALITY, COLOR_WORDS, COLOR_WORDS_EN };

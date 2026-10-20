@@ -64,8 +64,31 @@ export interface AssetMapping {
    * 不如两种都认。
    */
   lockIdByPhrase: Map<string, string>;
+  /**
+   * 全部锁的完整清单，**同名不会被覆盖**。
+   *
+   * 【为什么需要它】上面两个扁平 Map 以 label / phrase 为键，而键在不同角色之间
+   * 是**不唯一**的。两个角色都有叫「外套」的锁时，后写的会覆盖先写的，
+   * 于是所有镜头引用「外套」都会挂到后一个角色的锁上——前一个角色的锁静默失效，
+   * 而界面上完全看不出来。
+   *
+   * 这份清单保留全部条目并带上 `ownerId`，解析时可以先按「这一镜出现了谁」缩小范围。
+   *
+   * 可选：缺省时退化为旧的扁平 Map 查找（不区分归属）。
+   * 手工构造 AssetMapping 的地方（重试路径、测试）不必填它。
+   */
+  locks?: LockCandidate[];
   /** 变体的 label → 真实 id */
   variantIdByLabel: Map<string, string>;
+}
+
+/** 一条锁在解析时需要的全部信息 */
+export interface LockCandidate {
+  id: string;
+  label: string;
+  phrase: string;
+  /** 归属对象的 id（角色或场景） */
+  ownerId: string;
 }
 
 export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
@@ -73,6 +96,7 @@ export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
   const sceneIdBySlug = new Map<string, string>();
   const lockIdByLabel = new Map<string, string>();
   const lockIdByPhrase = new Map<string, string>();
+  const locks: LockCandidate[] = [];
   const variantIdByLabel = new Map<string, string>();
 
   const characters: CharacterCard[] = generated.characters.map((c) => {
@@ -82,6 +106,7 @@ export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
       const lockId = newId('lock');
       lockIdByLabel.set(lock.label, lockId);
       lockIdByPhrase.set(lock.phrase, lockId);
+      locks.push({ id: lockId, label: lock.label, phrase: lock.phrase, ownerId: id });
       return { id: lockId, label: lock.label, phrase: lock.phrase, appliesTo: lock.appliesTo };
     });
     return {
@@ -113,6 +138,7 @@ export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
       const lockId = newId('lock');
       lockIdByLabel.set(lock.label, lockId);
       lockIdByPhrase.set(lock.phrase, lockId);
+      locks.push({ id: lockId, label: lock.label, phrase: lock.phrase, ownerId: id });
       return { id: lockId, label: lock.label, phrase: lock.phrase, appliesTo: lock.appliesTo };
     });
     return {
@@ -138,6 +164,7 @@ export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
     sceneIdBySlug,
     lockIdByLabel,
     lockIdByPhrase,
+    locks,
     variantIdByLabel,
   };
 }
@@ -173,8 +200,15 @@ export function shotsFromGenerated(
 
     const activeLockIds: string[] = [];
     const unresolved: string[] = [];
+    /**
+     * 解析锁时限定在「这一镜出现的角色 + 它所在的场景」范围内。
+     *
+     * 不限定的话，两个角色都有叫「外套」的锁时会串到一个上（见 resolveLockReference 的说明）。
+     * 场景也要带进来：场景自己也有锁（地理、固定元素），它们的归属是场景 id。
+     */
+    const lockScope = sceneId ? [...characterIds, sceneId] : characterIds;
     for (const reference of g.activeLockLabels) {
-      const resolved = resolveLockReference(mapping, reference);
+      const resolved = resolveLockReference(mapping, reference, lockScope);
       if (resolved) {
         if (!activeLockIds.includes(resolved)) activeLockIds.push(resolved);
       } else {
@@ -281,23 +315,39 @@ export function shotsFromGenerated(
 /**
  * 把模型给出的锁引用解析成真实的锁 id。
  *
- * 依次尝试：精确 label → 精确 phrase → 归一化后的 label/phrase。
- * 最后那一步是为了容忍大小写、中英文标点、多余空格的差异——
- * 模型抄写时这点偏差很常见，不值得因此报一条错。
+ * ===========================================================================
+ * v0.39：按「这一镜出现了谁」限定解析范围
+ * ===========================================================================
+ * 原来的做法是查两张以 label / phrase 为键的扁平 Map。问题在于**键跨对象不唯一**：
+ *
+ *   角色 A 有一条锁叫「外套」
+ *   角色 B 也有一条锁叫「外套」
+ *
+ * 后写入的 B 会覆盖 A。于是所有镜头引用「外套」都挂到 B 的锁上，
+ * A 的锁从此静默失效——**界面上完全看不出来**，只有出图时角色 A 会变样。
+ *
+ * 现在改为：先在有归属信息的清单里，**只在「这一镜出现的角色与场景」范围内**找；
+ * 范围内找不到时，再退回全局精确匹配（保持旧行为，不至于因为 scope 传错就全挂）。
+ *
+ * 依次尝试：范围内精确 label → 范围内精确 phrase → 范围内归一化
+ *          → 全局精确 label / phrase → 全局归一化。
  */
 export function resolveLockReference(
-  mapping: Pick<AssetMapping, 'lockIdByLabel' | 'lockIdByPhrase'>,
+  mapping: Pick<AssetMapping, 'lockIdByLabel' | 'lockIdByPhrase'> & {
+    locks?: LockCandidate[];
+  },
   reference: string,
+  /** 这一镜出现的角色 id + 场景 id。留空表示不限范围。 */
+  scope?: Iterable<string>,
 ): string | undefined {
   const raw = reference.trim();
   if (raw.length === 0) return undefined;
 
-  const direct = mapping.lockIdByLabel.get(raw) ?? mapping.lockIdByPhrase.get(raw);
-  if (direct) return direct;
-
-  // 归一化的目的只有一个：模型抄写时的大小写、空格、标点差异不该导致匹配失败。
-  // 做法是「统一 → 去掉标点 → 压缩空格」，而不是把标点换成另一种标点——
-  // 后者会把「白色短毛，」变成「白色短毛,」，与「白色短毛」仍然不等。
+  /**
+   * 归一化的目的只有一个：模型抄写时的大小写、空格、标点差异不该导致匹配失败。
+   * 做法是「统一 → 去掉标点 → 压缩空格」，而不是把标点换成另一种标点——
+   * 后者会把「白色短毛，」变成「白色短毛,」，与「白色短毛」仍然不等。
+   */
   const normalize = (text: string): string =>
     text
       .toLowerCase()
@@ -305,6 +355,25 @@ export function resolveLockReference(
       .replace(/[，。、；：！？·…—～「」『』（）【】《》〈〉“”‘’"'.,;:!?()\[\]<>]/g, '')
       .replace(/\s+/g, '')
       .trim();
+
+  const scopeSet = scope ? new Set(scope) : null;
+  const all = mapping.locks;
+
+  // ---- 第一轮：限定在本次出场的对象范围内 ----
+  if (all && all.length > 0 && scopeSet && scopeSet.size > 0) {
+    const inScope = all.filter((l) => scopeSet.has(l.ownerId));
+    const exact =
+      inScope.find((l) => l.label === raw) ?? inScope.find((l) => l.phrase === raw);
+    if (exact) return exact.id;
+
+    const target = normalize(raw);
+    const fuzzy = inScope.find((l) => normalize(l.label) === target || normalize(l.phrase) === target);
+    if (fuzzy) return fuzzy.id;
+  }
+
+  // ---- 第二轮：全局精确匹配（旧行为） ----
+  const direct = mapping.lockIdByLabel.get(raw) ?? mapping.lockIdByPhrase.get(raw);
+  if (direct) return direct;
 
   const target = normalize(raw);
   for (const map of [mapping.lockIdByLabel, mapping.lockIdByPhrase]) {

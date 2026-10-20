@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AniGuide 数据模型 —— 唯一真源
  *
  * 设计要点（对应 方案.md v0.6 §5.5）：
@@ -218,6 +218,24 @@ export const CAMERA_MOVE_LABEL: Record<CameraMove, string> = {
   handheld: '手持',
 };
 
+/**
+ * 景别的英文词（用于提示词正文）。
+ *
+ * 【v0.39 新增】原来这张表只在 `domain/prompt/index.ts` 里有一份，
+ * 而出图提示词那边直接注入了枚举值 `extreme-wide`——
+ * 同一个「景别」，视频提示词写的是 `extreme wide establishing shot`，
+ * 图片提示词写的是 `extreme-wide`。后者不是自然英语，而且带连字符的标识符
+ * 会让模型按字面理解。两边现在共用这一份。
+ */
+export const SHOT_SIZE_EN: Record<ShotSize, string> = {
+  'extreme-wide': 'extreme wide establishing shot',
+  wide: 'wide shot',
+  full: 'full shot',
+  medium: 'medium shot',
+  'close-up': 'close-up',
+  'extreme-close-up': 'extreme close-up',
+};
+
 /** 镜头英文运镜词（用于提示词正文） */
 export const CAMERA_MOVE_EN: Record<CameraMove, string> = {
   static: 'static camera, minimal movement',
@@ -384,7 +402,11 @@ export type CheckRuleId =
   | 'continuity-large-motion'
   | 'continuity-light-mismatch'
   | 'continuity-long-chain'
-  | 'continuity-untyped-transition';
+  | 'continuity-untyped-transition'
+  // 提示词质量（v0.39 新增，依据当前主流 AI 视频制作规范）
+  | 'adjacent-same-shot-size'
+  | 'pronoun-in-visual'
+  | 'abstract-emotion';
 
 export interface CheckIssue {
   /** 稳定 id，便于测试与去重 */
@@ -481,7 +503,7 @@ export interface GeneratedImage {
   /**
    * 直接可用的图片地址。
    *
-   * ⚠️ 阿里云返回的是 OSS 临时链接，24 小时后失效。
+   * 注意： 阿里云返回的是 OSS 临时链接，24 小时后失效。
    * 因此**不要把这个 URL 当成长期引用**，必须立刻下载并转成 dataUrl 留存。
    * 见 ModelProfile.imageUrlTtlHours。
    */
@@ -698,7 +720,7 @@ export interface Asset extends Versioned {
   dataUrl?: string;
   /**
    * 平台返回的原始地址。
-   * ⚠️ 阿里云的是 OSS 临时链接，24 小时后失效。只作排查用，**不要拿来展示**。
+   * 注意： 阿里云的是 OSS 临时链接，24 小时后失效。只作排查用，**不要拿来展示**。
    */
   sourceUrl?: string;
   mimeType: string;
@@ -767,3 +789,4 @@ export interface PromptNote {
   /** 为什么这么写 */
   reason: string;
 }
+

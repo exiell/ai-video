@@ -1,5 +1,5 @@
-import type { CheckIssue, Project, Shot } from '../../types/model';
-import { PLATFORM_LABEL } from '../../types/model';
+import type { CheckIssue, Project, Shot, TargetPlatform } from '../../types/model';
+import { PLATFORM_LABEL, SHOT_SIZE_LABEL } from '../../types/model';
 import { findActionFragments, makeIssue, shotLabel } from './shared';
 
 /**
@@ -16,12 +16,19 @@ import { findActionFragments, makeIssue, shotLabel } from './shared';
  */
 
 /** 各视频平台的单镜时长上限（秒）。用于提示新手不要超过平台限制。 */
+/**
+ * 各平台的单镜时长上限（秒）。
+ *
+ * 【v0.39 校正 sora】原来写 20 秒，那是上一代的数字。
+ * 当前 Sora 2 只有 4 / 8 / 12 三档，上限 12 秒。
+ * 这类数字会随模型迭代过期，改动时请在方案文档里注明依据与日期。
+ */
 const PLATFORM_MAX_DURATION: Record<string, number> = {
   jimeng: 12,
   kling: 10,
   seedance: 15,
   runway: 10,
-  sora: 20,
+  sora: 12,
   veo: 8,
 };
 
@@ -52,6 +59,31 @@ const REQUIRED_FIELDS: RequiredField[] = [
     suggestion: '写「镜头结束时画面停在哪」：人物停在哪、手在哪、画面中心是谁。',
   },
 ];
+
+/**
+ * 选出「最严格」的平台时长上限。
+ *
+ * 【v0.39 修】原来用的是 `Math.max`——取所有平台里**最长**的那个。
+ * 后果是选择越严格，检查越松：同时选 Veo(8 秒) 和 Seedance(15 秒) 时，
+ * 上限变成 15，于是一个 12 秒的镜头在 Veo 上必然失败，检查却通过了。
+ *
+ * 一个「多选平台反而更容易过检」的规则比没有更糟：它给出的是错误的安全感。
+ * 现在取最小值，并在文案里点名是哪个平台卡住的。
+ */
+export function strictestLimit(platforms: TargetPlatform[]): {
+  platform: TargetPlatform;
+  limit: number;
+} {
+  // 不能把初值写死成某个平台的上限：那样单选一个更宽松的平台时，
+  // 结果会被那个写死的初值压住（实测：单选 Seedance(15) 返回了 12）。
+  let best: { platform: TargetPlatform; limit: number } | null = null;
+  for (const platform of platforms) {
+    const limit = PLATFORM_MAX_DURATION[platform] ?? 10;
+    if (!best || limit < best.limit) best = { platform, limit };
+  }
+  // 一个平台都没选时按即梦的 12 秒兜底（不是「不限」，避免静默放过）
+  return best ?? { platform: 'jimeng', limit: 12 };
+}
 
 export function checkStoryboard(project: Project): CheckIssue[] {
   const issues: CheckIssue[] = [];
@@ -104,16 +136,15 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         }),
       );
     } else {
-      const max = Math.max(...brief.platforms.map((p) => PLATFORM_MAX_DURATION[p] ?? 10), 10);
-      if (shot.duration > max) {
-        const platformNames = brief.platforms.map((p) => PLATFORM_LABEL[p]).join(' / ');
+      const max = strictestLimit(brief.platforms);
+      if (shot.duration > max.limit) {
         issues.push(
           makeIssue({
             ruleId: 'duration-mismatch',
             severity: 'info',
-            title: `${label}的 ${shot.duration} 秒超过了平台单镜上限`,
-            why: `你选的平台（${platformNames}）单次生成最长约 ${max} 秒。超过的部分生成不出来，或者会被平台自动截断。`,
-            suggestion: `把第 ${shot.number} 镜缩短到 ${max} 秒以内，拆成两镜；或者保留，到时候在平台里分段生成再拼。`,
+            title: `${label}的 ${shot.duration} 秒超过了${PLATFORM_LABEL[max.platform]}的单镜上限`,
+            why: `${PLATFORM_LABEL[max.platform]}单次生成最长约 ${max.limit} 秒。超过的部分生成不出来，或者会被平台自动截断。`,
+            suggestion: `把第 ${shot.number} 镜缩短到 ${max.limit} 秒以内、拆成两镜；或者保留，到时候在平台里分段生成再拼。`,
             location: { kind: 'shot', id: shot.id, field: 'duration' },
           }),
         );
@@ -184,24 +215,142 @@ export function checkStoryboard(project: Project): CheckIssue[] {
   }
 
   // ---- 提示词完整性 ----
+  // 【v0.39 修】风格词与画幅是**项目级**设置，原来混在逐镜检查里，
+  // 于是风格词为空时 7 个镜头会报 7 条一模一样的「缺风格词」。
+  // 现在拆开：项目级的只报一次，逐镜的照旧逐镜报。
+  const projectMissing: string[] = [];
+  if (brief.styleTags.length === 0) projectMissing.push('风格词');
+  if (!brief.aspectRatio) projectMissing.push('画幅');
+  if (projectMissing.length > 0) {
+    issues.push(
+      makeIssue({
+        ruleId: 'prompt-incomplete',
+        severity: 'warning',
+        title: `项目设置里缺少：${projectMissing.join('、')}`,
+        why:
+          '这两项是整部片子共用的，会注入到每一镜的提示词里。' +
+          '缺画幅可能给你出成横屏，缺风格词可能出成写实风而不是动漫风。',
+        suggestion: '去「引导向导」或项目设置里补上。',
+        location: { kind: 'project', id: project.id, field: projectMissing[0] === '风格词' ? 'brief.styleTags' : 'brief.aspectRatio' },
+      }),
+    );
+  }
+
   for (const shot of shots) {
     const missing: string[] = [];
     if (!shot.cameraMove) missing.push('运镜');
     if (!shot.shotSize) missing.push('景别');
-    if (brief.styleTags.length === 0) missing.push('风格词');
-    if (!brief.aspectRatio) missing.push('画幅');
     if (missing.length === 0) continue;
     issues.push(
       makeIssue({
         ruleId: 'prompt-incomplete',
         severity: 'warning',
         title: `${shotLabel(shot.number)}的提示词缺少：${missing.join('、')}`,
-        why: '这会让模型自己决定这些部分。缺画幅可能给你出成横屏，缺风格词可能出成写实风而不是动漫风。',
-        suggestion:
-          missing.includes('画幅') || missing.includes('风格词')
-            ? '去项目设置里补上画幅和风格关键词，它们会注入到每一镜的提示词里。'
-            : `给第 ${shot.number} 镜补上${missing.join('、')}。`,
+        why: '这会让模型自己决定这部分，出图结果不可控。',
+        suggestion: `给第 ${shot.number} 镜补上${missing.join('、')}。`,
         location: { kind: 'shot', id: shot.id },
+      }),
+    );
+  }
+
+
+  // -------------------------------------------------------------------------
+  // 以下三条来自当前主流的 AI 视频制作规范（v0.39 新增）
+  // -------------------------------------------------------------------------
+  // 依据：
+  //  1. 专业分镜规范要求「交替使用各种景别，严禁连续使用相同中景」——
+  //     连续两个同景别，观众会觉得没剪。
+  //  2. 出图/出视频的提示词里**不能用「他 / 她 / 它」指代角色**：
+  //     模型不知道「他」是谁，只知道这是一段文字。必须写姓名或资产标签。
+  //  3. 提示词里**不能写抽象情绪词**（难过、愤怒、崩溃）：模型在训练数据里
+  //     见过无数种「难过」，写这个词等于让它随便挑一种。要写可拍的东西——
+  //     瞳孔、呼吸、手指、视线的落点。
+
+  // ---- 相邻镜同景别 ----
+  for (let i = 1; i < shots.length; i += 1) {
+    const prev = shots[i - 1]!;
+    const current = shots[i]!;
+    if (!prev.shotSize || !current.shotSize) continue;
+    if (prev.shotSize !== current.shotSize) continue;
+    issues.push(
+      makeIssue({
+        ruleId: 'adjacent-same-shot-size',
+        severity: 'info',
+        title: `${shotLabel(prev.number)}和${shotLabel(current.number)}都是「${SHOT_SIZE_LABEL[current.shotSize]}」`,
+        why:
+          '连续两个镜头用同一个景别，观众会觉得「没剪」——画面在动，但视角没变。' +
+          '专业分镜的基本要求是景别交替：远景交代空间，中景推进动作，近景给情绪。',
+        suggestion: `把其中一镜换个景别。${
+          current.shotSize === 'medium'
+            ? '尤其「中景接中景」最闷——把后一镜推成近景，情绪会立刻变重。'
+            : '哪怕只差一档也会好很多。'
+        }`,
+        location: { kind: 'shot', id: current.id, field: 'shotSize' },
+      }),
+    );
+  }
+
+  // ---- 提示词里的代词 ----
+  // 只在「这一镜确实有角色」时提示：没有角色时用「人影」是正常写法。
+  const PRONOUN_RE = /(?:^|[^其])(他们|她们|它们|他|她|它)/;
+  for (const shot of shots) {
+    if (shot.characterIds.length === 0) continue;
+    const visual = [shot.startState, shot.action, shot.endState].join(' ');
+    const hit = PRONOUN_RE.exec(visual);
+    if (!hit) continue;
+    const names = project.characters
+      .filter((c) => shot.characterIds.includes(c.id))
+      .map((c) => c.name)
+      .join('、');
+    issues.push(
+      makeIssue({
+        ruleId: 'pronoun-in-visual',
+        severity: shot.characterIds.length >= 2 ? 'warning' : 'info',
+        title: `${shotLabel(shot.number)}的画面描述里用了「${hit[1]}」`,
+        why:
+          '提示词是给模型看的文字，它**不知道「' +
+          hit[1] +
+          '」指的是谁**。' +
+          (shot.characterIds.length >= 2
+            ? `这一镜有 ${shot.characterIds.length} 个角色（${names}），用代词会让模型无法判断是谁在做这个动作。`
+            : '直接写名字或身份，模型的对应关系会更稳。'),
+        suggestion: `把「${hit[1]}」换成具体的人名（${names || '本镜的角色'}）。${
+          shot.characterIds.length >= 2 ? '尤其是两人同框的镜头，代词是动作错位最常见的原因。' : ''
+        }`,
+        location: { kind: 'shot', id: shot.id, field: 'action' },
+      }),
+    );
+  }
+
+  // ---- 抽象情绪词 ----
+  /**
+   * 词表刻意只收「纯心理词」。
+   * 不收「紧张」「压迫」这类——它们虽然抽象，却是可以指导构图的（空间、光线）。
+   * 收的是那些**没法画出来**的：模型看到「难过」只能随机挑一种表现。
+   */
+  const ABSTRACT_EMOTIONS = [
+    '难过', '伤心', '悲伤', '痛苦', '愤怒', '生气', '委屈', '失望',
+    '崩溃', '绝望', '麻木', '孤独', '幸福', '开心', '高兴',
+  ];
+  for (const shot of shots) {
+    const mood = (shot.mood ?? '').trim();
+    if (!mood) continue;
+    const hit = ABSTRACT_EMOTIONS.find((w) => mood.includes(w));
+    if (!hit) continue;
+    issues.push(
+      makeIssue({
+        ruleId: 'abstract-emotion',
+        severity: 'info',
+        title: `${shotLabel(shot.number)}的情绪写成了「${hit}」`,
+        why:
+          '情绪栏不直接进提示词，但它会影响你怎么写画面。' +
+          '「' + hit + '」是一个结论，不是一个画面——模型在读到这里时，' +
+          '只能从它见过的无数种「' + hit + '」里随便挑一种。',
+        suggestion:
+          '把情绪落成能拍的东西：瞳孔缩了还是散了、呼吸是急还是停、' +
+          '手指在抓什么、视线落在哪、肩膀塌了还是绷着。' +
+          '写成这样之后，画面描述和情绪栏才对得上。',
+        location: { kind: 'shot', id: shot.id, field: 'mood' },
       }),
     );
   }
