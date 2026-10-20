@@ -1,3 +1,4 @@
+import { Info } from '../components/bits';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -195,7 +196,11 @@ export function ExportPage() {
               </table>
             </div>
             <div className="hint">
-              文件名是<code>对象名_生成时间.png</code>，打开文件夹就知道哪张是谁的。
+              文件名是<code>对象名_生成时间.png</code>
+            <Info label="文件名长什么样">
+              例如 <code>图包/角色/头部特写/林冲_2026-10-12_18-30-00.png</code>，
+              打开文件夹就知道哪张是谁的、什么时候生成的。
+            </Info>
             </div>
           </>
         ) : null}
@@ -225,7 +230,11 @@ export function ExportPage() {
             </table>
           </div>
           <div className="hint">
-            包里附一份<b>一致性总览.md</b>，逐张记录锁了什么、用了哪张参考图。
+            包里附一份<b>一致性总览.md</b>
+            <Info label="这份表有什么用">
+              它逐张记录每张图当时锁了什么、用了哪张参考图。
+              以后发现某张图脸不对时，翻那份表就能看出问题出在哪。
+            </Info>
           </div>
         </div>
       ) : null}

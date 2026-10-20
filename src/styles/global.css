@@ -906,3 +906,173 @@ table.simple th {
 .chat-diff-danger .chat-diff-row:first-child {
   background: rgba(255, 107, 107, 0.1);
 }
+/*
+  按需显示的说明（v0.38）。
+  不占布局：绝对定位浮在上层，所以关掉时这一行的高度和没有它一样。
+*/
+.info {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+
+.info-dot {
+  /*
+    尺寸按 skill 的 app-screen 规则：点击目标桌面 ≥24px。
+    视觉上是个小圆点，但热区做够，不然很难点中。
+  */
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: help;
+  transition: color 0.12s, background 0.12s;
+}
+
+.info-dot:hover,
+.info-dot[aria-expanded='true'] {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.info-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.info-body {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: -8px;
+  width: max-content;
+  max-width: 320px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.55;
+  font-weight: 400;
+  white-space: normal;
+  text-align: left;
+}
+
+/* 浮层靠右时会被窗口裁掉，往回收一点 */
+.info-body.right {
+  left: auto;
+  right: -8px;
+}
+/* 导航项置灰（没打开项目时） */
+.nav-item-off {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.nav-item-off:hover {
+  background: transparent;
+}
+/*
+  一行式「下一步」条（v0.38）。
+  原来的四行说明卡被压成这一条：去哪、点哪个按钮。为什么收进展开。
+*/
+.next-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 7px 12px;
+  margin-bottom: 14px;
+  border-radius: 6px;
+  background: var(--bg-soft);
+  border-left: 3px solid var(--accent);
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.next-step-tag {
+  flex: none;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.next-step-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.next-step-text b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.next-step-more {
+  flex: none;
+  font-size: 12px;
+}
+
+.next-step-more > summary {
+  cursor: pointer;
+  color: var(--text-faint);
+  list-style: none;
+}
+
+.next-step-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.next-step-more > summary::after {
+  content: ' ▾';
+}
+
+.next-step-more[open] > summary::after {
+  content: ' ▴';
+}
+
+.next-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  background: var(--bg-card);
+  line-height: 1.6;
+}
+/* 设置页的子导航（v0.38：一区一屏） */
+.subnav {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.subnav-item {
+  padding: 7px 12px;
+  margin-bottom: -1px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  border-bottom: 2px solid transparent;
+  text-decoration: none;
+}
+
+.subnav-item:hover {
+  color: var(--text);
+}
+
+.subnav-item.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}

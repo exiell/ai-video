@@ -1,3 +1,4 @@
+import { Info } from './bits';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useAppStore } from '../store/app';
@@ -77,15 +78,16 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
     <div className="card">
       <h3 className="card-title">批量生成</h3>
       <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-        逐张点太慢，这里可以一次跑完。<b>顺序执行，一张一张来</b>——
-        出图接口有限流，并发只会换来报错。中途某一项失败不会中断整批。
+        一次跑完，<b>按首帧 → 尾帧 → 动作关键帧的顺序</b>
+        <Info label="为什么要按顺序、能不能并发">
+          三帧有先后：后面的帧会自动拿前面的当构图锚点。顺序反了锚点就没了，
+          三帧的机位可能对不上。
+          <br />
+          <br />
+          另外接口有限流，并发只会换来报错，所以这里一张一张来。
+          中途某一项失败不会中断整批。
+        </Info>
       </p>
-      <div className="summary-bar" style={{ marginBottom: 12 }}>
-        <b>三帧有先后顺序：首帧 → 尾帧 → 动作关键帧</b>
-        <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
-          后面的帧会自动拿前面的当构图锚点。顺序反了锚点就没了，三帧的机位可能对不上。
-        </span>
-      </div>
 
       {!hasImageKey ? (
         <div className="issue warning" style={{ marginBottom: 12 }}>
@@ -114,12 +116,15 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
         ))}
       </div>
 
-      <div style={{ marginTop: 8 }}>
-        {tasks.map((task) => (
-          <div key={task} className="hint" style={{ marginTop: 2 }}>
-            <b>{TASK_LABEL[task]}</b>：<RichText>{TASK_HINT[task]}</RichText>
-          </div>
-        ))}
+      <div className="hint" style={{ marginTop: 6 }}>
+        每个按钮做什么
+        <Info label="五个按钮分别生成什么">
+          {tasks.map((task) => (
+            <div key={task} style={{ marginBottom: 4 }}>
+              <b>{TASK_LABEL[task]}</b>：<RichText>{TASK_HINT[task]}</RichText>
+            </div>
+          ))}
+        </Info>
       </div>
 
       {batch ? (

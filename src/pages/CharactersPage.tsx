@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
-import { Field, WhyDetails } from '../components/bits';
+import { Field, WhyDetails, Info } from '../components/bits';
 import {
   CHARACTER_ROLE_LABEL,
   LOCK_ASPECT_LABEL,
@@ -103,9 +103,12 @@ export function CharactersPage() {
       <div className="card">
         <h3 className="card-title">连续性锁怎么写</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          写法要求：<b>一条能直接贴进提示词的短语</b>。中文英文都可以，但英文通常更稳。
-          <br />
-          例：<code>pine-green lapel service jacket</code>、<code>a long wooden spear with a tarnished steel head</code>
+          写成<b>能直接贴进提示词的短语</b>
+          <Info label="怎么写、举个例">
+            中文英文都可以，但英文通常更稳。例：
+            <code>pine-green lapel service jacket</code>、
+            <code>a long wooden spear with a tarnished steel head</code>
+          </Info>
         </p>
       </div>
 
@@ -340,7 +343,11 @@ export function CharactersPage() {
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>③ 变体（随剧情变）</h4>
                 <p className="hint" style={{ marginTop: 0 }}>
-                  「换了件外套」是变体，不是新角色。登记后检查引擎会豁免对应冲突。
+                  「换了件外套」是变体，不是新角色
+                    <Info label="为什么登记变体">
+                      登记之后，检查引擎就知道这个变化是你<b>有意安排</b>的，
+                      不会再把它报成前后冲突。
+                    </Info>
                 </p>
                 {character.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>

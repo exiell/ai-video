@@ -3,13 +3,26 @@ import { Field, WhyDetails } from '../components/bits';
 import { RichText } from '../components/bits';
 import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
-import { Link } from 'react-router-dom';
+import { Link, NavLink, useParams } from 'react-router-dom';
 import { MODEL_PROFILES } from '../data/models/profiles';
 import { VENDORS, findVendor, modelsOfVendor, vendorCors } from '../data/models/vendors';
 import { currentTransport, useSettings } from '../store/settings';
 import { isModelOverridden, resolveModelName } from '../services/llm/modelName';
 import { testConnection, type ConnectionTestResult } from '../services/gateway';
 import type { ModelProfile } from '../types/model';
+
+/**
+ * 设置的四个子视图。
+ *
+ * 顺序按用户实际会碰到的先后排：先选模型（决定花钱和效果），
+ * 再解决连不上的问题，再看数据安全，最后是语言这类一次设定完不动的。
+ */
+const SECTIONS: { key: string; label: string; title: string; blurb: string }[] = [
+  { key: 'models', label: '默认模型', title: '默认模型', blurb: '选好以后就不用再管。' },
+  { key: 'connection', label: '连接与 Key', title: '连接与 Key', blurb: '填 Key，测能不能连上。' },
+  { key: 'data', label: '数据与备份', title: '数据与备份', blurb: '你的东西都存在这台电脑上。' },
+  { key: 'language', label: '语言', title: '语言', blurb: '界面与提示词的语言。' },
+];
 
 /**
  * M0 设置中心（方案.md v0.6 §3.2 + §5.4）
@@ -106,19 +119,48 @@ export function SettingsPage() {
     }
   }
 
+  /**
+   * 四个子视图（v0.38）。
+   *
+   * 【为什么要拆】原来是一条长页：CORS 检测 → 默认模型 → 八个厂商的 Key →
+   * 代理 → 语言 → 备份 → 存储用量。用户滚很久才能找到自己要改的那一项，
+   * 而且「第一步/第二步」的编号暗示必须按顺序做——其实不用。
+   *
+   * tasteskill 的 app-screens 章节对这件事有明确要求：
+   * 「设置跨多个区时，每个侧边项开自己的一屏，不要一条长页把所有区串起来」。
+   *
+   * 实现上用嵌套路由而不是内部 state：这样地址栏能直接分享到某一区，
+   * 刷新也停在同一区。状态仍然留在这一个组件里——拆成四个组件会让
+   * 钥匙串、测试结果这些状态各忘一份。
+   */
+  const { section } = useParams<{ section?: string }>();
+  const tab = SECTIONS.some((x) => x.key === section) ? (section as string) : 'models';
+
   return (
     <>
       <div className="page-head">
         <div>
-          <h2>设置</h2>
+          <h2>{SECTIONS.find((x) => x.key === tab)?.title ?? '设置'}</h2>
+          <p>{SECTIONS.find((x) => x.key === tab)?.blurb ?? ''}</p>
         </div>
-        <a className="btn" href="./cors-check.html" target="_blank" rel="noreferrer">
-          先做跨域实测 →
-        </a>
       </div>
 
+      <nav className="subnav">
+        {SECTIONS.map((item) => (
+          <NavLink
+            key={item.key}
+            to={`/settings/${item.key}`}
+            className={({ isActive }) => `subnav-item${isActive ? ' active' : ''}`}
+          >
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      {tab === 'connection' ? (<>
+
       <div className="card">
-        <h3 className="card-title">第一步：确认能不能直连</h3>
+        <h3 className="card-title">能不能直连</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           点开测一下能不能直连。通就不用管下面「代理」那一栏。
         </p>
@@ -127,11 +169,13 @@ export function SettingsPage() {
         </a>
       </div>
 
+      </>) : null}
+
+      {tab === 'models' ? (<>
       <div className="card">
-        <h3 className="card-title">第二步：默认模型</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           <RichText>
-            {'先选你要用哪家的哪个模型。**Key 在下一节按厂商填**——同一个厂商的对话模型与出图模型共用一个 Key，所以只填一次。'}
+            {'Key 在「连接与 Key」那一页按厂商填——同一个厂商的对话模型与出图模型共用一个 Key，只填一次。'}
           </RichText>
         </p>
 
@@ -178,8 +222,11 @@ export function SettingsPage() {
         </div>
       </div>
 
+      </>) : null}
+
+      {tab === 'connection' ? (<>
       <div className="card">
-        <h3 className="card-title">第三步：按厂商填 API Key</h3>
+        <h3 className="card-title">按厂商填 Key</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           一个厂商一个 Key，只填你要用的那几家。
         </p>
@@ -359,7 +406,7 @@ export function SettingsPage() {
 
       <div className="card">
         <h3 className="card-title">
-          第四步：代理（只有在直连不通时才需要填）
+          代理
           {prefs.proxyBaseUrl.trim() ? <span className="tag tag-warning">已启用</span> : null}
         </h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
@@ -390,6 +437,9 @@ export function SettingsPage() {
       </div>
 
 
+      </>) : null}
+
+      {tab === 'language' ? (<>
       <div className="card">
         <h3 className="card-title">语言</h3>
         <Field label="界面语言">
@@ -399,9 +449,12 @@ export function SettingsPage() {
         </Field>
       </div>
 
+      </>) : null}
+
+      {tab === 'data' ? (<>
       <div className="card">
         <h3 className="card-title">
-          备份
+          存储与备份
           {imageStats && imageStats.count > 0 ? (
             <span className="tag tag-warning">有 {imageStats.count} 张图未备份</span>
           ) : null}
@@ -422,10 +475,9 @@ export function SettingsPage() {
             </div>
           </div>
         ) : null}
-      </div>
-
-      <div className="card">
-        <h3 className="card-title">存储用量</h3>
+        <h3 className="card-title" style={{ marginTop: 20 }}>
+          存储用量
+        </h3>
         {usage ? (
           <>
             <div className="row" style={{ marginBottom: 8 }}>
@@ -456,7 +508,7 @@ export function SettingsPage() {
         ) : (
           <div className="hint">这个浏览器不支持查看存储用量。</div>
         )}
-        <WhyDetails>
+        <WhyDetails summary="为什么图必须存在本地">
           图片必须存在本地，因为平台返回的是<b>24 小时后失效</b>的临时链接。
           只存链接的话，图库第二天会集体变成裂图。
           <br />
@@ -465,6 +517,7 @@ export function SettingsPage() {
           所以养成定期导出的习惯。
         </WhyDetails>
       </div>
+      </>) : null}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
-import { Field, WhyDetails } from '../components/bits';
+import { Field, WhyDetails, Info } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
@@ -301,8 +301,10 @@ export function ScenesPage() {
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>④ 连续性锁</h4>
                 <p className="hint" style={{ marginTop: 0 }}>
-                  和角色锁一样，锁面写成能原样贴进提示词的短语。例：
-                  <code>a green blackboard with chalk dust at its base</code>
+                  写成能原样贴进提示词的短语
+                  <Info label="举个例">
+                    <code>a green blackboard with chalk dust at its base</code>
+                  </Info>
                 </p>
                 {scene.continuityLocks.map((lock) => (
                   <div className="row" key={lock.id} style={{ marginBottom: 8 }}>
@@ -385,7 +387,11 @@ export function ScenesPage() {
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>⑤ 变体（随剧情变）</h4>
                 <p className="hint" style={{ marginTop: 0 }}>
-                  「被打碎了窗户」是变体，不是新场景。登记后检查引擎会豁免对应冲突。
+                  「被打碎了窗户」是变体，不是新场景
+                  <Info label="为什么登记变体">
+                    时间从白天到晚上、窗户被打碎，这些都算变体。
+                    登记之后检查引擎会豁免对应的光线/色调冲突——因为那是你有意安排的。
+                  </Info>
                 </p>
                 {scene.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>

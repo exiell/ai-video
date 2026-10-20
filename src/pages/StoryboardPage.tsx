@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { SummaryBar } from '../components/bits';
+import { SummaryBar, Info } from '../components/bits';
 import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
@@ -570,8 +570,18 @@ export function StoryboardPage() {
                           <>这是第一镜，无需承接。</>
                         ) : (
                           <>
-                            「承接」会自动拿上一镜尾帧当锚点，两镜才接得住。「跳切」不用。
-                            {inferred ? <><br />（按上一镜的衔接说明推断为「{inferred === 'continuation' ? '承接' : '跳切'}」，你可以直接改。）</> : null}
+                            承接会拿上一镜尾帧当锚点
+                            <Info label="承接和跳切有什么区别">
+                              「承接」用于连续动作：出这一镜首帧时会自动拿上一镜尾帧当参考图，
+                              两镜才真的接得住。「跳切」用于换地方、跳时间、或者有意断开——它不拿锚点，
+                              否则会把两个不该相连的镜头焊在一起。
+                            </Info>
+                            {inferred ? (
+                              <>
+                                <br />（按上一镜推断为「
+                                {inferred === 'continuation' ? '承接' : '跳切'}」，可直接改。）
+                              </>
+                            ) : null}
                           </>
                         )}
                       </div>
@@ -588,20 +598,19 @@ export function StoryboardPage() {
                         placeholder="例：他保持这个姿势不动，下一镜从同一机位推进；或：直接切到第二天早上"
                       />
                       <div className="hint">
-                        <b>下一镜要从这里接</b>。写清这一镜结束时画面停在哪。
                         {next ? (
                           <>
-                            <br />
-                            下一镜（第 {next.number} 镜）的起点是：
-                            <b>{next.startState || '（还没写）'}</b>
-                            —— 尾帧要能接住它。
+                            下一镜（第 {next.number} 镜）从
+                            <b>{next.startState || '（还没写）'}</b>开始，尾帧要能接住它。
                           </>
                         ) : (
-                          <>
-                            <br />
-                            这是<b>最后一镜</b>，可以写一句收尾说明，例如「画面停在摊开的笔记本上，缓缓淡出」。
-                          </>
+                          <>最后一镜，写一句收尾说明即可。</>
                         )}
+                        <Info label="这一栏是干什么的">
+                          它同时管三件事：<b>尾帧图该画成什么样</b>、视频提示词里的转场怎么写、
+                          剪辑时的落点在哪。所以写清这一镜结束时画面停在哪，
+                          而不是写「接下来会发生什么」。
+                        </Info>
                       </div>
                     </div>
 

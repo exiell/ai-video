@@ -167,7 +167,7 @@ export function GuidePage() {
       <div className="page-head">
         <div>
           <h2>引导向导</h2>
-          <p>一次只问一个问题。不知道该选什么就按默认值走——所有选项随时可以回来改。</p>
+          <p>一次只问一个问题，不确定就按默认值走</p>
         </div>
       </div>
 

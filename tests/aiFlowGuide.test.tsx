@@ -227,10 +227,27 @@ describe('AI 流程指引 · 紧凑版', () => {
     p.scenes = [{ id: 's1', name: '场景' } as never];
     useAppStore.setState({ project: p });
     const t = text(render('compact'));
-    // 第 1 步已完成 → 紧凑版应指向第 2 步
-    expect(t).toContain('第 2 步');
-    expect(t).not.toContain('第 3 步');
-    expect(t).not.toContain('第 4 步');
+    /*
+      v0.38 紧凑版从「一张四行说明卡」改成「一行：下一步去哪、点哪个」。
+      所以这里断言的是条上的步骤标记，不再是「第 N 步」这个措辞。
+
+      「只显示第一个没做完的」这个约束没变，只是换了说法。
+    */
+    // 第 1 步已完成 → 条上应指向第 2 步
+    expect(t).toContain('下一步 2/4');
+    expect(t).not.toContain('下一步 3/4');
+    expect(t).not.toContain('下一步 4/4');
+  });
+
+  it('**一行式**：不管内容多长，标题区只占一行（不再铺开四行）', () => {
+    // 这条守的是 v0.38 的核心：说明不再挡在操作之前。
+    const p = makeEmptyProject('一行');
+    useAppStore.setState({ project: p });
+    const html = render('compact');
+    // 只保留一个 next-step 条；「怎么做 / 当前进度 / 会看到什么」
+    // 这些原来常驻的行现在都收进了 details
+    expect((html.match(/class="next-step"/g) ?? []).length).toBe(1);
+    expect(html).toContain('<details');
   });
 
   it('全部做完后紧凑版自动消失（不占用界面）', () => {

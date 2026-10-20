@@ -1,3 +1,4 @@
+import { Info } from '../components/bits';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -53,8 +54,11 @@ export function PromptsPage() {
         <div>
           <h2>提示词</h2>
           <p>
-            正文是英文——模型对英文提示词的理解更稳。但每一镜下面都有<b>中文对照</b>和
-            <b>逐项说明</b>，你能看懂自己要生成什么、每个词为什么这么写。
+            英文正文，中文对照
+            <Info label="为什么正文是英文">
+              模型对英文提示词的理解更稳，所以正文用英文。
+              但每一镜下面都有中文对照和逐项说明，你能看懂要生成什么、每个词为什么这么写。
+            </Info>
           </p>
         </div>
         <div className="row">

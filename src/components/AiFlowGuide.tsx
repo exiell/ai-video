@@ -32,8 +32,15 @@ interface FlowStep {
   /** 在哪个界面做 */
   where: string;
   route: string;
-  /** 点哪个按钮 */
+  /** 点哪个按钮（完整说法，给展开区用） */
   action: string;
+  /**
+   * 一行式「下一步」条上用的短说法。
+   *
+   * 原来的 action 是给完整版卡片用的，里面带着"角色建议先出全身多视图"这类补充，
+   * 放进一行条里会被挤成两行、而且重点不明。短说法只说**去哪、点哪个按钮**。
+   */
+  shortAction: string;
   /** 做完会看到什么 */
   expect: string;
   done: boolean;
@@ -104,6 +111,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       where: '分镜表',
       route: '/storyboard',
       action: '点卡片里的「① 从故事里拆角色与场景」',
+      shortAction: '点「从故事里拆角色与场景」',
       expect:
         '会按故事里的场次生成场景卡与角色卡，并自动填好固定元素、光线、身份描述。之后你可以逐条改。',
       done: hasSplit,
@@ -124,6 +132,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       route: '/characters',
       action:
         '角色设定页点「全部角色形象图」；场景设定页点「全部场景参考板」。角色建议先出全身多视图，再出头部特写。',
+      shortAction: '点「全部角色形象图」和「全部场景参考板」',
       expect: '每个角色拿到两张图（全身多视图 + 头部特写），每个场景拿到一张参考板。',
       done: characters.length > 0 && charsReady === characters.length && scenesReady === scenes.length,
       progress: `角色 ${pct(charsReady, characters.length)}（全身 ${pct(charsWithSheet, characters.length)}、特写 ${pct(charsWithFace, characters.length)}）· 场景 ${pct(scenesReady, scenes.length)}`,
@@ -135,6 +144,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       where: '分镜表',
       route: '/storyboard',
       action: '点卡片里的「② 生成分镜表」',
+      shortAction: '点「生成分镜表」',
       expect:
         '模型把故事拆成镜头，每镜带起点、唯一动作、终点，并自动挂好场景、角色和连续性锁。',
       done: hasShots,
@@ -148,6 +158,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       route: '/storyboard',
       action:
         '用「批量生成」里的「全部镜头首帧 / 全部动作关键帧 / 全部尾帧」，或逐个镜头点「生成关键帧（锁角色）」。',
+      shortAction: '用「批量生成」一次出全部首帧',
       expect: '每个镜头三张图：首帧（构图）、动作关键帧（动态顶点）、尾帧（这一镜结束时的状态）。',
       done: shots.length > 0 && firstReady === shots.length && peakReady === shots.length && endReady === shots.length,
       progress: `首帧 ${pct(firstReady, shots.length)} · 动作关键帧 ${pct(peakReady, shots.length)} · 尾帧 ${pct(endReady, shots.length)}`,
@@ -168,42 +179,61 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
     // 找到第一个没做完的步骤；全做完了就不显示
     const current = steps.find((s) => !s.done);
     if (!current) return null;
+    const stepNo = steps.indexOf(current) + 1;
 
+    /**
+     * 【v0.38 从一张卡改成一行】
+     *
+     * 原来是「标题 + 怎么做 + 进度 + 一段为什么 + 看完整流程」，五行。
+     * 而它出现在几乎每个操作页顶部——**说明比页面本身还长**，
+     * 用户要先读完一段解释才能看到自己要操作的东西。
+     *
+     * 现在只留一行：**下一步去哪、点哪个按钮**。
+     * 为什么这么做（gate）、当前进度、完整四步，全部收进右边那个展开。
+     *
+     * 保留的信息一条没少，只是不再挡在路上。
+     */
     return (
-      <div
-        className="issue info"
-        style={{ marginBottom: 14, borderLeftWidth: 3 }}
-      >
-        <div className="issue-title">
-          AI 流程 · 第 {steps.indexOf(current) + 1} 步（共 {steps.length} 步）
-          <span className="tag" style={{ marginLeft: 8 }}>
-            已完成 {doneCount}/{steps.length}
-          </span>
-        </div>
-        <div className="issue-line">
-          <b>{current.title}</b>
-        </div>
-        <div className="issue-line">
-          <b>怎么做：</b>
-          <RichText>{current.action}</RichText>
-        </div>
-        {current.progress ? (
-          <div className="issue-line">
-            <b>当前进度：</b>
-            {current.progress}
-          </div>
-        ) : null}
-        <div className="hint" style={{ marginTop: 6 }}>
-          <RichText>{current.gate ?? ''}</RichText>{' '}
+      <div className="next-step">
+        <span className="next-step-tag">下一步 {stepNo}/{steps.length}</span>
+        <span className="next-step-text">
+          {onThisPage(current.route) ? (
+            <b>{current.shortAction}</b>
+          ) : (
+            <>
+              去「{current.where}」，<b>{current.shortAction}</b>
+            </>
+          )}
+        </span>
+        {onThisPage(current.route) ? null : (
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
-            style={{ padding: '0 6px', verticalAlign: 'baseline' }}
-            onClick={() => navigate('/guide')}
+            className="btn btn-sm"
+            onClick={() => navigate(current.route)}
           >
-            看完整流程 →
+            去做 →
           </button>
-        </div>
+        )}
+        <details className="next-step-more">
+          <summary>为什么</summary>
+          <div className="next-step-body">
+            {current.progress ? <div>当前进度：{current.progress}</div> : null}
+            <div>
+              <RichText>{current.gate ?? ''}</RichText>
+            </div>
+            <div>
+              做完会看到：<RichText>{current.expect}</RichText>
+            </div>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              style={{ padding: '0 6px' }}
+              onClick={() => navigate('/guide')}
+            >
+              看完整四步 →
+            </button>
+          </div>
+        </details>
       </div>
     );
   }

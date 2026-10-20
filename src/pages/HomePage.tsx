@@ -1,7 +1,7 @@
 import { useAppStore } from '../store/app';
 import { cloneAsNewProject } from '../store/app';
 import { sampleProject } from '../data/samples/sampleProject';
-import { RichText } from '../components/bits';
+import { RichText , Info } from '../components/bits';
 import { useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { deleteProject, listProjects, loadProject, type ProjectRecord } from '../services/storage';
@@ -63,9 +63,11 @@ export function HomePage() {
         <div>
           <h2>项目</h2>
           <p>
-            <RichText>
-              {'这个工具不生成视频，它交付的是**方案**：分镜表、角色与场景设定卡、可直接粘贴的多平台提示词，外加一份穿帮检查单。拿着这些，你去即梦、可灵、Seedance 等平台执行。'}
-            </RichText>
+            <RichText>{'交付一份**能开拍的方案**，不是视频'}</RichText>
+            <Info label="具体交付什么">
+              分镜表、角色与场景设定卡、可直接粘贴的多平台提示词，外加一份穿帮检查单。
+              拿着这些，你去即梦、可灵、Seedance 等平台执行。
+            </Info>
           </p>
         </div>
       </div>

@@ -82,7 +82,12 @@ export default function App() {
             <Route path="/scenes" element={<ScenesPage />} />
             <Route path="/prompts" element={<PromptsPage />} />
             <Route path="/export" element={<ExportPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            {/*
+              设置拆成四个子视图（v0.38）。老地址 /settings 重定向到默认那一区，
+              这样之前放在书签或文档里的链接不会失效。
+            */}
+            <Route path="/settings" element={<Navigate to="/settings/models" replace />} />
+            <Route path="/settings/:section" element={<SettingsPage />} />
             <Route path="/help" element={<HelpPage />} />
             <Route path="/about" element={<AboutPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />

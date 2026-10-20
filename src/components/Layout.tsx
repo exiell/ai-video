@@ -44,10 +44,31 @@ export function Layout({ children }: { children: ReactNode }) {
           </NavLink>
         </nav>
 
-        {project ? (
-          <nav className="nav-group">
-            <div className="nav-group-title">创作流程</div>
-            {FLOW.map((item) => (
+        {/*
+          「创作流程」在没有打开项目时也显示，只是置灰。
+
+          【为什么不做成 project ? … : null】原来没项目时这七项整个消失，
+          导航只剩「项目 / 帮助与术语 / 设置 / 关于」——用户看不到这个工具能干什么，
+          而这恰恰是「一目了然知道有什么功能」的最基本要求。
+
+          置灰而不是隐藏：让人知道有这七步、它们叫什么、按什么顺序。
+          点了会告诉他先去开项目，而不是让他以为自己点错了。
+        */}
+        <nav className="nav-group">
+          <div className="nav-group-title">创作流程</div>
+          {FLOW.map((item) => {
+            if (!project) {
+              return (
+                <span
+                  key={item.to}
+                  className="nav-item nav-item-off"
+                  title="先打开一个项目，这一步才能用"
+                >
+                  <span>{item.label}</span>
+                </span>
+              );
+            }
+            return (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -61,9 +82,9 @@ export function Layout({ children }: { children: ReactNode }) {
                   <span className="tag tag-warning">{warningCount}</span>
                 ) : null}
               </NavLink>
-            ))}
-          </nav>
-        ) : null}
+            );
+          })}
+        </nav>
 
         <nav className="nav-group">
           <div className="nav-group-title">其他</div>

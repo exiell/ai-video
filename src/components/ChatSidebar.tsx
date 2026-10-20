@@ -113,8 +113,7 @@ export function ChatSidebar() {
             {bubbles.length === 0 ? (
               <div className="chat-empty">
                 <p style={{ marginTop: 0 }}>
-                  不知道该怎么说？可以试试下面这些。它会先告诉你它的理解，
-                  再给出具体要改哪些字，<b>你确认了才会改</b>。
+                  它先说出自己的理解，<b>你确认了才会改</b>。试试：
                 </p>
                 {QUICK_ASKS.map((q) => (
                   <button

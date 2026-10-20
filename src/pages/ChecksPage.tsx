@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RULE_LABEL, summarizeReport } from '../domain/checks';
-import { SummaryBar } from '../components/bits';
+import { SummaryBar, Info } from '../components/bits';
 import type { CheckIssue, CheckSeverity } from '../types/model';
 import { AutoFixPanel } from '../components/AutoFixPanel';
 
@@ -73,8 +73,11 @@ export function ChecksPage() {
         <div>
           <h2>穿帮检查</h2>
           <p>
-            这里检查的是「该一致的地方有没有写下来」，不是「生成出来一定没问题」。
-            生成模型仍可能出错，但把事实写清楚，你能在花钱出图之前就看出哪些地方会穿帮。
+            在花钱出图之前，先看出哪里会穿帮
+            <Info label="这个检查管什么、不管什么">
+              它检查的是「该一致的地方有没有写下来」，<b>不是</b>「生成出来一定没问题」。
+              生成模型仍然可能出错。把事实写清楚，能让大部分穿帮在出图之前就暴露出来。
+            </Info>
           </p>
         </div>
         <button type="button" className="btn" onClick={refreshChecks}>

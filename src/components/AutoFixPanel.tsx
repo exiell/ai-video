@@ -1,3 +1,4 @@
+import { Info } from './bits';
 import { useMemo, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { RULE_LABEL } from '../domain/checks';
@@ -107,10 +108,13 @@ export function AutoFixPanel({ report }: { report: CheckReport }) {
 
       {plan.manualOnly > 0 ? (
         <div className="hint" style={{ marginTop: 10 }}>
-          <b>为什么有些问题不自动改</b>：需要审美判断的修改一律不碰——
-          {plan.manualRuleIds.map((id) => RULE_LABEL[id] ?? id).join('、')}。
-          比如「光线与场景设定不一致」，改成傍晚还是把场景卡改成白天，只有你知道；
-          机器猜错会把你的创作意图改坏，而且你还不知道为什么。
+          这几类需要你判断
+          <Info label="为什么有些问题不自动改">
+            需要审美判断的修改一律不碰：
+            {plan.manualRuleIds.map((id) => RULE_LABEL[id] ?? id).join('、')}。
+            比如「光线与场景设定不一致」，改成傍晚、还是把场景卡改成白天，只有你知道。
+            机器猜错会把你的创作意图改坏，而且你还不知道为什么。
+          </Info>
         </div>
       ) : null}
 
