@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails, Info } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
@@ -185,7 +185,7 @@ export function ScenesPage() {
             </div>
 
             {open ? (
-              <div style={{ marginTop: 16 }}>
+              <div className="card-more" style={{ marginTop: 16 }}>
                 <h4 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（这是哪里）</h4>
                 <Field label="地点类型">
                   <input
@@ -475,5 +475,3 @@ export function ScenesPage() {
     </>
   );
 }
-
-

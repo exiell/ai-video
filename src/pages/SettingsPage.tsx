@@ -570,9 +570,14 @@ export function SettingsPage() {
       <div className="card">
         <h3 className="card-title">语言</h3>
         <Field label="界面语言">
-          <select value="zh" disabled>
-            <option value="zh">简体中文</option>
-          </select>
+          <SelectMenu
+            className="language-select"
+            value="zh"
+            options={[{ value: 'zh', label: '简体中文' }]}
+            ariaLabel="界面语言"
+            disabled
+            onChange={() => undefined}
+          />
         </Field>
       </div>
 

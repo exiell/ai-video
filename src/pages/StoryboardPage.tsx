@@ -228,6 +228,14 @@ export function StoryboardPage() {
     { value: '', label: '（未指定场景）' },
     ...project.scenes.map((s) => ({ value: s.id, label: s.name })),
   ];
+  const storySceneOptions = [
+    { value: '', label: '（未指定）' },
+    ...project.story.scenes.map((s) => ({ value: s.id, label: s.label })),
+  ];
+  const transitionOptions = [
+    { value: 'continuation', label: '承接上一镜（连续动作）' },
+    { value: 'cut', label: '跳切（换地方／跳时间／有意断开）' },
+  ];
 
   function isFlagged(shotId: string, field: string): boolean {
     return flaggedFields.get(shotId)?.has(field) ?? false;
@@ -589,21 +597,21 @@ export function StoryboardPage() {
                           总开关
                         </span>
                       </div>
-                      <select
+                      <SelectMenu
+                        className="transition-select"
                         value={
                           shot.transitionType ??
                           (index === 0 ? 'cut' : inferTransitionType(prevShot))
                         }
+                        options={transitionOptions}
                         disabled={index === 0}
-                        onChange={(e) =>
+                        ariaLabel={`第 ${shot.number} 镜与上一镜的转场`}
+                        onChange={(value) =>
                           patch(shot, {
-                            transitionType: e.target.value as 'continuation' | 'cut',
+                            transitionType: value as 'continuation' | 'cut',
                           })
                         }
-                      >
-                        <option value="continuation">承接上一镜（连续动作）</option>
-                        <option value="cut">跳切（换地方／跳时间／有意断开）</option>
-                      </select>
+                      />
                       <div className="hint">
                         {index === 0 ? (
                           <>这是第一镜，无需承接。</>
@@ -655,17 +663,13 @@ export function StoryboardPage() {
 
                     <div>
                       <div className="field-label">来源场次</div>
-                      <select
+                      <SelectMenu
+                        className="source-scene-select"
                         value={shot.sourceSceneId}
-                        onChange={(e) => patch(shot, { sourceSceneId: e.target.value })}
-                      >
-                        <option value="">（未指定）</option>
-                        {project.story.scenes.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.label}
-                          </option>
-                        ))}
-                      </select>
+                        options={storySceneOptions}
+                        ariaLabel={`第 ${shot.number} 镜的来源场次`}
+                        onChange={(value) => patch(shot, { sourceSceneId: value })}
+                      />
                     </div>
                   </div>
 

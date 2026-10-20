@@ -1,4 +1,4 @@
-﻿import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Icon } from './Icon';
 
 export interface SelectOption {
@@ -20,12 +20,14 @@ export function SelectMenu({
   onChange,
   ariaLabel,
   className,
+  disabled = false,
 }: {
   value: string;
   options: SelectOption[];
   onChange: (value: string) => void;
   ariaLabel: string;
   className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -55,6 +57,7 @@ export function SelectMenu({
   }
 
   function onKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (disabled) return;
     if (event.key === 'Escape') {
       setOpen(false);
       return;
@@ -95,7 +98,10 @@ export function SelectMenu({
         aria-controls={listId}
         aria-label={ariaLabel}
         aria-activedescendant={open ? `${listId}-${active}` : undefined}
-        onClick={() => setOpen((next) => !next)}
+        disabled={disabled}
+        onClick={() => {
+          if (!disabled) setOpen((next) => !next);
+        }}
       >
         <span className="select-value">{selected?.label ?? '请选择'}</span>
         <Icon name="chevron-right" size={15} className="select-chevron" />

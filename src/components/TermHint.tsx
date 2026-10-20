@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CAMERA_MOVE_GUIDE, SHOT_SIZE_GUIDE, findTerm } from '../domain/help/terms';
 import type { CameraMove, ShotSize } from '../types/model';
@@ -54,6 +54,7 @@ export function TermHint({ term }: { term: string }) {
       </button>
       {open ? (
         <span
+          className="term-pop"
           style={{
             position: 'absolute',
             zIndex: 20,

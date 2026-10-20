@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails, Info } from '../components/bits';
 import {
@@ -14,6 +14,17 @@ import { AssetGallery, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
+import { SelectMenu } from '../components/SelectMenu';
+
+const ROLE_OPTIONS = Object.entries(CHARACTER_ROLE_LABEL).map(([value, label]) => ({
+  value,
+  label,
+}));
+
+const LOCK_ASPECT_OPTIONS = Object.entries(LOCK_ASPECT_LABEL).map(([value, label]) => ({
+  value,
+  label,
+}));
 
 /**
  * M3 角色设定卡（方案.md v0.6 §6.2）
@@ -131,22 +142,18 @@ export function CharactersPage() {
                   value={character.name}
                   onChange={(e) => upsertCharacter({ ...character, name: e.target.value })}
                 />
-                <select
+                <SelectMenu
+                  className="character-role-select"
                   value={character.role}
-                  onChange={(e) =>
+                  options={ROLE_OPTIONS}
+                  ariaLabel={`${character.name}的角色类型`}
+                  onChange={(value) =>
                     upsertCharacter({
                       ...character,
-                      role: e.target.value as CharacterCard['role'],
+                      role: value as CharacterCard['role'],
                     })
                   }
-                  style={{ width: 110 }}
-                >
-                  {Object.entries(CHARACTER_ROLE_LABEL).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                />
                 <span className="tag">{shots.length} 镜出镜</span>
                 {character.continuityLocks.length === 0 ? (
                   <span className="tag tag-warning">没有连续性锁</span>
@@ -177,7 +184,7 @@ export function CharactersPage() {
             </div>
 
             {open ? (
-              <div style={{ marginTop: 16 }}>
+              <div className="card-more" style={{ marginTop: 16 }}>
                 <h4 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（跨集不变）</h4>
                 <div className="grid-2">
                   <Field label="面部特征">
@@ -290,24 +297,20 @@ export function CharactersPage() {
                       }
                       placeholder="锁面，例：a worn padded cotton robe in faded indigo"
                     />
-                    <select
+                    <SelectMenu
+                      className="lock-aspect-select"
                       value={lock.appliesTo}
-                      onChange={(e) =>
+                      options={LOCK_ASPECT_OPTIONS}
+                      ariaLabel="这条锁锁的是哪个方面"
+                      onChange={(value) =>
                         upsertCharacter({
                           ...character,
                           continuityLocks: character.continuityLocks.map((l) =>
-                            l.id === lock.id ? { ...l, appliesTo: e.target.value as LockAspect } : l,
+                            l.id === lock.id ? { ...l, appliesTo: value as LockAspect } : l,
                           ),
                         })
                       }
-                      style={{ width: 90 }}
-                    >
-                      {Object.entries(LOCK_ASPECT_LABEL).map(([value, label]) => (
-                        <option key={value} value={value}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
+                    />
                     <button
                       type="button"
                       className="btn btn-ghost btn-sm"

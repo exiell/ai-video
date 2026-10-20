@@ -4253,6 +4253,16 @@ table.simple tbody tr:last-child td {
   background: #f7fafd;
 }
 
+.select-trigger:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.select-trigger:disabled:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card);
+}
+
 .select-trigger:focus-visible {
   outline: none;
   border-color: var(--accent);
@@ -4405,9 +4415,59 @@ table.simple tbody tr:last-child td {
   border-color: var(--warning) !important;
 }
 
+/* 角色、连续性锁、转场、来源场次、语言：统一紧凑高度 */
+.character-role-select {
+  flex: 0 0 110px;
+  width: 110px;
+}
+
+.lock-aspect-select {
+  flex: 0 0 90px;
+  width: 90px;
+}
+
+.transition-select,
+.source-scene-select,
+.language-select {
+  width: 100%;
+}
+
+.character-role-select .select-trigger,
+.lock-aspect-select .select-trigger,
+.transition-select .select-trigger,
+.source-scene-select .select-trigger,
+.language-select .select-trigger {
+  height: 34px;
+  padding: 0 9px;
+  font-size: 12.5px;
+}
+
+.lock-aspect-select .select-pop {
+  right: auto;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* 角色/场景展开后的整块内容 */
+.card-more {
+  animation: detail-in 0.18s ease-out both;
+}
+
+/* 其他展开层：AI 流程的「为什么」、术语气泡、说明气泡 */
+.next-step-more[open] .next-step-body,
+.term-pop,
+.info-body {
+  animation: detail-in 0.16s ease-out both;
+}
+
 .shot-card:has(.select-menu.open) {
   position: relative;
   z-index: 30;
+}
+
+.card:has(.select-menu.open) {
+  position: relative;
+  z-index: 20;
 }
 
 .shot-more {
@@ -4803,6 +4863,11 @@ select {
 [data-theme='night'] .select-trigger:hover {
   border-color: #4a5360;
   background: #1b222b;
+}
+
+[data-theme='night'] .select-trigger:disabled:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card);
 }
 
 [data-theme='night'] .select-trigger:focus-visible {
