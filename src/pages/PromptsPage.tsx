@@ -27,7 +27,7 @@ export function PromptsPage() {
   const bundles = useMemo(() => (project ? buildAllPrompts(project) : []), [project]);
 
   if (!project) {
-    return <div className="empty">还没有打开任何项目。先去「项目」页新建或打开一个。</div>;
+    return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
   if (project.shots.length === 0) {
     return <div className="empty">还没有镜头。先去「分镜表」加上几个。</div>;
@@ -52,7 +52,7 @@ export function PromptsPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>提示词</h2>
+          <h1>提示词</h1>
           <p>
             英文正文，中文对照
             <Info label="为什么正文是英文">
@@ -91,7 +91,7 @@ export function PromptsPage() {
         <div className="card">
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <div>
-              <b style={{ fontSize: 13 }}>负向词（所有镜头共用）</b>
+              <h3 className="prompt-subtitle">负向词（所有镜头共用）</h3>
               <div className="hint">
                 贴到平台的「负向词 / 不要出现」框里，<b>不要</b>混进正文。
               </div>
@@ -104,12 +104,12 @@ export function PromptsPage() {
               {copied === 'negative' ? '已复制' : '复制'}
             </button>
           </div>
-          <pre style={{ marginTop: 8 }}>{project.brief.negativePrompt}</pre>
+          <div className="prompt-text prompt-text-compact">{project.brief.negativePrompt}</div>
         </div>
       ) : null}
 
       {!bundle ? (
-        <div className="empty">这个平台还没有提示词。去「引导向导」里把目标平台选上。</div>
+        <div className="empty">这个平台还没有提示词。去「故事」里把目标平台选上。</div>
       ) : (
         bundle.lines.map(({ shot, prompt }) => (
           <div
@@ -122,9 +122,9 @@ export function PromptsPage() {
             }
           >
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <b style={{ fontSize: 14 }}>
+              <h3 className="prompt-shot-title">
                 第 {shot.number} 镜 · {shot.duration} 秒
-              </b>
+              </h3>
               <button
                 type="button"
                 className="btn btn-sm"
@@ -135,14 +135,14 @@ export function PromptsPage() {
             </div>
 
             <div className="field-label">英文正文（直接粘贴到平台）</div>
-            <pre>{prompt.en}</pre>
+            <div className="prompt-text">{prompt.en}</div>
 
             <details className="why" open>
               <summary>中文对照（看懂要生成什么）</summary>
               <div className="why-body">
-                <pre style={{ background: 'transparent', border: 'none', padding: 0 }}>
+                <div className="prompt-text prompt-text-plain">
                   {prompt.zh}
-                </pre>
+                </div>
               </div>
             </details>
 
@@ -179,3 +179,6 @@ export function PromptsPage() {
     </>
   );
 }
+
+
+

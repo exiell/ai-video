@@ -1,0 +1,688 @@
+﻿<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>方案 B · 放映室</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Noto+Serif+SC:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ground: #08080a;
+    --surface: #111114;
+    --raised: #18181c;
+    --active: #222227;
+    --line: #242428;
+    --line-soft: #1b1b1f;
+    --text: #f1f1ef;
+    --muted: #b4b1aa;
+    --faint: #97938b;
+    --brass: #c9a15e;
+    --brass-soft: #2a2419;
+    --danger: #e05c5c;
+    --danger-soft: #2a1817;
+    --font: "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+    --serif: "Noto Serif SC", "Songti SC", SimSun, serif;
+    --frame-paper: #e4e2dc;
+    --frame-ink: #22211d;
+    --frame-snow: #fcfcf9;
+    --frame-warm: #a8783f;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    height: 56px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 0 22px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; width: 174px; flex: none; }
+  .brand svg { width: 22px; height: 22px; }
+  .brand span { font-size: 14px; font-weight: 600; letter-spacing: .01em; }
+  .project {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding-left: 22px;
+    border-left: 1px solid var(--line);
+    min-width: 0;
+  }
+  .project b {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .project small { font-size: 11px; color: var(--faint); }
+  .top-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .top-actions a:hover { color: var(--text); }
+  .top-actions .bad { color: var(--danger); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--active); border-color: #33333a; }
+  .btn-light {
+    background: var(--text);
+    border-color: var(--text);
+    color: #111;
+  }
+  .btn-light:hover { background: #fff; border-color: #fff; }
+  .btn-ghost { border-color: transparent; color: var(--muted); }
+
+  /* ---------- body ---------- */
+  .body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 196px minmax(0, 1fr) 330px;
+    min-height: 0;
+  }
+
+  /* ---------- scene rail ---------- */
+  .rail-l {
+    padding: 14px 12px 18px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .rail-label {
+    padding: 0 8px 9px;
+    font-size: 11px;
+    color: var(--faint);
+  }
+  .scene {
+    display: block;
+    padding: 10px 8px;
+    border-radius: 8px;
+    margin-bottom: 2px;
+  }
+  .scene:hover { background: var(--surface); }
+  .scene.active { background: var(--active); }
+  .scene-name { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .scene-name b { font-size: 13px; font-weight: 500; }
+  .scene-name span { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .scene-meta { font-size: 11px; color: var(--faint); margin-top: 2px; }
+  .scene.active .scene-meta { color: var(--muted); }
+
+  .rail-nav { margin-top: auto; padding-top: 20px; border-top: 1px solid var(--line-soft); }
+  .rail-nav a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 12px;
+    color: var(--faint);
+    border-radius: 6px;
+  }
+  .rail-nav a:hover { color: var(--text); background: var(--surface); }
+  .rail-nav a.on { color: var(--text); }
+  .rail-nav .n { font-size: 11px; color: var(--brass); }
+
+  /* ---------- stage ---------- */
+  .stage-col {
+    padding: 6px 26px 18px 20px;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .stage-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 13px;
+  }
+  .stage-kicker { font-size: 11px; color: var(--faint); margin-bottom: 4px; }
+  h1 {
+    font-family: var(--serif);
+    font-size: 27px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: .01em;
+    margin: 0;
+  }
+  .stage-meta {
+    display: flex;
+    gap: 14px;
+    font-size: 11px;
+    color: var(--faint);
+    padding-bottom: 3px;
+    white-space: nowrap;
+  }
+  .stage-meta b { color: var(--muted); font-weight: 500; }
+
+  .hero-frame {
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--frame-paper);
+    border: 1px solid #2c2b28;
+    aspect-ratio: 16 / 9;
+    max-height: 466px;
+  }
+  .hero-frame svg { width: 100%; height: 100%; display: block; }
+
+  .hero-caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-top: 9px;
+    font-size: 11px;
+    color: var(--faint);
+  }
+  .hero-caption b { color: var(--muted); font-weight: 500; }
+
+  .filmstrip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 7px;
+    margin-top: 18px;
+  }
+  .clip { min-width: 0; }
+  .clip .thumb {
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 5px;
+    border: 1px solid #2b2b2f;
+    opacity: .55;
+    transition: opacity .15s;
+  }
+  .clip:hover .thumb { opacity: .85; }
+  .clip.on .thumb { outline: 2px solid var(--brass); outline-offset: 1px; opacity: 1; }
+  .clip .thumb svg { width: 100%; height: 100%; display: block; }
+  .clip-cap {
+    margin-top: 5px;
+    font-size: 11px;
+    color: var(--faint);
+    display: flex;
+    justify-content: space-between;
+    gap: 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .clip.on .clip-cap { color: var(--text); }
+
+  .beats {
+    margin-top: auto;
+    padding-top: 18px;
+    display: grid;
+    grid-template-columns: 1.15fr 1fr 1fr;
+    gap: 22px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .beat-label { font-size: 11px; color: var(--brass); margin-bottom: 5px; }
+  .beat p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--muted); }
+  .beat p b { color: var(--text); font-weight: 500; }
+
+  /* ---------- inspector ---------- */
+  .inspector {
+    background: var(--surface);
+    padding: 20px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-height: 0;
+  }
+  .ins-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .ins-head h2 { font-size: 13px; font-weight: 600; margin: 0; }
+  .ins-head span { font-size: 11px; color: var(--faint); }
+
+  .task {
+    background: var(--raised);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .task-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .task-top .when { font-size: 11px; color: var(--faint); }
+  .task-top .kind { font-size: 11px; color: var(--danger); }
+  .task h3 { margin: 0 0 5px; font-size: 14px; font-weight: 500; line-height: 1.4; }
+  .task p { margin: 0 0 11px; font-size: 12px; line-height: 1.65; color: var(--muted); }
+  .task .btn { height: 32px; font-size: 12px; }
+
+  .prompt {
+    background: var(--ground);
+    border-radius: 7px;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.75;
+    color: #c7c2b8;
+    max-height: 176px;
+    display: -webkit-box;
+    -webkit-line-clamp: 8;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .prompt b { color: var(--text); font-weight: 500; }
+  .prompt-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--faint);
+  }
+  .prompt-meta a:hover { color: var(--text); }
+
+  .lock-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line-soft);
+    font-size: 12px;
+  }
+  .lock-row:last-child { border-bottom: 0; }
+  .lock-row .dot { color: var(--brass); margin-right: 7px; }
+  .lock-row span { color: var(--muted); }
+  .lock-row b { color: var(--text); font-weight: 500; }
+  .lock-row .missing { color: var(--danger); }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .sec-head h3 { font-size: 12px; font-weight: 500; margin: 0; }
+  .sec-head span { font-size: 11px; color: var(--faint); }
+
+  .progress-block { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+  .progress-line { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+  .progress-line b { font-size: 18px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .progress-line span { font-size: 11px; color: var(--faint); }
+  .track { height: 3px; background: #26262b; border-radius: 2px; overflow: hidden; }
+  .track i { display: block; width: 70%; height: 100%; background: var(--brass); }
+  .progress-note { margin-top: 7px; font-size: 11px; color: var(--faint); line-height: 1.55; }
+
+  :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+  @media (max-width: 1180px) {
+    .body { grid-template-columns: 180px minmax(0, 1fr) 300px; }
+    .stage-col { padding-right: 18px; }
+  }
+  @media (max-width: 980px) {
+    .body { grid-template-columns: minmax(0, 1fr) 300px; }
+    .rail-l { display: none; }
+  }
+  @media (max-width: 760px) {
+    .topbar { height: 52px; padding: 0 16px; gap: 12px; }
+    .brand { width: auto; }
+    .brand span { display: none; }
+    .project { border-left: 0; padding-left: 0; }
+    .top-actions a:first-child { display: none; }
+    .body { display: block; }
+    .stage-col { padding: 8px 16px 0; }
+    .stage-head { flex-direction: column; align-items: flex-start; gap: 6px; }
+    h1 { font-size: 22px; }
+    .hero-frame { border-radius: 8px; }
+    .filmstrip { display: flex; overflow-x: auto; padding-bottom: 2px; }
+    .clip { flex: 0 0 96px; }
+    .beats { grid-template-columns: 1fr; gap: 12px; margin-top: 20px; padding-bottom: 20px; }
+    .inspector { margin-top: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2.5" y="4" width="19" height="16" rx="2" fill="none" stroke="#c9a15e" stroke-width="1.8"/>
+        <path d="M4 16 L9 9 L13 14 L16 10 L20 16" fill="none" stroke="#c9a15e" stroke-width="1.8"/>
+        <circle cx="16.8" cy="7.6" r="1.3" fill="#c9a15e"/>
+      </svg>
+      <span>AniGuide</span>
+    </div>
+    <div class="project">
+      <b>林教头风雪山神庙</b>
+      <small>示例项目 · 7 镜 · 28 秒</small>
+    </div>
+    <div class="top-actions">
+      <a href="#">导出制作包</a>
+      <a class="bad" href="#">1 个必须修</a>
+    </div>
+  </header>
+
+  <div class="body">
+    <aside class="rail-l">
+      <div class="rail-label">场次</div>
+      <a class="scene" href="#">
+        <div class="scene-name"><b>草料场外</b><span>3 镜 · 11s</span></div>
+        <div class="scene-meta">大雪 · 夜 · 山道尽头</div>
+      </a>
+      <a class="scene active" href="#">
+        <div class="scene-name"><b>山神庙</b><span>4 镜 · 17s</span></div>
+        <div class="scene-meta">残灯 · 门缝 · 三人密谋</div>
+      </a>
+      <div class="rail-nav" aria-label="制作">
+        <a href="#"><span>故事</span><span>已写</span></a>
+        <a href="#"><span>角色与场景</span><span>2 + 2</span></a>
+        <a class="on" href="#"><span>分镜</span><span class="n">7 镜</span></a>
+        <a href="#"><span>提示词</span><span>7 组</span></a>
+        <a href="#"><span>穿帮检查</span><span class="n">1</span></a>
+      </div>
+    </aside>
+
+    <main class="stage-col">
+      <div class="stage-head">
+        <div>
+          <div class="stage-kicker">山神庙 · 第 2 场 · 第 6 镜</div>
+          <h1>门缝里的真相</h1>
+        </div>
+        <div class="stage-meta"><span>特写</span><span><b>4 秒</b></span><span>推镜</span></div>
+      </div>
+
+      <div class="hero-frame" id="hero"></div>
+      <div class="hero-caption">
+        <span><b>画面</b>　门板、门缝白光、林冲的手</span>
+        <span>第 6 镜 / 7</span>
+      </div>
+
+      <div class="filmstrip" id="filmstrip"></div>
+
+      <div class="beats">
+        <div class="beat">
+          <div class="beat-label">起点</div>
+          <p>旧木门的门板特写，门缝里透进一绺雪地的白光，木纹和裂缝清晰。</p>
+        </div>
+        <div class="beat">
+          <div class="beat-label">唯一动作</div>
+          <p>林冲一只手撑上左边门板，<b>指节抵着木纹</b>。</p>
+        </div>
+        <div class="beat">
+          <div class="beat-label">终点</div>
+          <p>门板被推开一条缝，雪片被风卷进来，落在门槛上。</p>
+        </div>
+      </div>
+    </main>
+
+    <aside class="inspector">
+      <div class="ins-head">
+        <h2>这一镜</h2>
+        <span>第 6 镜 / 7</span>
+      </div>
+
+      <div class="task">
+        <div class="task-top">
+          <span class="kind">必须修</span>
+          <span class="when">约 1 分钟</span>
+        </div>
+        <h3>林冲没有连续性锁</h3>
+        <p>这一镜的提示词不会带上他的毡帽、棉袍和花枪。下一次重生成，脸和衣服可能就不是上一个人了。</p>
+        <button class="btn btn-light" type="button">补上锁</button>
+      </div>
+
+      <div>
+        <div class="sec-head"><h3>提示词正文</h3><span>英文 · 可直接粘贴</span></div>
+        <div class="prompt">
+          <b>Interior of a derelict mountain shrine at night.</b> A close-up of a weathered wooden door, a thin line of cold white light through the gap, the grain and cracks of the wood legible. A hand presses against the left panel, knuckles against the grain. Snow is blown through the opening. Chinese ink wash painting style mixed with cel-shaded anime, cold blue and grey palette, heavy snowfall, 16:9.
+        </div>
+        <div class="prompt-meta"><a href="#">看中文对照</a><a href="#">复制英文正文</a></div>
+      </div>
+
+      <div>
+        <div class="sec-head"><h3>这一镜的锁</h3><span>1 / 5</span></div>
+        <div class="lock-row"><span><i class="dot">·</i>山神庙 · 空间</span><b>已进提示词</b></div>
+        <div class="lock-row"><span><i class="dot">·</i>林冲 · 面部</span><b class="missing">未挂</b></div>
+        <div class="lock-row"><span><i class="dot">·</i>林冲 · 毡帽</span><b class="missing">未挂</b></div>
+        <div class="lock-row"><span><i class="dot">·</i>林冲 · 旧棉袍</span><b class="missing">未挂</b></div>
+        <div class="lock-row"><span><i class="dot">·</i>林冲 · 花枪</span><b class="missing">未挂</b></div>
+      </div>
+
+      <div class="progress-block">
+        <div class="progress-line"><b>28<span style="font-size:10px;color:var(--faint)"> / 40 秒</span></b><span>7 个镜头</span></div>
+        <div class="track"><i></i></div>
+        <p class="progress-note">剩下 12 秒。推门之后可以直接接门外三人，收在长枪指过去的那一帧。</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// Flat ink-wash storyboard frames for the three proposals.
+// Drawn in code because the sample project ships without generated stills.
+// Every frame uses the page's own tokens: --frame-paper, --frame-ink,
+// --frame-snow, --frame-warm, so the same drawings sit in a light or dark sheet.
+
+const dots = (seed) => {
+  let s = seed;
+  const rand = () => {
+    s = (s * 16807 + 11) % 2147483647;
+    return s / 2147483647;
+  };
+  return Array.from({ length: 26 }, () => {
+    const x = 8 + rand() * 304;
+    const y = 8 + rand() * 164;
+    const r = 0.6 + rand() * 1.9;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(1)}" fill="var(--frame-snow)" opacity="${(0.35 + rand() * 0.55).toFixed(2)}"/>`;
+  }).join('');
+};
+
+const svg = (content, seed = 3) => `
+<svg viewBox="0 0 320 180" role="img" aria-hidden="true" preserveAspectRatio="xMidYMid slice">
+  <rect width="320" height="180" fill="var(--frame-paper)"/>
+  ${content}
+  ${dots(seed)}
+</svg>`;
+
+const figure = (x, y, scale = 1, flip = false) => `
+  <g transform="translate(${x} ${y}) scale(${flip ? -scale : scale} ${scale})" fill="var(--frame-ink)">
+    <path d="M-7 0 L-8 -34 Q-8 -46 0 -47 Q8 -46 8 -34 L7 0 Z"/>
+    <circle cx="0" cy="-53" r="8"/>
+    <path d="M-12 -51 Q0 -60 12 -51 L10 -57 Q0 -64 -10 -57 Z" fill="var(--frame-ink)"/>
+    <path d="M8 -43 L24 -77 L27 -76 L12 -40 Z"/>
+  </g>`;
+
+const frames = [
+  {
+    n: 1,
+    dur: 4,
+    scene: '草料场外',
+    size: '大远景',
+    label: '雪压草厅，人从山道尽头走来',
+    svg: svg(
+      `<path d="M0 118 Q54 106 102 116 Q176 128 320 112 L320 180 L0 180 Z" fill="var(--frame-snow)" opacity=".7"/>
+       <path d="M0 136 Q90 126 320 138 L320 180 L0 180 Z" fill="var(--frame-ink)" opacity=".12"/>
+       <path d="M36 112 L52 82 L116 82 L130 112 Z" fill="var(--frame-ink)" opacity=".82"/>
+       <path d="M46 82 L84 66 L122 82 Z" fill="var(--frame-ink)"/>
+       <path d="M52 86 L112 86 L112 94 L52 94 Z" fill="var(--frame-snow)" opacity=".5"/>
+       <path d="M252 116 L276 84 L296 116 Z" fill="var(--frame-ink)" opacity=".55"/>
+       <path d="M214 116 Q236 108 262 116" stroke="var(--frame-ink)" stroke-width="1.4" fill="none" opacity=".35"/>
+       ${figure(168, 120, 0.55)}
+       <path d="M182 117 L205 128" stroke="var(--frame-ink)" stroke-width="1.2" opacity=".55"/>`,
+      11,
+    ),
+  },
+  {
+    n: 2,
+    dur: 3,
+    scene: '草料场外',
+    size: '中景',
+    label: '林冲侧身站定，转头望向塌掉的草厅',
+    svg: svg(
+      `<path d="M0 140 Q86 126 320 146 L320 180 L0 180 Z" fill="var(--frame-snow)" opacity=".8"/>
+       <path d="M0 120 L34 96 L96 96 L118 120 Z" fill="var(--frame-ink)" opacity=".25"/>
+       <path d="M0 124 L118 124 L118 132 L0 132 Z" fill="var(--frame-ink)" opacity=".18"/>
+       <g transform="translate(182 150) scale(1.55)" fill="var(--frame-ink)">
+         <path d="M-13 0 L-15 -58 Q-15 -76 0 -78 Q15 -76 15 -58 L13 0 Z"/>
+         <circle cx="0" cy="-88" r="12"/>
+         <path d="M-20 -84 Q0 -98 20 -84 L16 -94 Q0 -104 -16 -94 Z"/>
+         <path d="M14 -60 L42 -108 L47 -105 L21 -56 Z"/>
+         <path d="M-14 -56 L-28 -20" stroke="var(--frame-ink)" stroke-width="6"/>
+       </g>
+       <path d="M120 78 L168 62" stroke="var(--frame-ink)" stroke-width="1.2" opacity=".2"/>`,
+      23,
+    ),
+  },
+  {
+    n: 3,
+    dur: 4,
+    scene: '草料场外',
+    size: '特写',
+    label: '抬手拂去肩上的雪，把花枪换到左手',
+    svg: svg(
+      `<rect x="0" y="0" width="320" height="180" fill="var(--frame-ink)" opacity=".07"/>
+       <g transform="translate(160 196) scale(3.6)" fill="var(--frame-ink)">
+         <path d="M-17 0 L-19 -52 Q-19 -72 0 -74 Q19 -72 19 -52 L17 0 Z"/>
+         <circle cx="0" cy="-84" r="15"/>
+         <path d="M-24 -79 Q0 -98 24 -79 L19 -91 Q0 -106 -19 -91 Z"/>
+         <path d="M-16 -80 Q-8 -72 0 -80 Q8 -72 16 -80" stroke="var(--frame-snow)" stroke-width="2" fill="none" opacity=".45"/>
+         <path d="M-7 -87 L-3 -87 M4 -87 L8 -87" stroke="var(--frame-snow)" stroke-width="2"/>
+         <path d="M-2 -70 L0 -62" stroke="var(--frame-snow)" stroke-width="1.4" opacity=".35"/>
+       </g>
+       <path d="M28 160 L150 38" stroke="var(--frame-ink)" stroke-width="3"/>
+       <path d="M28 160 L150 38" stroke="var(--frame-snow)" stroke-width="1" opacity=".35"/>
+       <path d="M0 158 Q60 146 120 158" stroke="var(--frame-ink)" stroke-width="1" opacity=".18"/>`,
+      31,
+    ),
+  },
+  {
+    n: 4,
+    dur: 3,
+    scene: '山神庙内',
+    size: '全景',
+    label: '残灯照着的庙内，门缝透进雪的冷光',
+    svg: svg(
+      `<rect x="0" y="0" width="320" height="180" fill="var(--frame-ink)" opacity=".92"/>
+       <path d="M122 28 L198 28 L198 152 L122 152 Z" fill="var(--frame-warm)" opacity=".22"/>
+       <path d="M140 34 L182 34 L182 148 L140 148 Z" fill="var(--frame-warm)" opacity=".45"/>
+       <path d="M161 34 L161 148" stroke="var(--frame-ink)" stroke-width="3"/>
+       <path d="M0 152 L320 152 L320 180 L0 180 Z" fill="var(--frame-ink)"/>
+       <path d="M34 112 L102 112 L102 132 L34 132 Z" fill="var(--frame-ink)" opacity=".55"/>
+       <path d="M34 102 L102 102 L102 112 L34 112 Z" fill="var(--frame-warm)" opacity=".25"/>
+       <circle cx="78" cy="96" r="4" fill="var(--frame-warm)"/>
+       <path d="M232 128 L304 122 L304 154 L232 154 Z" fill="var(--frame-ink)" opacity=".7"/>
+       <path d="M232 128 L304 122" stroke="var(--frame-snow)" stroke-width="2" opacity=".35"/>
+       <path d="M186 152 L206 86 L236 86 L248 152 Z" fill="var(--frame-snow)" opacity=".16"/>`,
+      43,
+    ),
+  },
+  {
+    n: 5,
+    dur: 5,
+    scene: '山神庙内',
+    size: '中景',
+    label: '林冲闭眼坐在供桌旁，手按在花枪杆上',
+    svg: svg(
+      `<rect x="0" y="0" width="320" height="180" fill="var(--frame-ink)" opacity=".94"/>
+       <path d="M0 144 L320 144 L320 180 L0 180 Z" fill="var(--frame-ink)"/>
+       <path d="M220 18 L268 18 L268 128 L220 128 Z" fill="var(--frame-warm)" opacity=".1"/>
+       <path d="M220 18 L268 18 L268 24 L220 24 Z" fill="var(--frame-warm)" opacity=".3"/>
+       <g transform="translate(126 150) scale(1.6)" fill="var(--frame-ink)">
+         <path d="M-30 0 L-30 -20 Q-26 -42 0 -44 Q26 -42 30 -20 L30 0 Z"/>
+         <circle cx="0" cy="-54" r="13"/>
+         <path d="M-16 -50 Q0 -64 16 -50 L13 -60 Q0 -71 -13 -60 Z"/>
+         <path d="M-24 -38 L-54 -32 L-52 -24 L-22 -30 Z"/>
+       </g>
+       <path d="M50 170 L96 60" stroke="var(--frame-ink)" stroke-width="4"/>
+       <circle cx="88" cy="84" r="5" fill="var(--frame-warm)"/>
+       <path d="M88 84 L96 74" stroke="var(--frame-warm)" stroke-width="1" opacity=".6"/>
+       <path d="M176 150 L306 150" stroke="var(--frame-warm)" stroke-width="1" opacity=".12"/>`,
+      53,
+    ),
+  },
+  {
+    n: 6,
+    dur: 4,
+    scene: '山神庙内',
+    size: '特写',
+    label: '一只手撑上左边门板，指节抵着木纹',
+    svg: svg(
+      `<rect x="0" y="0" width="320" height="180" fill="var(--frame-ink)"/>
+       <g stroke="var(--frame-warm)" stroke-width="1" opacity=".18">
+         <path d="M22 0 L22 180"/><path d="M54 0 L54 180"/><path d="M86 0 L86 180"/>
+         <path d="M118 0 L118 180"/><path d="M150 0 L150 180"/><path d="M182 0 L182 180"/>
+         <path d="M214 0 L214 180"/><path d="M246 0 L246 180"/><path d="M278 0 L278 180"/>
+       </g>
+       <path d="M232 0 L260 0 L260 180 L232 180 Z" fill="var(--frame-snow)" opacity=".16"/>
+       <path d="M242 0 L252 0 L252 180 L242 180 Z" fill="var(--frame-paper)" opacity=".92"/>
+       <g transform="translate(70 56) scale(0.6)" stroke="var(--frame-ink)" stroke-width="1.6">
+         <path d="M58 176 L50 148 Q48 136 62 130 L96 142 L104 164 L96 176 Z" fill="var(--frame-ink)" stroke="var(--frame-paper)" stroke-width="1.2"/>
+         <path d="M94 166 Q88 150 94 134 L98 116 Q99 108 106 108 L110 108 Q116 108 117 116 L120 136 L122 102 Q123 94 130 94 Q137 94 138 102 L140 136 L144 96 Q145 88 152 88 Q159 88 160 96 L162 136 L167 103 Q168 96 175 96 Q182 96 183 104 L184 150 Q184 166 168 168 Z" fill="var(--frame-paper)"/>
+         <g fill="none" stroke-width="1.2" opacity=".45">
+           <path d="M111 118 L113 150"/><path d="M129 110 L131 150"/>
+           <path d="M147 108 L149 150"/><path d="M165 112 L167 150"/>
+           <path d="M104 132 L118 130"/><path d="M122 128 L136 126"/><path d="M140 126 L154 124"/>
+         </g>
+         <path d="M94 166 L80 172 L76 160 L96 148 Z" fill="var(--frame-ink)" stroke="var(--frame-paper)" stroke-width="1"/>
+       </g>
+       <path d="M84 58 L96 42" stroke="var(--frame-snow)" stroke-width="1.2" opacity=".3"/>
+       <path d="M206 30 L206 78" stroke="var(--frame-snow)" stroke-width="1" opacity=".28"/>`,
+      61,
+    ),
+  },
+  {
+    n: 7,
+    dur: 5,
+    scene: '山神庙外',
+    size: '全景',
+    label: '林冲提着花枪跨出门槛，门外三人被光晃着',
+    svg: svg(
+      `<rect x="0" y="0" width="320" height="180" fill="var(--frame-ink)"/>
+       <path d="M96 24 L224 24 L224 162 L96 162 Z" fill="var(--frame-paper)" opacity=".92"/>
+       <path d="M110 48 L210 48 L210 162 L110 162 Z" fill="var(--frame-snow)" opacity=".28"/>
+       ${figure(160, 162, 1.45)}
+       <path d="M146 106 L104 54 L98 58 L138 110 Z" fill="var(--frame-ink)"/>
+       <g fill="var(--frame-ink)" opacity=".85">
+         <path d="M64 162 L60 128 Q60 118 68 117 Q76 118 76 128 L72 162 Z"/><circle cx="68" cy="111" r="6"/>
+         <path d="M84 164 L81 136 Q81 127 88 126 Q95 127 95 136 L92 164 Z"/><circle cx="88" cy="121" r="5"/>
+         <path d="M246 162 L242 128 Q242 118 250 117 Q258 118 258 128 L254 162 Z"/><circle cx="250" cy="111" r="6"/>
+       </g>
+       <path d="M0 164 L320 164 L320 180 L0 180 Z" fill="var(--frame-ink)"/>
+       <path d="M96 24 L224 24" stroke="var(--frame-warm)" stroke-width="2" opacity=".2"/>`,
+      71,
+    ),
+  },
+];
+
+  document.getElementById('hero').innerHTML = frames[5].svg;
+  document.getElementById('filmstrip').innerHTML = frames.map((f, i) => `
+    <a class="clip${i === 5 ? ' on' : ''}" href="#" aria-label="第 ${f.n} 镜：${f.label}">
+      <div class="thumb">${f.svg}</div>
+      <div class="clip-cap"><span>${f.n}</span><span>${f.dur}s</span></div>
+    </a>
+  `).join('');
+</script>
+</body>
+</html>
+
+
+
+

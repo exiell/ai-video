@@ -218,3 +218,38 @@ limitations under the License.
 > 说明：本项目以**源码形式**分发，npm 依赖由使用者通过 `pnpm install` 自行获取，
 > 因此各包的许可原文随包提供，本文件不再逐个复制。但 Apache-2.0 的 NOTICE 归属声明
 > 按要求在此保留。
+
+---
+
+## 界面素材（2026-10-20 新增）
+
+本轮界面改版只取用了以下素材，均按原许可保留来源：
+
+### Tabler Icons
+
+- 来源：https://github.com/tabler/tabler-icons
+- 版本：3.49.0
+- 许可：MIT License
+- 版权：Copyright (c) 2019-2026 Paweł Kuna and Tabler contributors
+- 本项目使用：导航与操作图标（home、book、users、map、layout-grid、alert-triangle、terminal-2、download、settings、help-circle、sparkles 等），原始 SVG 位于 `aniguide/src/assets/icons/tabler-*.svg`。
+- MIT 许可全文见本文件第 1 节；上述版权行适用于本节素材。
+
+### Simple Icons
+
+- 来源：https://github.com/simple-icons/simple-icons
+- 版本：16.35.0
+- 许可：CC0-1.0
+- 本项目使用：DeepSeek、Qwen、Moonshot、MiniMax、Baidu 的品牌标识，原始 SVG 位于 `aniguide/src/assets/icons/brand-*.svg`。
+- 说明：CC0 不转让商标权；品牌标识仅用于标识对应厂商，不代表其对本项目的背书。
+
+### css3patterns
+
+- 来源：https://github.com/LeaVerou/css3patterns
+- 许可：MIT License
+- 版权：Copyright (c) Lea Verou
+- 本项目使用：「Blueprint grid」的网格几何，改写为「蓝图」外观的低对比度底纹；实现见 `aniguide/src/styles/global.css` 中 `[data-theme='blueprint'] .main`。
+- MIT 许可全文见本文件第 1 节；上述版权行适用于本节素材。
+
+### 未使用的素材
+
+`patterns/pattern-css` 没有许可证文件，本轮未纳入；`avatars`、`emoji`、`fonts` 未取用。字体仍使用系统字体，避免引入大体积中文字体或外部 CDN 依赖。

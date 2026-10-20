@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
@@ -55,7 +55,7 @@ describe('对话栏', () => {
   it('**收起时仍然渲染展开按钮**（否则用户找不回来）', () => {
     const { html, unmount } = render(<ChatSidebar />);
     expect(html).toContain('chat-toggle');
-    expect(html).toContain('问 AI');
+    expect(html).toContain('>AI<');
     expect(html).not.toContain('chat-body');
     unmount();
   });
@@ -73,7 +73,7 @@ describe('对话栏', () => {
   it('没有项目时输入框禁用，并提示去哪里打开', () => {
     useChat.setState({ open: true });
     const { html, unmount } = render(<ChatSidebar />);
-    expect(html).toContain('先去「项目」页打开一个项目');
+    expect(html).toContain('先去「作品主页」打开一个项目');
     unmount();
   });
 
@@ -451,3 +451,4 @@ describe('改动按对象分组显示', () => {
     unmount();
   });
 });
+

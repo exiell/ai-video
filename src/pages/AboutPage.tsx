@@ -11,7 +11,7 @@ export function AboutPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>关于</h2>
+          <h1>关于</h1>
           <p>AniGuide 是一个开源免费的工具，仅供学习交流。</p>
         </div>
       </div>
@@ -102,6 +102,27 @@ export function AboutPage() {
           </div>
         </div>
 
+        <div style={{ marginBottom: 14 }}>
+          <b style={{ fontSize: 13 }}>界面素材</b>
+          <span className="tag" style={{ marginLeft: 8 }}>
+            MIT / CC0
+          </span>
+          <div className="hint">
+            <a href="https://github.com/tabler/tabler-icons" target="_blank" rel="noreferrer">
+              Tabler Icons
+            </a>
+            （MIT）提供导航图标；
+            <a href="https://github.com/simple-icons/simple-icons" target="_blank" rel="noreferrer">
+              Simple Icons
+            </a>
+            （CC0-1.0）提供厂商品牌标识；
+            <a href="https://github.com/LeaVerou/css3patterns" target="_blank" rel="noreferrer">
+              css3patterns
+            </a>
+            （MIT）的「Blueprint grid」几何用于「蓝图」外观的底纹。品牌标识仅用于标识对应厂商，不代表官方背书。
+          </div>
+        </div>
+
         <div
           className="issue warning"
           style={{ marginTop: 16, marginBottom: 0, borderLeftColor: 'var(--warning)' }}
@@ -129,3 +150,4 @@ export function AboutPage() {
     </>
   );
 }
+

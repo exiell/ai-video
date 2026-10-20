@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails } from '../components/bits';
@@ -6,6 +6,7 @@ import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { TermHint } from '../components/TermHint';
+import { SelectMenu } from '../components/SelectMenu';
 import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
 import type { StoryScene, TargetPlatform } from '../types/model';
 import { PLATFORM_LABEL } from '../types/model';
@@ -166,45 +167,58 @@ export function GuidePage() {
     <>
       <div className="page-head">
         <div>
-          <h2>引导向导</h2>
-          <p>一次只问一个问题，不确定就按默认值走</p>
+          <h1>故事</h1>
+          <p>一次只问一个问题。写完这一段，就能往下拆场次、角色和镜头。</p>
         </div>
       </div>
 
-      <div className="steps">
-        {STEPS.map((label, index) => (
-          <button
-            key={label}
-            type="button"
-            className={`step${index === step ? ' active' : ''}`}
-            onClick={() => setStep(index)}
-          >
-            <span className="step-no">{index + 1}</span>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {step === 0 ? (
-        <div className="card">
-          <h3 className="card-title">这个故事是你自己的，还是让工具给你一个？</h3>
-          <div className="row">
-            <button
-              type="button"
-              className={`btn${story.source === 'original' ? ' btn-primary' : ''}`}
-              onClick={() => patchStory({ source: 'original' })}
-            >
-              我自己的故事
-            </button>
-            <button
-              type="button"
-              className={`btn${story.source === 'generated' ? ' btn-primary' : ''}`}
-              onClick={() => patchStory({ source: 'generated' })}
-            >
-              给个主题，让工具生成
-            </button>
+      <div className="guide-layout">
+        <aside className="guide-rail" aria-label="故事步骤">
+          <div className="guide-rail-title">
+            写故事 · {step + 1} / {STEPS.length}
           </div>
-          <WhyDetails>
+          {STEPS.map((label, index) => (
+            <button
+              key={label}
+              type="button"
+              className={`wizard-step${index === step ? ' active' : ''}${index < step ? ' done' : ''}`}
+              onClick={() => setStep(index)}
+            >
+              <span className="wizard-dot" aria-hidden="true" />
+              <span>{label}</span>
+              <span className="wizard-state">
+                {index === step ? '当前' : index < step ? '已完成' : ''}
+              </span>
+            </button>
+          ))}
+          <p className="guide-rail-note">
+            不知道选哪个就按默认值走。所有内容随时可以回来改，不会因为点了下一步就定死。
+          </p>
+        </aside>
+
+        <div className="guide-main">
+          {step === 0 ? (
+            <div className="card">
+              <h3 className="card-title">这个故事是你自己的，还是让工具给你一个？</h3>
+              <div className="choice-row">
+                <button
+                  type="button"
+                  className={`choice${story.source === 'original' ? ' active' : ''}`}
+                  onClick={() => patchStory({ source: 'original' })}
+                >
+                  <b>我自己的故事</b>
+                  <span>直接粘贴或写下你已经想好的故事，不会被模型改写。</span>
+                </button>
+                <button
+                  type="button"
+                  className={`choice${story.source === 'generated' ? ' active' : ''}`}
+                  onClick={() => patchStory({ source: 'generated' })}
+                >
+                  <b>给个主题，让工具生成</b>
+                  <span>给一句话主题，模型起草，你再逐字改。</span>
+                </button>
+              </div>
+              <WhyDetails>
             这两种来源后面要填的东西不一样。选「我自己的故事」，下一步你直接粘贴或写下来就行；
             选「给工具生成」，你只需要给一个主题，剩下交给模型去写。
             <br />
@@ -230,6 +244,55 @@ export function GuidePage() {
               />
             </div>
           ) : null}
+
+          <div className="guide-ahead">
+            <div className="guide-ahead-head">
+              <h4>下一步会让你写这些</h4>
+              <span>现在不用填</span>
+            </div>
+            <div className="guide-ahead-grid">
+              <div>
+                <b>故事正文</b>
+                <span>一段话就够：谁、在哪、发生了什么、最后怎么了。</span>
+              </div>
+              <div>
+                <b>主要人物</b>
+                <span>谁和谁的关系最关键，谁在挡着主角。</span>
+              </div>
+              <div>
+                <b>冲突与结局</b>
+                <span>主角想要什么，最后停在哪一帧画面上。</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="guide-sample">
+            <div className="aside-label">一个写好的开头长这样</div>
+            <p>一个被诬陷的武人被发配草料场，在风雪夜里听见门外三人密谋，推门而出。</p>
+            <span>一句话里有主角、处境、转折，和最后一个动作。</span>
+          </div>
+
+          <div className="guide-skeleton">
+            <div className="aside-label">把它拆成四格，就不会卡住</div>
+            <div className="skeleton-grid">
+              <div>
+                <b>谁</b>
+                <span>林冲，被发配的武人</span>
+              </div>
+              <div>
+                <b>想要</b>
+                <span>活下去，回到东京</span>
+              </div>
+              <div>
+                <b>挡着</b>
+                <span>陆谦带人放火烧草料场</span>
+              </div>
+              <div>
+                <b>停在</b>
+                <span>他推门而出，长枪指向三人</span>
+              </div>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -365,16 +428,12 @@ export function GuidePage() {
             </Field>
 
             <Field label="画面比例" hint="竖屏短视频选 9:16，横屏投稿选 16:9。必须在提示词里写明，否则模型可能把竖屏出成横屏。">
-              <select
+              <SelectMenu
                 value={project.brief.aspectRatio}
-                onChange={(e) => patchBrief({ aspectRatio: e.target.value })}
-              >
-                {ASPECT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
+                options={ASPECT_OPTIONS}
+                ariaLabel="画面比例"
+                onChange={(value) => patchBrief({ aspectRatio: value })}
+              />
             </Field>
           </div>
 
@@ -434,7 +493,7 @@ export function GuidePage() {
                   title={preset.description}
                 >
                   {preset.label}
-                  {active ? ' ✓' : ''}
+                  {active ? ' · 已选' : ''}
                 </button>
               );
             })}
@@ -575,7 +634,7 @@ export function GuidePage() {
             </ol>
 
             <div className="row" style={{ marginTop: 6 }}>
-              <button type="button" className="btn btn-primary" onClick={() => navigate('/storyboard')}>
+              <button type="button" className="btn" onClick={() => navigate('/storyboard')}>
                 从 AI 流程第 1 步开始
               </button>
               <Link className="btn" to="/help">
@@ -586,7 +645,7 @@ export function GuidePage() {
         </>
       ) : null}
 
-      <div className="row" style={{ marginTop: 18, justifyContent: 'space-between' }}>
+      <div className="wizard-actions">
         <button
           type="button"
           className="btn"
@@ -595,15 +654,59 @@ export function GuidePage() {
         >
           上一步
         </button>
-        <button
-          type="button"
-          className="btn btn-primary"
-          disabled={step === STEPS.length - 1}
-          onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
-        >
-          下一步
-        </button>
+        <div className="row">
+          <span className="wizard-actions-note">
+            {step === STEPS.length - 1 ? '故事写完后，下一步是把故事拆成分镜' : '切换步骤不会提交表单，随时可以回来改'}
+          </span>
+          {step < STEPS.length - 1 ? (
+            <button
+              type="button"
+              className="btn btn-blue"
+              onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+            >
+              下一步
+            </button>
+          ) : (
+            <button type="button" className="btn btn-blue" onClick={() => navigate('/storyboard')}>
+              去分镜表 →
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+
+        <aside className="guide-aside">
+          <section className="aside-card">
+            <div className="aside-label">写完这一段，你会得到</div>
+            <ul className="aside-list">
+              <li>
+                <b>一句话故事</b>
+                <span>导出方案和拍摄进度表的开头</span>
+              </li>
+              <li>
+                <b>场次拆分</b>
+                <span>按地点或时间切，防止漏拍一整场</span>
+              </li>
+              <li>
+                <b>角色与场景线索</b>
+                <span>下一步建卡时直接接着写</span>
+              </li>
+            </ul>
+          </section>
+
+          <section className="aside-card">
+            <div className="aside-label">写不出来就先回答</div>
+            <p className="aside-question">主角是谁？他想要什么？</p>
+            <p className="aside-question">什么挡着他？</p>
+            <p className="aside-question">最后停在哪一帧画面？</p>
+          </section>
+
+          <p className="aside-note">不用一次写对。所有内容随时可以回来改。</p>
+        </aside>
       </div>
     </>
   );
 }
+
+
+

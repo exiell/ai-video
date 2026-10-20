@@ -7,6 +7,15 @@
       name="description"
       content="AniGuide —— 免注册的纯网页工具，把「我想做个动漫视频」变成一份可直接开拍的制作方案：分镜表、角色与场景设定卡、多平台提示词、穿帮检查单。"
     />
+    <script>
+      // 在 React 挂载前应用上次选的外观，避免先闪一下浅色再切暗房。
+      try {
+        var theme = localStorage.getItem('aniguide.theme');
+        if (theme === 'night' || theme === 'blueprint' || theme === 'studio') {
+          document.documentElement.dataset.theme = theme;
+        }
+      } catch (e) {}
+    </script>
     <title>AniGuide · AI 动漫视频新手引导</title>
   </head>
   <body>

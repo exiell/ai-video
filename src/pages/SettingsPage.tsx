@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Field, WhyDetails } from '../components/bits';
 import { RichText } from '../components/bits';
+import { Icon, type IconName } from '../components/Icon';
+import { SelectMenu } from '../components/SelectMenu';
+import { THEMES, useTheme } from '../store/theme';
 import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
 import { Link, NavLink, useParams } from 'react-router-dom';
@@ -12,17 +15,27 @@ import { testConnection, type ConnectionTestResult } from '../services/gateway';
 import type { ModelProfile } from '../types/model';
 
 /**
- * 设置的四个子视图。
+ * 设置的子视图。
  *
  * 顺序按用户实际会碰到的先后排：先选模型（决定花钱和效果），
- * 再解决连不上的问题，再看数据安全，最后是语言这类一次设定完不动的。
+ * 再解决连不上的问题，再看数据安全，然后是外观、语言这类一次设定完不动的。
  */
 const SECTIONS: { key: string; label: string; title: string; blurb: string }[] = [
   { key: 'models', label: '默认模型', title: '默认模型', blurb: '选好以后就不用再管。' },
   { key: 'connection', label: '连接与 Key', title: '连接与 Key', blurb: '填 Key，测能不能连上。' },
   { key: 'data', label: '数据与备份', title: '数据与备份', blurb: '你的东西都存在这台电脑上。' },
+  { key: 'appearance', label: '外观', title: '外观', blurb: '换配色和字体，不改功能。' },
   { key: 'language', label: '语言', title: '语言', blurb: '界面与提示词的语言。' },
 ];
+
+/** 有官方品牌图标的厂商；其余用文字名，不硬凑。图标来自 Simple Icons（CC0）。 */
+const VENDOR_ICON: Record<string, IconName> = {
+  deepseek: 'deepseek',
+  dashscope: 'qwen',
+  moonshot: 'moonshot',
+  minimax: 'minimax',
+  qianfan: 'baidu',
+};
 
 /**
  * M0 设置中心（方案.md v0.6 §3.2 + §5.4）
@@ -41,6 +54,8 @@ export function SettingsPage() {
   const setKey = useSettings((s) => s.setKey);
   const clearKey = useSettings((s) => s.clearKey);
   const setModelOverride = useSettings((s) => s.setModelOverride);
+  const theme = useTheme((s) => s.theme);
+  const setTheme = useTheme((s) => s.setTheme);
 
   const project = useAppStore((s) => s.project);
 
@@ -59,6 +74,17 @@ export function SettingsPage() {
 
   const llmProfiles = MODEL_PROFILES.filter((p) => p.type === 'llm');
   const t2iProfiles = MODEL_PROFILES.filter((p) => p.type === 't2i');
+  const llmOptions = llmProfiles.map((p) => ({
+    value: p.id,
+    label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
+  }));
+  const t2iOptions = t2iProfiles.map((p) => ({
+    value: p.id,
+    label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
+    hint: p.capabilities.referenceImage
+      ? `支持参考图 · 最多 ${p.capabilities.maxReferenceImages} 张`
+      : '不支持参考图',
+  }));
 
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ConnectionTestResult>>({});
@@ -140,7 +166,7 @@ export function SettingsPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>{SECTIONS.find((x) => x.key === tab)?.title ?? '设置'}</h2>
+          <h1>{SECTIONS.find((x) => x.key === tab)?.title ?? '设置'}</h1>
           <p>{SECTIONS.find((x) => x.key === tab)?.blurb ?? ''}</p>
         </div>
       </div>
@@ -179,46 +205,73 @@ export function SettingsPage() {
           </RichText>
         </p>
 
-        <div className="row" style={{ marginBottom: 12 }}>
-          <span className="hint" style={{ marginTop: 0, minWidth: 96 }}>
-            写故事与分镜
-          </span>
-          <select
-            style={{ flex: 1, minWidth: 260 }}
+        <div className="settings-select-row">
+          <span className="settings-select-label">写故事与分镜</span>
+          <SelectMenu
+            className="grow"
             value={prefs.defaultLlmProfileId}
-            onChange={(e) => setPref('defaultLlmProfileId', e.target.value)}
-          >
-            {llmProfiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {findVendor(p.vendorId)?.name ?? p.provider} · {p.name.replace(/^[^·]*·\s*/, '')}
-              </option>
-            ))}
-          </select>
+            options={llmOptions}
+            ariaLabel="写故事与分镜的默认模型"
+            onChange={(value) => setPref('defaultLlmProfileId', value)}
+          />
         </div>
 
-        <div className="row" style={{ marginBottom: 12 }}>
-          <span className="hint" style={{ marginTop: 0, minWidth: 96 }}>
-            生成画面
-          </span>
-          <select
-            style={{ flex: 1, minWidth: 260 }}
+        <div className="settings-select-row">
+          <span className="settings-select-label">生成画面</span>
+          <SelectMenu
+            className="grow"
             value={prefs.defaultReferenceProfileId}
-            onChange={(e) => {
-              setPref('defaultReferenceProfileId', e.target.value);
-              setPref('defaultT2iProfileId', e.target.value);
+            options={t2iOptions}
+            ariaLabel="生成画面的默认模型"
+            onChange={(value) => {
+              setPref('defaultReferenceProfileId', value);
+              setPref('defaultT2iProfileId', value);
             }}
-          >
-            {t2iProfiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {findVendor(p.vendorId)?.name ?? p.provider} · {p.name.replace(/^[^·]*·\s*/, '')}
-                {p.capabilities.referenceImage ? `（参考图 ${p.capabilities.maxReferenceImages} 张）` : '（不支持参考图）'}
-              </option>
-            ))}
-          </select>
+          />
         </div>
 
         <div className="hint">
           不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。
+        </div>
+      </div>
+
+      <div className="card settings-next">
+        <div className="settings-next-head">
+          <div>
+            <h3 className="card-title">选好模型之后</h3>
+            <p>模型只是「用哪个」，真正能不能生成还差一个 Key。</p>
+          </div>
+          <Link className="btn btn-blue" to="/settings/connection">
+            去填 Key
+          </Link>
+        </div>
+        <div className="settings-next-grid">
+          <div>
+            <b>一个厂商一个 Key</b>
+            <span>同一家的对话和出图共用一个 Key，只填一次。</span>
+          </div>
+          <div>
+            <b>填完先测连接</b>
+            <span>「连接与 Key」里有测试按钮，会告诉你直连还是被跨域拦了。</span>
+          </div>
+          <div>
+            <b>没配也能先看</b>
+            <span>示例项目不需要 Key；先看完整产出，再决定要不要填。</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="card settings-picks">
+        <h3 className="card-title">这两个默认值怎么来的</h3>
+        <div className="settings-picks-grid">
+          <div>
+            <b>写故事与分镜：DeepSeek 快速版</b>
+            <span>中文叙事稳定，价格低。分镜字段多、需要反复改，快模型够用，也省得每次等太久。</span>
+          </div>
+          <div>
+            <b>生成画面：通义千问图生图</b>
+            <span>支持参考图，适合把角色形象图和首帧当锚点。三张参考图能同时锁人、锁场景、锁构图。</span>
+          </div>
         </div>
       </div>
 
@@ -234,6 +287,7 @@ export function SettingsPage() {
         {vendorCards.map(({ vendor, models, cors }) => {
           const key = keys[vendor.id] ?? '';
           const result = results[vendor.id];
+          const vendorIcon = VENDOR_ICON[vendor.id];
           // 测连接要挑一个模型：优先用这个厂商当前被选为默认的那个
           const preferred =
             models.find((m) => m.id === prefs.defaultLlmProfileId) ??
@@ -252,6 +306,7 @@ export function SettingsPage() {
             >
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
                 <b style={{ fontSize: 13.5 }}>
+                  {vendorIcon ? <Icon name={vendorIcon} size={16} className="vendor-icon" /> : null}
                   {vendor.name}
                   <span
                     className={`tag ${cors === 'unknown' ? 'tag-warning' : 'tag-ok'}`}
@@ -355,7 +410,7 @@ export function SettingsPage() {
                   }}
                 >
                   <div className="issue-title">
-                    {result.ok ? '✓ 连接正常' : `✗ ${result.info?.title ?? '连接失败'}`}
+                    {result.ok ? '连接正常' : (result.info?.title ?? '连接失败')}
                     <span className="tag" style={{ marginLeft: 8 }}>
                       {result.via === 'proxy' ? '经代理' : '直连'}
                     </span>
@@ -437,6 +492,78 @@ export function SettingsPage() {
       </div>
 
 
+      </>) : null}
+
+      {tab === 'appearance' ? ( <>
+      <div className="card">
+        <h3 className="card-title">界面外观</h3>
+        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
+          只换配色、字体和底纹，不改功能，也不影响数据与导出。切换后会立刻应用，下次打开保持。
+        </p>
+        <div className="appearance-grid">
+          {THEMES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={`theme-card${theme === item.id ? ' active' : ''}`}
+              onClick={() => setTheme(item.id)}
+              aria-pressed={theme === item.id}
+            >
+              <span className={`theme-preview preview-${item.id}`} aria-hidden="true">
+                <span className="tp-rail" />
+                <span className="tp-page">
+                  <span className="tp-head" />
+                  <span className="tp-card">
+                    <b>Aa</b>
+                    <i />
+                    <i className="short" />
+                  </span>
+                  <span className="tp-accent" />
+                </span>
+              </span>
+              <span className="theme-card-body">
+                <b>{item.label}</b>
+                <span>{item.description}</span>
+              </span>
+              <span className="theme-card-state">
+                {theme === item.id ? '当前使用' : '设为当前'}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="settings-next-grid" style={{ marginTop: 18 }}>
+          <div>
+            <b>工作台</b>
+            <span>默认。最亮、对比最清楚，第一次用从这套开始。</span>
+          </div>
+          <div>
+            <b>暗房</b>
+            <span>晚上做片时用；近黑底不刺眼，黄铜只落在主行动上。</span>
+          </div>
+          <div>
+            <b>蓝图</b>
+            <span>像分镜坐标纸；衬线标题和细网格更适合阅读长方案。</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="card appearance-note">
+        <h3 className="card-title">换外观时不会发生什么</h3>
+        <div className="appearance-note-grid">
+          <div>
+            <b>不重写项目</b>
+            <span>故事、分镜、角色、检查结果都不会被改动。</span>
+          </div>
+          <div>
+            <b>不影响导出</b>
+            <span>CSV、Markdown、PNG 的内容和文件名保持原样。</span>
+          </div>
+          <div>
+            <b>不依赖外部字体</b>
+            <span>三套都用本机字体；断网也能正常显示。</span>
+          </div>
+        </div>
+      </div>
       </>) : null}
 
       {tab === 'language' ? (<>
@@ -521,3 +648,5 @@ export function SettingsPage() {
     </>
   );
 }
+
+

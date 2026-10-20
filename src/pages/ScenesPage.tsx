@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails, Info } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
@@ -62,7 +62,7 @@ export function ScenesPage() {
   }, [project?.id]);
 
   if (!project) {
-    return <div className="empty">还没有打开任何项目。先去「项目」页新建或打开一个。</div>;
+    return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
 
   function add() {
@@ -75,7 +75,7 @@ export function ScenesPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>场景设定</h2>
+          <h1>场景设定</h1>
           <p>
             <b>固定元素</b>是「这是同一个地方」的依据。
           </p>
@@ -475,3 +475,5 @@ export function ScenesPage() {
     </>
   );
 }
+
+

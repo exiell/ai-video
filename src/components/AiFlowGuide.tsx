@@ -1,4 +1,4 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+﻿import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RichText } from './bits';
 import { useImage } from '../store/image';
@@ -57,7 +57,7 @@ function pct(done: number, total: number): string {
 export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact' }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // ⚠️ 所有 Hook 必须在任何提前 return 之前调用 —— 否则 Hook 调用顺序会随
+  // 注意： 所有 Hook 必须在任何提前 return 之前调用 —— 否则 Hook 调用顺序会随
   // `project` 是否存在而变化，React 会直接抛错。这类错误在只有示例项目时
   // 可能一直不触发，等到用户新建空项目才炸。
   const project = useAppStore((s) => s.project);
@@ -283,7 +283,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
             }}
           >
             <div style={{ fontWeight: 600, marginBottom: 4 }}>
-              {item.done ? '✓ ' : ''}
+              {item.done ? '已完成 · ' : ''}
               第 {index + 1} 步 · {item.title}
               {item.progress ? (
                 <span className="tag" style={{ marginLeft: 8 }}>
@@ -327,3 +327,5 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
     </div>
   );
 }
+
+

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { useChat, type ChatBubble } from '../store/chat';
 import { useAppStore } from '../store/app';
 import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
@@ -82,10 +82,11 @@ export function ChatSidebar() {
         className="chat-toggle"
         onClick={toggle}
         title={open ? '收起对话栏' : '展开对话栏'}
+        aria-label={open ? '收起对话栏' : '展开对话栏'}
         aria-expanded={open}
       >
         <span className="chat-toggle-icon">{open ? '›' : '‹'}</span>
-        {!open ? <span className="chat-toggle-label">问 AI</span> : null}
+        {!open ? <span className="chat-toggle-label">AI</span> : null}
       </button>
 
       {open ? (
@@ -162,7 +163,7 @@ export function ChatSidebar() {
               placeholder={
                 project
                   ? `例如：第 3 镜太闷了，能不能更紧张一点？（用 ${currentLlmName()} 回答）`
-                  : '先去「项目」页打开一个项目'
+                  : '先去「作品主页」打开一个项目'
               }
               disabled={!project || pending}
               rows={inputFocused || draft.length > 40 ? 3 : 2}
@@ -241,7 +242,7 @@ function EditBatch({ bubble, isActive }: { bubble: ChatBubble; isActive: boolean
       */}
       <div className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
         {/*
-          ⚠️ 这里的文案必须走 RichText —— JSX 不解析 Markdown。
+          注意： 这里的文案必须走 RichText —— JSX 不解析 Markdown。
           我自己在这里犯过一次「写了 ** 却没包 RichText」的错，
           结果是用户看到字面的星号。测试里有专门一条守这个。
         */}
@@ -553,3 +554,5 @@ function whereLabel(edit: ChatEditProposal): string {
   if (kind === 'story') return `故事 · ${what}`;
   return `整体规格 · ${what}`;
 }
+
+

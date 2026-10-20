@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RichText } from '../components/bits';
 import {
@@ -32,7 +32,7 @@ export function HelpPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>帮助与术语</h2>
+          <h1>帮助与术语</h1>
           <p>
             这里不收字典定义，只收<b>判断依据</b>——每个词条回答的是
             「这个选择会让观众感觉到什么」，因为新手缺的不是定义，是不知道该选哪个。
@@ -44,7 +44,7 @@ export function HelpPage() {
         <h3 className="card-title">第一次用？按这个顺序走</h3>
         <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
           <li>
-            <b>先看示例项目</b>（在「项目」页）。不用配 Key 就能看到一份完整产出长什么样，
+            <b>先看示例项目</b>（在「作品主页」）。不用配 Key 就能看到一份完整产出长什么样，
             看完你就知道这些东西最终是为了什么。
           </li>
           <li>
@@ -56,7 +56,7 @@ export function HelpPage() {
             并给出对应做法，比自己猜快得多。
           </li>
           <li>
-            <b>走引导向导</b>，把故事写出来。每个问题旁边都有「为什么问这个」，
+            <b>走「故事」</b>，把故事写出来。每个问题旁边都有「为什么问这个」，
             看不懂就展开看。
           </li>
           <li>
@@ -279,3 +279,5 @@ export function HelpPage() {
     </>
   );
 }
+
+

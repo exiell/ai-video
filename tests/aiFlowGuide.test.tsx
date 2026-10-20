@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
@@ -187,7 +187,7 @@ describe('AI 流程指引 · 进度统计', () => {
     useAppStore.setState({ project: p });
     const t = text(render());
     expect(t).toContain('已有 2 个镜头');
-    expect(t).toContain('✓');
+    expect(t).toContain('已完成 · 第 3 步 · 生成分镜表');
   });
 
   it('三帧各自统计，不互相顶替', () => {
@@ -283,3 +283,4 @@ describe('AI 流程指引 · 紧凑版', () => {
     expect(text(render())).not.toContain('**');
   });
 });
+

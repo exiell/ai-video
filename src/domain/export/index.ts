@@ -1,4 +1,4 @@
-import type { CheckReport, Project } from '../../types/model';
+﻿import type { CheckReport, Project } from '../../types/model';
 import { PLATFORM_LABEL } from '../../types/model';
 import { buildAllPrompts } from '../prompt';
 
@@ -160,7 +160,7 @@ export function charactersToMarkdown(project: Project): string {
     out.push('### 连续性锁（必须跨镜保持）');
     out.push('');
     if (character.continuityLocks.length === 0) {
-      out.push('⚠️ 还没有任何连续性锁。没有锁，模型每一镜都会重新想象这个人的样子。');
+      out.push('注意： 还没有任何连续性锁。没有锁，模型每一镜都会重新想象这个人的样子。');
     } else {
       for (const lock of character.continuityLocks) {
         out.push(`- **${lock.label}**（${lock.appliesTo}）`);
@@ -227,7 +227,7 @@ export function scenesToMarkdown(project: Project): string {
     out.push('### 固定元素（跨镜必须出现）');
     out.push('');
     if (scene.fixedElements.length === 0) {
-      out.push('⚠️ 没有登记固定元素，换个镜头就认不出是同一处地方。');
+      out.push('注意： 没有登记固定元素，换个镜头就认不出是同一处地方。');
     } else {
       for (const el of scene.fixedElements) out.push(`- \`${el}\``);
     }
@@ -444,3 +444,4 @@ export function promptsToMarkdown(project: Project): { fileName: string; content
     return { fileName: `${PLATFORM_LABEL[platform]}.md`, content: out.join('\n') };
   });
 }
+

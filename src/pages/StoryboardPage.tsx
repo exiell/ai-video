@@ -5,6 +5,8 @@ import { SummaryBar, Info } from '../components/bits';
 import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
+import { Icon } from '../components/Icon';
+import { SelectMenu } from '../components/SelectMenu';
 import { useGeneration } from '../store/generation';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
@@ -192,7 +194,7 @@ export function StoryboardPage() {
   }, [project?.id]);
 
   if (!project) {
-    return <div className="empty">还没有打开任何项目。先去「项目」页新建或打开一个。</div>;
+    return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
 
   const total = project.shots.reduce((s, x) => s + (Number.isFinite(x.duration) ? x.duration : 0), 0);
@@ -202,6 +204,19 @@ export function StoryboardPage() {
     ...project.brief.platforms.map((p) => PLATFORM_MAX_DURATION[p] ?? 10),
     10,
   );
+
+  const shotSizeOptions = SHOT_SIZE_OPTIONS.map((s) => ({
+    value: s,
+    label: SHOT_SIZE_LABEL[s],
+  }));
+  const cameraMoveOptions = CAMERA_MOVE_OPTIONS.map((m) => ({
+    value: m,
+    label: CAMERA_MOVE_LABEL[m],
+  }));
+  const sceneOptions = [
+    { value: '', label: '（未指定场景）' },
+    ...project.scenes.map((s) => ({ value: s.id, label: s.name })),
+  ];
 
   function isFlagged(shotId: string, field: string): boolean {
     return flaggedFields.get(shotId)?.has(field) ?? false;
@@ -215,13 +230,13 @@ export function StoryboardPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>分镜表</h2>
+          <h1>分镜表</h1>
           <p>一镜只做一件事：起点 → 动作 → 终点。</p>
         </div>
         <div className="row">
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
             onClick={() => {
               const shot = makeShot(
                 project.shots.length + 1,
@@ -242,26 +257,6 @@ export function StoryboardPage() {
       {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
       <AiFlowGuide variant="compact" />
 
-      <div className="card">
-        <h3 className="card-title">生成分镜</h3>
-        <GenerateBar
-          task="assets"
-          label="① 从故事里拆角色与场景"
-          hint={`当前已有 ${project.characters.length} 个角色、${project.scenes.length} 个场景。重新生成会覆盖它们。`}
-        />
-        <GenerateBar
-          task="shots"
-          label="② 生成分镜表"
-          hint={
-            project.story.body.trim()
-              ? '会把故事拆成镜头，并自动挂好场景、角色和连续性锁。'
-              : '故事还是空的，先去「引导向导」把故事写出来（或让模型生成）。'
-          }
-        />
-      </div>
-
-      <BatchGenerateCard tasks={['characters', 'scenes', 'first-frame', 'action-peak', 'end-frame']} />
-
       <SummaryBar>
         <span>
           共 <b>{project.shots.length}</b> 镜
@@ -277,16 +272,57 @@ export function StoryboardPage() {
         ) : project.shots.length > 0 ? (
           <span className="tag tag-ok">时长吻合</span>
         ) : null}
+        {report && report.counts.error > 0 ? (
+          <span className="tag tag-error">{report.counts.error} 个必须修</span>
+        ) : project.shots.length > 0 ? (
+          <span className="tag tag-ok">检查通过</span>
+        ) : null}
         <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
           单镜上限约 {maxPerShot} 秒（按所选平台）
         </span>
         {generatingAssets ? <span className="tag tag-info">正在拆角色与场景</span> : null}
       </SummaryBar>
 
+      {/*
+        生成工具收进折叠区。
+        页面首先应该是「看和改这 7 个镜头」；没配 Key 时的两条警告不该占满第一屏。
+      */}
+      <details className="tools-drawer">
+        <summary>
+          <span className="tools-drawer-title">
+            <Icon name="sparkles" size={14} className="tools-icon" />
+            用模型生成
+          </span>
+          <span className="tools-drawer-hint">
+            从故事拆角色、场景和分镜，或批量出图；需要先在设置里配好 Key。
+          </span>
+          <span className="tools-drawer-toggle">展开</span>
+        </summary>
+        <div className="tools-drawer-body">
+          <div className="card">
+            <h3 className="card-title">生成分镜</h3>
+            <GenerateBar
+              task="assets"
+              label="① 从故事里拆角色与场景"
+              hint={`当前已有 ${project.characters.length} 个角色、${project.scenes.length} 个场景。重新生成会覆盖它们。`}
+            />
+            <GenerateBar
+              task="shots"
+              label="② 生成分镜表"
+              hint={
+                project.story.body.trim()
+                  ? '会把故事拆成镜头，并自动挂好场景、角色和连续性锁。'
+                  : '故事还是空的，先去「故事」把故事写出来（或让模型生成）。'
+              }
+            />
+          </div>
+          <BatchGenerateCard tasks={['characters', 'scenes', 'first-frame', 'action-peak', 'end-frame']} />
+        </div>
+      </details>
+
       {project.shots.length === 0 ? (
         <div className="empty">
-          还没有镜头。可以点上面的「② 生成分镜表」让模型拆，也可以点右上角「加一个镜头」手动写，
-          或者去「项目」页打开示例项目看看结构。
+          还没有镜头。展开上面的「用模型生成」让模型拆，或点右上角「加一个镜头」手动写。
           {generatingShots ? (
             <div style={{ marginTop: 8 }}>模型正在拆镜头，请稍等…</div>
           ) : null}
@@ -320,43 +356,31 @@ export function StoryboardPage() {
                 />
                 <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>秒</span>
 
-                <select
+                <SelectMenu
+                  className="shot-select shot-size-select"
                   value={shot.shotSize}
-                  onChange={(e) => patch(shot, { shotSize: e.target.value as ShotSize })}
-                  style={{ width: 92 }}
-                >
-                  {SHOT_SIZE_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {SHOT_SIZE_LABEL[s]}
-                    </option>
-                  ))}
-                </select>
+                  options={shotSizeOptions}
+                  ariaLabel={`第 ${shot.number} 镜的景别`}
+                  onChange={(value) => patch(shot, { shotSize: value as ShotSize })}
+                />
 
-                <select
+                <SelectMenu
+                  className="shot-select shot-move-select"
                   value={shot.cameraMove}
-                  onChange={(e) => patch(shot, { cameraMove: e.target.value as CameraMove })}
-                  style={{ width: 92 }}
-                >
-                  {CAMERA_MOVE_OPTIONS.map((m) => (
-                    <option key={m} value={m}>
-                      {CAMERA_MOVE_LABEL[m]}
-                    </option>
-                  ))}
-                </select>
+                  options={cameraMoveOptions}
+                  ariaLabel={`第 ${shot.number} 镜的运镜`}
+                  onChange={(value) => patch(shot, { cameraMove: value as CameraMove })}
+                />
 
-                <select
+                <SelectMenu
+                  className={`shot-select shot-scene-select${
+                    isFlagged(shot.id, 'sceneId') ? ' field-flagged' : ''
+                  }`}
                   value={shot.sceneId}
-                  onChange={(e) => patch(shot, { sceneId: e.target.value })}
-                  className={isFlagged(shot.id, 'sceneId') ? 'field-flagged' : ''}
-                  style={{ width: 150 }}
-                >
-                  <option value="">（未指定场景）</option>
-                  {project.scenes.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                  options={sceneOptions}
+                  ariaLabel={`第 ${shot.number} 镜的场景`}
+                  onChange={(value) => patch(shot, { sceneId: value })}
+                />
 
                 <span style={{ flex: 1 }} />
 
@@ -410,7 +434,7 @@ export function StoryboardPage() {
               </div>
 
               {open ? (
-                <>
+                <div className="shot-more">
                   <div className="shot-fields" style={{ marginTop: 10 }}>
                     <div>
                       <div className="field-label">起点（镜头开始那一瞬间能看见什么）</div>
@@ -782,7 +806,7 @@ export function StoryboardPage() {
                       看这一镜的提示词
                     </button>
                   </div>
-                </>
+                </div>
               ) : (
                 <div className="hint" style={{ marginTop: 6 }}>
                   {shot.startState ? `起点：${shot.startState.slice(0, 60)}` : '起点还没写'}
@@ -797,3 +821,8 @@ export function StoryboardPage() {
     </>
   );
 }
+
+
+
+
+

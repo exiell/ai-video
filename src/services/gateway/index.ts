@@ -1,4 +1,4 @@
-import type { ModelProfile } from '../../types/model';
+﻿import type { ModelProfile } from '../../types/model';
 import {
   buildDashScopeAsyncPayload,
   buildDashScopeHeaders,
@@ -488,7 +488,7 @@ export function buildImagePayloadFor(
     ...(options.batchSize !== undefined ? { n: options.batchSize } : {}),
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     /**
-     * ⚠️ 参考图必须在这里透传。
+     * 注意： 参考图必须在这里透传。
      *
      * 这个函数原来**从来没有被调用过**（出图链路自己拼了另一份载荷），
      * 所以它漏掉 referenceImages 这件事一直没暴露。
@@ -636,7 +636,7 @@ export const extractImageUrls = extractOpenAiImageUrls;
 /**
  * 测试连接时的默认模型名。
  *
- * ⚠️ 调用方应当通过 options.modelName 显式传入模型名，
+ * 注意： 调用方应当通过 options.modelName 显式传入模型名，
  * 由上层统一解析（见 services/llm/modelName.ts）。
  * 这个兜底值只在没传时使用。
  *
@@ -771,3 +771,4 @@ export async function testConnection(
     return { ok: false, via, elapsedMs: Date.now() - started, info };
   }
 }
+

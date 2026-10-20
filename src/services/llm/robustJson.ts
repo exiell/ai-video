@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 模型输出的鲁棒解析
  *
  * ===========================================================================
@@ -64,7 +64,7 @@ function stripFence(text: string): string {
 /**
  * 顶层字段别名归一化。
  *
- * ⚠️ **只在顶层用，不要往下递归。**
+ * 注意： **只在顶层用，不要往下递归。**
  * 「characters」在故事输出里常被当成 charactersNote 的别名，
  * 但它在「角色与场景」输出里是合法的字段名。递归套用会把整个角色列表吃掉——
  * 这是一个真实发生过的错误，靠测试里那条「不被别名覆盖」的断言才拦住。
@@ -307,3 +307,4 @@ export function parseModelJson(raw: string): { value?: unknown; error?: string; 
     error: extractJsonObject(stripFence(trimmed)) === null ? 'no-object' : 'invalid-json',
   };
 }
+

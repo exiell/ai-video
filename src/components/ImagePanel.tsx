@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useSettings } from '../store/settings';
@@ -157,10 +157,10 @@ export function ImagePanel({
         >
           <div className="issue-title">
             {feedback.kind === 'ok'
-              ? '✓ 已生成并保存'
+              ? '已生成并保存'
               : feedback.kind === 'info'
                 ? '生成完成，但有事要看一下'
-                : '✗ 生成失败'}
+                : '生成失败'}
           </div>
           <div className="issue-line" style={{ whiteSpace: 'pre-wrap' }}>
             {feedback.message}
@@ -262,3 +262,4 @@ export function AssetGallery({
     </div>
   );
 }
+

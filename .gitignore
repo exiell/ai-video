@@ -27,3 +27,7 @@ pnpm-debug.log*
 
 # 一键启动器的依赖安装标记（记录本机状态，不该入库）
 node_modules/.aniguide-install-stamp
+
+# 设计审查工具的临时目录：截图与检查结果，可由 lint/inspect 重新生成。
+# 6 MB 的 jpg 不该进仓库；对应的规范文字与最终实现都在 src/ 里。
+**/.taste-skill/

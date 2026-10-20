@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CAMERA_MOVE_GUIDE, SHOT_SIZE_GUIDE, findTerm } from '../domain/help/terms';
 import type { CameraMove, ShotSize } from '../types/model';
@@ -43,7 +43,7 @@ export function TermHint({ term }: { term: string }) {
           border: '1px solid var(--border-strong)',
           background: open ? 'var(--accent-dim)' : 'transparent',
           color: open ? '#fff' : 'var(--text-faint)',
-          fontSize: 10,
+          fontSize: 11,
           lineHeight: 1,
           padding: 0,
           cursor: 'pointer',
@@ -112,3 +112,4 @@ export function CameraMoveHint({ value }: { value: CameraMove }) {
     </div>
   );
 }
+

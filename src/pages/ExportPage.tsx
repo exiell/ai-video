@@ -1,4 +1,4 @@
-import { Info } from '../components/bits';
+﻿import { Info } from '../components/bits';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -38,7 +38,7 @@ export function ExportPage() {
   }, [project]);
 
   if (!project) {
-    return <div className="empty">还没有打开任何项目。先去「项目」页新建或打开一个。</div>;
+    return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
 
   const currentReport = report ?? runChecks(project);
@@ -101,7 +101,7 @@ export function ExportPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>导出</h2>
+          <h1>导出</h1>
           <p>
             这个包既是成品，也是<b>唯一的备份</b>。图片只在这个浏览器里，清了就没了。
           </p>
@@ -345,3 +345,5 @@ function summarizeByKind(
   }
   return [...map.entries()].map(([kind, v]) => ({ kind, ...v }));
 }
+
+

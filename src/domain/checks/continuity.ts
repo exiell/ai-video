@@ -1,4 +1,4 @@
-import type { CheckIssue, Project, Shot } from '../../types/model';
+﻿import type { CheckIssue, Project, Shot } from '../../types/model';
 import { makeIssue, shotLabel } from './shared';
 
 /**
@@ -435,7 +435,7 @@ export function continuitySheetMarkdown(project: Project): string {
     out.push(
       `| ${shot.number} | ${scene?.name ?? '—'} | ${truncate(shot.endState)} | → | ${
         next ? truncate(next.startState) : '（全片结束）'
-      } | ${shot.transition || '—'} | ${shot.continuityNote || '（未写）'}${next && next.sceneId !== shot.sceneId && nextScene ? ` ⚠️ 换到「${nextScene.name}」` : ''} |`,
+      } | ${shot.transition || '—'} | ${shot.continuityNote || '（未写）'}${next && next.sceneId !== shot.sceneId && nextScene ? ` 注意： 换到「${nextScene.name}」` : ''} |`,
     );
   }
   out.push('');
@@ -446,3 +446,4 @@ function truncate(text: string, max = 42): string {
   const clean = text.trim().replace(/\|/g, '／');
   return clean.length > max ? `${clean.slice(0, max)}…` : clean || '—';
 }
+

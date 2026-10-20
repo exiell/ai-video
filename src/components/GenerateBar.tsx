@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+﻿import { Link } from 'react-router-dom';
 import { checkLlmReadiness } from '../services/llm/readiness';
 import { useGeneration, type GenerationTask } from '../store/generation';
 
@@ -40,7 +40,7 @@ export function GenerateBar({
       <div className="row">
         <button
           type="button"
-          className="btn btn-primary"
+          className="btn btn-blue"
           disabled={busy || blockedByOther || !readiness.ready}
           onClick={run}
         >
@@ -78,7 +78,7 @@ export function GenerateBar({
           }}
         >
           <div className="issue-title">
-            {feedback.kind === 'ok' ? '✓ 生成完成' : feedback.kind === 'info' ? '生成完成，但有问题要看一下' : '✗ 生成失败'}
+            {feedback.kind === 'ok' ? '生成完成' : feedback.kind === 'info' ? '生成完成，但有问题要看一下' : '生成失败'}
             {feedback.attempts && feedback.attempts > 1 ? (
               <span className="tag" style={{ marginLeft: 8 }}>
                 重试 {feedback.attempts - 1} 次
@@ -121,3 +121,5 @@ export function GenerateBar({
     </div>
   );
 }
+
+

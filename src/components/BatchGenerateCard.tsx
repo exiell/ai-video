@@ -147,6 +147,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             ) : null}
           </div>
           <div
+            className="batch-progress"
             style={{
               height: 6,
               background: 'var(--bg)',
@@ -157,6 +158,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             }}
           >
             <div
+              className="batch-progress-fill"
               style={{
                 width: `${Math.round((batch.done / Math.max(batch.total, 1)) * 100)}%`,
                 height: '100%',

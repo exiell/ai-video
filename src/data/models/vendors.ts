@@ -1,4 +1,4 @@
-import type { ModelProfile, VendorDefinition } from '../../types/model';
+﻿import type { ModelProfile, VendorDefinition } from '../../types/model';
 import { MODEL_PROFILES } from './profiles';
 
 /**
@@ -38,7 +38,7 @@ export const VENDORS: VendorDefinition[] = [
     consoleUrl: 'https://bailian.console.aliyun.com/',
     corsDirect: 'yes',
     corsEvidence: '预检 200 + ACAO 回显 Origin，allow-headers 含 x-dashscope-async',
-    notes: '出图主力。⚠️ 返回的图片链接 24 小时后失效，工具会立刻下载留存。',
+    notes: '出图主力。注意： 返回的图片链接 24 小时后失效，工具会立刻下载留存。',
   },
   {
     id: 'zhipu',
@@ -62,7 +62,7 @@ export const VENDORS: VendorDefinition[] = [
     consoleUrl: 'https://platform.minimax.cn/',
     corsDirect: 'yes',
     corsEvidence: '对话与出图均为 POST 200 + ACAO 回显 Origin',
-    notes: '⚠️ 地址是 api.minimax.cn，不是旧教程里的 .chat。',
+    notes: '注意： 地址是 api.minimax.cn，不是旧教程里的 .chat。',
   },
   {
     id: 'stepfun',
@@ -70,7 +70,7 @@ export const VENDORS: VendorDefinition[] = [
     consoleUrl: 'https://platform.stepfun.com/interface-key',
     corsDirect: 'yes',
     corsEvidence: 'POST 401 + ACAO `*`',
-    notes: '⚠️ 文生图已全线关停，只有对话模型。',
+    notes: '注意： 文生图已全线关停，只有对话模型。',
   },
   {
     id: 'siliconflow',
@@ -86,7 +86,7 @@ export const VENDORS: VendorDefinition[] = [
     consoleUrl: 'https://console.bce.baidu.com/qianfan/ais/console/applicationConsole/application',
     corsDirect: 'yes',
     corsEvidence: 'POST 401 + ACAO `*`；无效 Key 返回 401 invalid_iam_token',
-    notes: '⚠️ 模型名默认空着，要去控制台查一个填上。',
+    notes: '注意： 模型名默认空着，要去控制台查一个填上。',
   },
 ];
 
@@ -125,3 +125,4 @@ export function vendorCors(vendorId: string): 'yes' | 'no' | 'unknown' {
 export function vendorEvidence(vendorId: string): string | undefined {
   return modelsOfVendor(vendorId)[0]?.notes;
 }
+

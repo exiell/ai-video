@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+﻿import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RULE_LABEL, summarizeReport } from '../domain/checks';
 import { SummaryBar, Info } from '../components/bits';
@@ -34,7 +34,7 @@ export function ChecksPage() {
   const refreshChecks = useAppStore((s) => s.refreshChecks);
 
   if (!project) {
-    return <div className="empty">还没有打开任何项目。先去「项目」页新建或打开一个。</div>;
+    return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
   if (!report) {
     return (
@@ -71,7 +71,7 @@ export function ChecksPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>穿帮检查</h2>
+          <h1>穿帮检查</h1>
           <p>
             在花钱出图之前，先看出哪里会穿帮
             <Info label="这个检查管什么、不管什么">
@@ -148,3 +148,5 @@ export function ChecksPage() {
     </>
   );
 }
+
+

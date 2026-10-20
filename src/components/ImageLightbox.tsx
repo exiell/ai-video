@@ -64,6 +64,7 @@ export function ImageLightbox({
       role="dialog"
       aria-modal="true"
       aria-label="放大查看"
+      className="lightbox"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -142,6 +143,7 @@ export function ImageLightbox({
         <img
           src={asset.dataUrl}
           alt={ASSET_KIND_LABEL[asset.kind]}
+          className="lightbox-img"
           onClick={(e) => {
             e.stopPropagation();
             setActualSize((v) => !v);

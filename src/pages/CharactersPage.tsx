@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails, Info } from '../components/bits';
 import {
@@ -76,7 +76,7 @@ export function CharactersPage() {
   }, [project?.id]);
 
   if (!project) {
-    return <div className="empty">还没有打开任何项目。先去「项目」页新建或打开一个。</div>;
+    return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
 
   function add() {
@@ -89,7 +89,7 @@ export function CharactersPage() {
     <>
       <div className="page-head">
         <div>
-          <h2>角色设定</h2>
+          <h1>角色设定</h1>
           <p>角色分三层：身份 / 变体 / 连续性锁。</p>
         </div>
         <button type="button" className="btn btn-primary" onClick={add}>
@@ -494,3 +494,5 @@ export function CharactersPage() {
     </>
   );
 }
+
+
