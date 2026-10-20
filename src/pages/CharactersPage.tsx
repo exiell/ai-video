@@ -15,6 +15,8 @@ import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
 import { SelectMenu } from '../components/SelectMenu';
+import { Reveal } from '../components/Reveal';
+import { Icon } from '../components/Icon';
 
 const ROLE_OPTIONS = Object.entries(CHARACTER_ROLE_LABEL).map(([value, label]) => ({
   value,
@@ -164,10 +166,13 @@ export function CharactersPage() {
               <div className="row">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm expand-toggle"
+                  aria-expanded={open}
+                  aria-controls={`character-more-${character.id}`}
                   onClick={() => setOpenId(open ? null : character.id)}
                 >
                   {open ? '收起' : '展开'}
+                  <Icon name="chevron-right" size={13} className="expand-chevron" />
                 </button>
                 <button
                   type="button"
@@ -183,8 +188,12 @@ export function CharactersPage() {
               </div>
             </div>
 
-            {open ? (
-              <div className="card-more" style={{ marginTop: 16 }}>
+            <Reveal open={open}>
+              <div
+                className="card-more"
+                id={`character-more-${character.id}`}
+                style={{ marginTop: 16 }}
+              >
                 <h4 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（跨集不变）</h4>
                 <div className="grid-2">
                   <Field label="面部特征">
@@ -483,14 +492,15 @@ export function CharactersPage() {
                   不能让「不同提示词」生成同一个人。所以它只是连续性锁的补充，不是替代。
                 </WhyDetails>
               </div>
-            ) : (
+            </Reveal>
+            {!open ? (
               <div className="hint" style={{ marginTop: 6 }}>
                 {character.identity.summary || '（还没写身份描述）'}
                 {character.continuityLocks.length > 0
                   ? ` · 锁：${character.continuityLocks.map((l) => l.label).join('、')}`
                   : ''}
               </div>
-            )}
+            ) : null}
           </div>
         );
       })}

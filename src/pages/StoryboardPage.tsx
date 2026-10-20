@@ -427,10 +427,13 @@ export function StoryboardPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm expand-toggle"
+                  aria-expanded={open}
+                  aria-controls={`shot-more-${shot.id}`}
                   onClick={() => setExpanded(open ? null : shot.id)}
                 >
                   {open ? '收起' : '展开'}
+                  <Icon name="chevron-right" size={13} className="expand-chevron" />
                 </button>
                 <button
                   type="button"
@@ -457,7 +460,7 @@ export function StoryboardPage() {
               </div>
 
               {open ? (
-                <div className="shot-more">
+                <div className="shot-more" id={`shot-more-${shot.id}`}>
                   <div className="shot-fields" style={{ marginTop: 10 }}>
                     <div>
                       <div className="field-label">起点（镜头开始那一瞬间能看见什么）</div>

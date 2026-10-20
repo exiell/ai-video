@@ -4448,6 +4448,37 @@ table.simple tbody tr:last-child td {
   min-width: 100%;
 }
 
+/* 角色/场景展开：真实高度过渡，不是只让内容淡一下 */
+.reveal {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.28s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.reveal.open {
+  grid-template-rows: 1fr;
+}
+
+.reveal-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.expand-toggle {
+  gap: 3px;
+}
+
+.expand-chevron {
+  color: var(--text-faint);
+  transform: rotate(90deg);
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+
+.expand-toggle[aria-expanded='true'] .expand-chevron {
+  color: var(--accent);
+  transform: rotate(-90deg);
+}
+
 /* 角色/场景展开后的整块内容 */
 .card-more {
   animation: detail-in 0.18s ease-out both;

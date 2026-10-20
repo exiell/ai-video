@@ -7,6 +7,8 @@ import { AssetGallery, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
+import { Reveal } from '../components/Reveal';
+import { Icon } from '../components/Icon';
 
 /**
  * 场景设定（方案.md v0.6 §3.2 M3 —— 与角色卡同级的一等公民）
@@ -165,10 +167,13 @@ export function ScenesPage() {
               <div className="row">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm expand-toggle"
+                  aria-expanded={open}
+                  aria-controls={`scene-more-${scene.id}`}
                   onClick={() => setOpenId(open ? null : scene.id)}
                 >
                   {open ? '收起' : '展开'}
+                  <Icon name="chevron-right" size={13} className="expand-chevron" />
                 </button>
                 <button
                   type="button"
@@ -184,8 +189,12 @@ export function ScenesPage() {
               </div>
             </div>
 
-            {open ? (
-              <div className="card-more" style={{ marginTop: 16 }}>
+            <Reveal open={open}>
+              <div
+                className="card-more"
+                id={`scene-more-${scene.id}`}
+                style={{ marginTop: 16 }}
+              >
                 <h4 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（这是哪里）</h4>
                 <Field label="地点类型">
                   <input
@@ -461,14 +470,15 @@ export function ScenesPage() {
                   + 加一个变体
                 </button>
               </div>
-            ) : (
+            </Reveal>
+            {!open ? (
               <div className="hint" style={{ marginTop: 6 }}>
                 {scene.lightDirection || '（没写光线）'} · {scene.mainColor || '（没写色调）'}
                 {scene.fixedElements.length > 0
                   ? ` · 固定元素：${scene.fixedElements.slice(0, 2).join(' / ')}`
                   : ''}
               </div>
-            )}
+            ) : null}
           </div>
         );
       })}
