@@ -154,6 +154,7 @@ function inferTransitionType(previous: {
 export function StoryboardPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const shotParam = params.get('shot');
   const project = useAppStore((s) => s.project);
   const report = useAppStore((s) => s.report);
   const upsertShot = useAppStore((s) => s.upsertShot);
@@ -168,6 +169,7 @@ export function StoryboardPage() {
     return gallery[refId] ?? [];
   }
   const [expanded, setExpanded] = useState<string | null>(params.get('shot'));
+  const [located, setLocated] = useState<string | null>(params.get('shot'));
 
   const flaggedFields = useMemo(() => {
     const map = new Map<string, Set<string>>();
@@ -192,6 +194,15 @@ export function StoryboardPage() {
     for (const shot of project?.shots ?? []) void loadGallery(shot.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
+
+  // 从检查页或作品主页跳到某一镜时，短暂高亮一下，避免用户落地后找不到目标。
+  useEffect(() => {
+    if (!shotParam) return;
+    setExpanded(shotParam);
+    setLocated(shotParam);
+    const timer = window.setTimeout(() => setLocated(null), 1800);
+    return () => window.clearTimeout(timer);
+  }, [shotParam]);
 
   if (!project) {
     return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
@@ -342,7 +353,11 @@ export function StoryboardPage() {
           );
           const open = expanded === shot.id;
           return (
-            <div className="shot-card" key={shot.id} id={`shot-${shot.id}`}>
+            <div
+              className={`shot-card${located === shot.id ? ' shot-located' : ''}`}
+              key={shot.id}
+              id={`shot-${shot.id}`}
+            >
               <div className="shot-head">
                 <span className="shot-no">第 {shot.number} 镜</span>
                 <input

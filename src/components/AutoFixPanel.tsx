@@ -198,6 +198,7 @@ function ProposalRow({
 }) {
   return (
     <label
+      className="fix-proposal"
       style={{
         display: 'block',
         borderLeft: `3px solid ${checked ? 'var(--accent)' : 'var(--border-strong)'}`,

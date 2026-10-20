@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useSettings } from '../store/settings';
@@ -212,7 +212,11 @@ export function AssetGallery({
         }}
       >
         {assets.map((asset, index) => (
-          <figure key={asset.id} style={{ margin: 0 }}>
+          <figure
+            key={asset.id}
+            className="asset-figure"
+            style={{ margin: 0, animationDelay: `${Math.min(index, 6) * 35}ms` }}
+          >
             <button
               type="button"
               onClick={() => setLightbox({ assets, index })}

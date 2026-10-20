@@ -4509,6 +4509,48 @@ table.simple tbody tr:last-child td {
   }
 }
 
+/* 新生成的参考图/关键帧逐张出现，最多错开 6 张 */
+.asset-figure {
+  animation: asset-in 0.28s ease-out both;
+}
+
+@keyframes asset-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 自动修复的每条提议展开时依次出现 */
+.fix-proposal {
+  animation: detail-in 0.18s ease-out both;
+}
+
+/* 从检查页跳到某一镜：目标镜先描边，再慢慢褪掉 */
+.shot-located {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  animation: locate-fade 1.8s ease-out both;
+}
+
+@keyframes locate-fade {
+  from {
+    outline-color: var(--accent);
+  }
+  to {
+    outline-color: transparent;
+  }
+}
+
+.shot-card {
+  scroll-margin-top: 20px;
+}
+
 /* 设置里的外观卡片 */
 .appearance-grid {
   display: grid;
