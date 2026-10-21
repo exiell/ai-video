@@ -9,6 +9,7 @@ import {
   type ImagePromptInput,
 } from '../domain/image/prompts';
 import type { PanelTarget, GenerateOption } from './ImagePanel';
+import { SCENE_ANGLE_LABEL } from '../types/model';
 import { RichText } from './bits';
 
 /**
@@ -69,10 +70,21 @@ export function collectPromptEntries(
     }
 
     if (target === 'scene') {
-      if (seen.has('scene')) continue;
-      seen.add('scene');
-      const input = buildScenePlatePrompt(project, refId);
-      if (input) out.push({ title: '场景参考板', input });
+      // v0.46：主视角与反打是两段不同的提示词，各列一条。
+      // 反打那段必须**配着主视角板当参考图**去用，所以标题里写清楚。
+      const angle = option.angle ?? 'master';
+      if (seen.has(`scene:${angle}`)) continue;
+      seen.add(`scene:${angle}`);
+      const input = buildScenePlatePrompt(project, refId, angle);
+      if (input) {
+        out.push({
+          title:
+            angle === 'reverse'
+              ? `场景参考板 · ${SCENE_ANGLE_LABEL.reverse}（拿主视角板当参考图去改）`
+              : `场景参考板 · ${SCENE_ANGLE_LABEL.master}`,
+          input,
+        });
+      }
       continue;
     }
 

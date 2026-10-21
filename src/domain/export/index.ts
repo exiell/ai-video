@@ -1,4 +1,4 @@
-﻿import type { CheckReport, Project } from '../../types/model';
+import type { CheckReport, Project } from '../../types/model';
 import { PLATFORM_LABEL } from '../../types/model';
 import { buildAllPrompts } from '../prompt';
 import {
@@ -508,11 +508,19 @@ export function imagePromptsToMarkdown(project: Project): string {
     out.push('> 刻意要求画面里没有人。场景板的作用是固定空间结构与光线，');
     out.push('> 站了人反而会干扰后续把角色放进去。');
     out.push('');
+    out.push('> **反打板不是重新画一间屋子**：拿主视角那张当参考图去改（图生图），');
+    out.push('> 提示词用下面「反打视角」这段。重画出来的门和草料会挪位置，那就不是同一个地方了。');
+    out.push('');
     for (const scene of project.scenes) {
       emit(
-        `场景「${scene.name}」· 参考板`,
+        `场景「${scene.name}」· 主视角板`,
         `${scene.identity.summary || scene.name}`,
-        buildScenePlatePrompt(project, scene.id),
+        buildScenePlatePrompt(project, scene.id, 'master'),
+      );
+      emit(
+        `场景「${scene.name}」· 反打视角板`,
+        `${scene.identity.summary || scene.name}（把主视角板当参考图去改）`,
+        buildScenePlatePrompt(project, scene.id, 'reverse'),
       );
     }
   }

@@ -14,6 +14,7 @@ import { useImage } from '../store/image';
 import { CameraMoveHint, ShotSizeHint } from '../components/TermHint';
 import {
   CAMERA_MOVE_LABEL,
+  SCENE_ANGLE_LABEL,
   SHOT_SIZE_LABEL,
   type CameraMove,
   type Shot,
@@ -435,7 +436,6 @@ export function StoryboardPage() {
 
               <div className="shot-primary">
                 <div className="field-label">动作</div>
-                <div className="field-help">这一镜只做一件事</div>
                 <input
                   type="text"
                   value={shot.action}
@@ -443,6 +443,7 @@ export function StoryboardPage() {
                   className={isFlagged(shot.id, 'action') ? 'field-flagged' : ''}
                   placeholder="例：他抬手拂去肩上的雪"
                 />
+                <div className="field-help">这一镜只做一件事</div>
               </div>
 
               {open ? (
@@ -452,338 +453,389 @@ export function StoryboardPage() {
                     <CameraMoveHint value={shot.cameraMove} />
                   </div>
 
-                  <div className="shot-fields">
-                    <h4 className="shot-section-title">
-                      画面 <span>起点、终点、人物、机位和来源</span>
-                    </h4>
-                    <div>
-                      <div className="field-label">起点</div>
-                      <div className="field-help">镜头开始那一瞬间能看见什么</div>
-                      <textarea
-                        rows={3}
-                        value={shot.startState}
-                        onChange={(e) => patch(shot, { startState: e.target.value })}
-                        className={isFlagged(shot.id, 'startState') ? 'field-flagged' : ''}
-                        placeholder="只写这一瞬间看得见的东西"
-                      />
-                    </div>
-                    <div>
-                      <div className="field-label">终点</div>
-                      <div className="field-help">镜头结束画面停在哪</div>
-                      <textarea
-                        rows={3}
-                        value={shot.endState}
-                        onChange={(e) => patch(shot, { endState: e.target.value })}
-                        className={isFlagged(shot.id, 'endState') ? 'field-flagged' : ''}
-                        placeholder="下一镜要从这里接下去"
-                      />
-                    </div>
-                    <div>
-                      <div className="field-label">出镜角色</div>
-                      <div className="row" style={{ gap: 6 }}>
-                        {project.characters.length === 0 ? (
-                          <span className="hint">还没有角色。去「角色设定」里建一个。</span>
-                        ) : (
-                          project.characters.map((c) => {
-                            const on = shot.characterIds.includes(c.id);
-                            return (
-                              <button
-                                key={c.id}
-                                type="button"
-                                className={`btn btn-sm${on ? ' btn-primary' : ''}`}
-                                onClick={() =>
-                                  patch(shot, {
-                                    characterIds: on
-                                      ? shot.characterIds.filter((x) => x !== c.id)
-                                      : [...shot.characterIds, c.id],
-                                  })
-                                }
-                              >
-                                {c.name}
-                              </button>
-                            );
-                          })
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="field-label">台词 / 旁白</div>
-                      <input
-                        type="text"
-                        value={shot.dialogue}
-                        onChange={(e) => patch(shot, { dialogue: e.target.value })}
-                      />
-                    </div>
-
-                    <div>
-                      <div className="field-label">机位</div>
-                      <div className="field-help">观众站在哪看</div>
-                      <input
-                        type="text"
-                        value={shot.cameraPosition}
-                        onChange={(e) => patch(shot, { cameraPosition: e.target.value })}
-                        placeholder="例：略低角度，与桌面齐平"
-                      />
-                      <div className="hint">
-                        与视线齐平是平等，仰拍是压迫，俯拍是弱小。
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="field-label">来源场次</div>
-                      <SelectMenu
-                        className="source-scene-select"
-                        value={shot.sourceSceneId}
-                        options={storySceneOptions}
-                        ariaLabel={`第 ${shot.number} 镜的来源场次`}
-                        onChange={(value) => patch(shot, { sourceSceneId: value })}
-                      />
-                    </div>
-
-                    <h4 className="shot-section-title">
-                      声音与情绪 <span>看不见但听得见的信息</span>
-                    </h4>
-
-                    <div>
-                      <div className="field-label">声音</div>
-                      <input
-                        type="text"
-                        value={shot.sound}
-                        onChange={(e) => patch(shot, { sound: e.target.value })}
-                        placeholder="环境音 / 音效"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="field-label">情绪</div>
-                      <input
-                        type="text"
-                        value={shot.mood}
-                        onChange={(e) => patch(shot, { mood: e.target.value })}
-                      />
-                    </div>
-
-                    <div>
-                      <div className="field-label">画外人物</div>
-                      <div className="field-help">只在声音里出现的人</div>
-                      <input
-                        type="text"
-                        value={shot.offscreenCharacters.join('、')}
-                        onChange={(e) =>
-                          patch(shot, {
-                            offscreenCharacters: e.target.value
-                              .split(/[、,，\s]+/)
-                              .map((s) => s.trim())
-                              .filter(Boolean),
-                          })
-                        }
-                        placeholder="用、分隔"
-                      />
-                    </div>
-
-                    <h4 className="shot-section-title">
-                      剪辑与衔接 <span>镜头之间怎么接</span>
-                    </h4>
-
-                    <div>
-                      <div className="field-label">转场</div>
-                      <div className="field-help">剪辑阶段用，不进生成提示词</div>
-                      <input
-                        type="text"
-                        value={shot.transition}
-                        onChange={(e) => patch(shot, { transition: e.target.value })}
-                      />
-                      <div className="hint">多数镜头用硬切就好。</div>
-                    </div>
-
-                    <div>
-                      <div className="field-label">与上一镜的转场</div>
-                      <div className="field-help">总开关</div>
-                      <SelectMenu
-                        className="transition-select"
-                        value={
-                          shot.transitionType ??
-                          (index === 0 ? 'cut' : inferTransitionType(prevShot))
-                        }
-                        options={transitionOptions}
-                        disabled={index === 0}
-                        ariaLabel={`第 ${shot.number} 镜与上一镜的转场`}
-                        onChange={(value) =>
-                          patch(shot, {
-                            transitionType: value as 'continuation' | 'cut',
-                          })
-                        }
-                      />
-                    </div>
-
-                    <div className="wide">
-                      <div className="field-label">下一镜的衔接</div>
-                      <div className="field-help">这一镜怎么接到下一镜</div>
-                      <input
-                        type="text"
-                        value={shot.continuityNote ?? ''}
-                        onChange={(e) => patch(shot, { continuityNote: e.target.value })}
-                        placeholder="例：他保持这个姿势不动，下一镜从同一机位推进"
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 18 }}>
-                    <h4 className="shot-section-title">
-                      连续性锁 <span>勾选这一镜不能变的部分</span>
-                    </h4>
-                    {isFlagged(shot.id, 'activeLockIds') ? (
-                      <div style={{ marginTop: 6 }}>
-                        <span className="tag tag-error">有角色没勾锁</span>
-                      </div>
-                    ) : null}
-                    <div className="row" style={{ gap: 6 }}>
-                      {project.characters.every((c) => c.continuityLocks.length === 0) &&
-                      project.scenes.every((s) => s.continuityLocks.length === 0) ? (
-                        <span className="hint">
-                          还没有任何连续性锁。去「角色设定」或「场景设定」里加上。
+                  <div className="shot-sections">
+                    <section className="shot-section">
+                      <div className="shot-section-rail">
+                        <span className="shot-section-icon">
+                          <Icon name="photo" size={16} />
                         </span>
-                      ) : (
-                        <>
-                          {project.characters.flatMap((c) =>
-                            c.continuityLocks.map((lock) => {
-                              const on = shot.activeLockIds.includes(lock.id);
-                              return (
-                                <button
-                                  key={lock.id}
-                                  type="button"
-                                  className={`btn btn-sm${on ? ' btn-primary' : ''}`}
-                                  onClick={() =>
-                                    patch(shot, {
-                                      activeLockIds: on
-                                        ? shot.activeLockIds.filter((x) => x !== lock.id)
-                                        : [...shot.activeLockIds, lock.id],
-                                    })
-                                  }
-                                  title={lock.phrase}
-                                >
-                                  {c.name}·{lock.label}
-                                </button>
-                              );
-                            }),
-                          )}
-                          {project.scenes.flatMap((s) =>
-                            s.continuityLocks.map((lock) => {
-                              const on = shot.activeLockIds.includes(lock.id);
-                              return (
-                                <button
-                                  key={lock.id}
-                                  type="button"
-                                  className={`btn btn-sm${on ? ' btn-primary' : ''}`}
-                                  onClick={() =>
-                                    patch(shot, {
-                                      activeLockIds: on
-                                        ? shot.activeLockIds.filter((x) => x !== lock.id)
-                                        : [...shot.activeLockIds, lock.id],
-                                    })
-                                  }
-                                  title={lock.phrase}
-                                >
-                                  {s.name}·{lock.label}
-                                </button>
-                              );
-                            }),
-                          )}
-                        </>
-                      )}
-                    </div>
-                    {locks.length > 0 ? (
-                      <details className="why shot-lock-details">
-                        <summary>已锁定 {locks.length} 条</summary>
-                        <div className="why-body">
-                          {locks.map((l) => (
-                            <code key={l.id} style={{ marginRight: 6 }}>
-                              {l.phrase}
-                            </code>
-                          ))}
-                          <div className="hint" style={{ marginTop: 4 }}>
-                            这些短语会被原样写进这一镜的提示词。
+                        <h4 className="shot-section-title">画面</h4>
+                        <p className="shot-section-desc">起点、终点、人物和机位</p>
+                      </div>
+                      <div className="shot-section-body">
+                        <div>
+                          <div className="field-label">起点</div>
+                          <textarea
+                            rows={3}
+                            value={shot.startState}
+                            onChange={(e) => patch(shot, { startState: e.target.value })}
+                            className={isFlagged(shot.id, 'startState') ? 'field-flagged' : ''}
+                            placeholder="只写这一瞬间看得见的东西"
+                          />
+                          <div className="field-help">镜头开始那一瞬间能看见什么</div>
+                        </div>
+                        <div>
+                          <div className="field-label">终点</div>
+                          <textarea
+                            rows={3}
+                            value={shot.endState}
+                            onChange={(e) => patch(shot, { endState: e.target.value })}
+                            className={isFlagged(shot.id, 'endState') ? 'field-flagged' : ''}
+                            placeholder="下一镜要从这里接下去"
+                          />
+                          <div className="field-help">镜头结束画面停在哪</div>
+                        </div>
+                        <div>
+                          <div className="field-label">出镜角色</div>
+                          <div className="row" style={{ gap: 6 }}>
+                            {project.characters.length === 0 ? (
+                              <span className="hint">还没有角色。去「角色设定」里建一个。</span>
+                            ) : (
+                              project.characters.map((c) => {
+                                const on = shot.characterIds.includes(c.id);
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                    onClick={() =>
+                                      patch(shot, {
+                                        characterIds: on
+                                          ? shot.characterIds.filter((x) => x !== c.id)
+                                          : [...shot.characterIds, c.id],
+                                      })
+                                    }
+                                  >
+                                    {c.name}
+                                  </button>
+                                );
+                              })
+                            )}
                           </div>
                         </div>
-                      </details>
-                    ) : null}
+
+                        <div>
+                          <div className="field-label">台词 / 旁白</div>
+                          <input
+                            type="text"
+                            value={shot.dialogue}
+                            onChange={(e) => patch(shot, { dialogue: e.target.value })}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="field-label">机位</div>
+                          <input
+                            type="text"
+                            value={shot.cameraPosition}
+                            onChange={(e) => patch(shot, { cameraPosition: e.target.value })}
+                            placeholder="例：略低角度，与桌面齐平"
+                          />
+                          <div className="field-help">
+                            观众站在哪看。与视线齐平是平等，仰拍是压迫，俯拍是弱小。
+                          </div>
+                        </div>
+
+                        {/*
+                          朝向（v0.46）。
+                          与「机位」分开：机位说的是高低（仰拍俯拍），朝向说的是看哪一面墙。
+                          后者必须机器可读，因为出图时要靠它去挑对应的那张场景板。
+                        */}
+                        <div>
+                          <div className="field-label">朝向</div>
+                          <SelectMenu
+                            value={shot.viewAngle ?? 'master'}
+                            options={[
+                              { value: 'master', label: SCENE_ANGLE_LABEL.master },
+                              { value: 'reverse', label: SCENE_ANGLE_LABEL.reverse },
+                            ]}
+                            ariaLabel={`第 ${shot.number} 镜的朝向`}
+                            onChange={(value) =>
+                              patch(shot, { viewAngle: value === 'reverse' ? 'reverse' : 'master' })
+                            }
+                          />
+                          <div className="field-help">
+                            看这间屋子的哪一面。反打要先去场景页给这个场景出一张反打板，否则会退回主视角板。
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="field-label">来源场次</div>
+                          <SelectMenu
+                            className="source-scene-select"
+                            value={shot.sourceSceneId}
+                            options={storySceneOptions}
+                            ariaLabel={`第 ${shot.number} 镜的来源场次`}
+                            onChange={(value) => patch(shot, { sourceSceneId: value })}
+                          />
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="shot-section">
+                      <div className="shot-section-rail">
+                        <span className="shot-section-icon">
+                          <Icon name="volume" size={16} />
+                        </span>
+                        <h4 className="shot-section-title">声音与情绪</h4>
+                        <p className="shot-section-desc">看不见但听得见的信息</p>
+                      </div>
+                      <div className="shot-section-body">
+                        <div>
+                          <div className="field-label">声音</div>
+                          <input
+                            type="text"
+                            value={shot.sound}
+                            onChange={(e) => patch(shot, { sound: e.target.value })}
+                            placeholder="环境音 / 音效"
+                          />
+                        </div>
+
+                        <div>
+                          <div className="field-label">情绪</div>
+                          <input
+                            type="text"
+                            value={shot.mood}
+                            onChange={(e) => patch(shot, { mood: e.target.value })}
+                          />
+                        </div>
+
+                        <div>
+                          <div className="field-label">画外人物</div>
+                          <input
+                            type="text"
+                            value={shot.offscreenCharacters.join('、')}
+                            onChange={(e) =>
+                              patch(shot, {
+                                offscreenCharacters: e.target.value
+                                  .split(/[、,，\s]+/)
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="用、分隔"
+                          />
+                          <div className="field-help">只在声音里出现的人</div>
+                        </div>
+
+                      </div>
+                    </section>
+
+                    <section className="shot-section">
+                      <div className="shot-section-rail">
+                        <span className="shot-section-icon">
+                          <Icon name="scissors" size={16} />
+                        </span>
+                        <h4 className="shot-section-title">剪辑与衔接</h4>
+                        <p className="shot-section-desc">镜头之间怎么接</p>
+                      </div>
+                      <div className="shot-section-body">
+                        <div>
+                          <div className="field-label">转场</div>
+                          <input
+                            type="text"
+                            value={shot.transition}
+                            onChange={(e) => patch(shot, { transition: e.target.value })}
+                          />
+                          <div className="field-help">剪辑阶段用，不进生成提示词。多数镜头用硬切就好。</div>
+                        </div>
+
+                        <div>
+                          <div className="field-label">与上一镜的转场</div>
+                          <SelectMenu
+                            className="transition-select"
+                            value={
+                              shot.transitionType ??
+                              (index === 0 ? 'cut' : inferTransitionType(prevShot))
+                            }
+                            options={transitionOptions}
+                            disabled={index === 0}
+                            ariaLabel={`第 ${shot.number} 镜与上一镜的转场`}
+                            onChange={(value) =>
+                              patch(shot, {
+                                transitionType: value as 'continuation' | 'cut',
+                              })
+                            }
+                          />
+                          <div className="field-help">总开关</div>
+                        </div>
+
+                        <div>
+                          <div className="field-label">下一镜的衔接</div>
+                          <input
+                            type="text"
+                            value={shot.continuityNote ?? ''}
+                            onChange={(e) => patch(shot, { continuityNote: e.target.value })}
+                            placeholder="例：他保持这个姿势不动，下一镜从同一机位推进"
+                          />
+                          <div className="field-help">这一镜怎么接到下一镜</div>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section className="shot-section">
+                      <div className="shot-section-rail">
+                        <span className="shot-section-icon">
+                          <Icon name="lock" size={16} />
+                        </span>
+                        <h4 className="shot-section-title">连续性锁</h4>
+                        <p className="shot-section-desc">勾选这一镜不能变的部分</p>
+                      </div>
+                      <div className="shot-section-body">
+                        {isFlagged(shot.id, 'activeLockIds') ? (
+                          <div style={{ marginTop: 6 }}>
+                            <span className="tag tag-error">有角色没勾锁</span>
+                          </div>
+                        ) : null}
+                        <div className="row" style={{ gap: 6 }}>
+                          {project.characters.every((c) => c.continuityLocks.length === 0) &&
+                          project.scenes.every((s) => s.continuityLocks.length === 0) ? (
+                            <span className="hint">
+                              还没有任何连续性锁。去「角色设定」或「场景设定」里加上。
+                            </span>
+                          ) : (
+                            <>
+                              {project.characters.flatMap((c) =>
+                                c.continuityLocks.map((lock) => {
+                                  const on = shot.activeLockIds.includes(lock.id);
+                                  return (
+                                    <button
+                                      key={lock.id}
+                                      type="button"
+                                      className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                      onClick={() =>
+                                        patch(shot, {
+                                          activeLockIds: on
+                                            ? shot.activeLockIds.filter((x) => x !== lock.id)
+                                            : [...shot.activeLockIds, lock.id],
+                                        })
+                                      }
+                                      title={lock.phrase}
+                                    >
+                                      {c.name}·{lock.label}
+                                    </button>
+                                  );
+                                }),
+                              )}
+                              {project.scenes.flatMap((s) =>
+                                s.continuityLocks.map((lock) => {
+                                  const on = shot.activeLockIds.includes(lock.id);
+                                  return (
+                                    <button
+                                      key={lock.id}
+                                      type="button"
+                                      className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                      onClick={() =>
+                                        patch(shot, {
+                                          activeLockIds: on
+                                            ? shot.activeLockIds.filter((x) => x !== lock.id)
+                                            : [...shot.activeLockIds, lock.id],
+                                        })
+                                      }
+                                      title={lock.phrase}
+                                    >
+                                      {s.name}·{lock.label}
+                                    </button>
+                                  );
+                                }),
+                              )}
+                            </>
+                          )}
+                        </div>
+                        {locks.length > 0 ? (
+                          <details className="why shot-lock-details">
+                            <summary>已锁定 {locks.length} 条</summary>
+                            <div className="why-body">
+                              {locks.map((l) => (
+                                <code key={l.id} style={{ marginRight: 6 }}>
+                                  {l.phrase}
+                                </code>
+                              ))}
+                              <div className="hint" style={{ marginTop: 4 }}>
+                                这些短语会被原样写进这一镜的提示词。
+                              </div>
+                            </div>
+                          </details>
+                        ) : null}
+                        {scene ? (
+                          <details className="why shot-scene">
+                            <summary>当前场景：{scene.name}</summary>
+                            <div className="why-body">
+                              固定元素：
+                              {scene.fixedElements.length > 0
+                                ? scene.fixedElements.map((el) => (
+                                    <code key={el} style={{ marginRight: 6 }}>
+                                      {el}
+                                    </code>
+                                  ))
+                                : '（还没登记）'}
+                              <br />
+                              主光方向：{scene.lightDirection || '（未填）'} · 主色调：
+                              {scene.mainColor || '（未填）'}
+                            </div>
+                          </details>
+                        ) : null}
+                      </div>
+                    </section>
                   </div>
 
-                  {scene ? (
-                    <details className="why shot-scene">
-                      <summary>当前场景：{scene.name}</summary>
-                      <div className="why-body">
-                        固定元素：
-                        {scene.fixedElements.length > 0
-                          ? scene.fixedElements.map((el) => (
-                              <code key={el} style={{ marginRight: 6 }}>
-                                {el}
-                              </code>
-                            ))
-                          : '（还没登记）'}
-                        <br />
-                        主光方向：{scene.lightDirection || '（未填）'} · 主色调：
-                        {scene.mainColor || '（未填）'}
-                      </div>
-                    </details>
-                  ) : null}
+                  <div className="shot-output">
+                    <ImagePanel
+                      refId={shot.id}
+                      target="frame"
+                      label="这一镜的三帧"
+                      options={[
+                        {
+                          label: '① 首帧',
+                          useReference: false,
+                          frameKind: 'first-frame',
+                        },
+                        {
+                          label: '① 首帧（锁角色）',
+                          useReference: true,
+                          frameKind: 'first-frame',
+                        },
+                        {
+                          label: '② 动作关键帧',
+                          useReference: true,
+                          frameKind: 'action-peak',
+                        },
+                        {
+                          label: '③ 尾帧',
+                          useReference: true,
+                          frameKind: 'end-frame',
+                        },
+                      ]}
+                      footer={
+                        <>
+                          <FrameOrderHint
+                            hasFirstFrame={galleryFor(shot.id).some(
+                              (a) => a.kind === 'first-frame' && a.dataUrl,
+                            )}
+                            hasActionPeak={galleryFor(shot.id).some(
+                              (a) => a.kind === 'action-peak' && a.dataUrl,
+                            )}
+                            hasEndFrame={galleryFor(shot.id).some(
+                              (a) => a.kind === 'end-frame' && a.dataUrl,
+                            )}
+                          />
+                          <AssetGallery
+                            assets={galleryFor(shot.id)}
+                            emptyHint="还没有生成过这一镜的帧。"
+                          />
+                        </>
+                      }
+                    />
 
-                  <ImagePanel
-                    refId={shot.id}
-                    target="frame"
-                    label="这一镜的三帧"
-                    options={[
-                      {
-                        label: '① 首帧',
-                        useReference: false,
-                        frameKind: 'first-frame',
-                      },
-                      {
-                        label: '① 首帧（锁角色）',
-                        useReference: true,
-                        frameKind: 'first-frame',
-                      },
-                      {
-                        label: '② 动作关键帧',
-                        useReference: true,
-                        frameKind: 'action-peak',
-                      },
-                      {
-                        label: '③ 尾帧',
-                        useReference: true,
-                        frameKind: 'end-frame',
-                      },
-                    ]}
-                    footer={
-                      <>
-                        <FrameOrderHint
-                          hasFirstFrame={galleryFor(shot.id).some(
-                            (a) => a.kind === 'first-frame' && a.dataUrl,
-                          )}
-                          hasActionPeak={galleryFor(shot.id).some(
-                            (a) => a.kind === 'action-peak' && a.dataUrl,
-                          )}
-                          hasEndFrame={galleryFor(shot.id).some(
-                            (a) => a.kind === 'end-frame' && a.dataUrl,
-                          )}
-                        />
-                        <AssetGallery
-                          assets={galleryFor(shot.id)}
-                          emptyHint="还没有生成过这一镜的帧。"
-                        />
-                      </>
-                    }
-                  />
-
-                  <div className="row" style={{ marginTop: 12 }}>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={() => navigate(`/prompts?shot=${shot.id}`)}
-                    >
-                      看这一镜的提示词
-                    </button>
+                    <div className="row" style={{ marginTop: 12 }}>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        onClick={() => navigate(`/prompts?shot=${shot.id}`)}
+                      >
+                        看这一镜的提示词
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (

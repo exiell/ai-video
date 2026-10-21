@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { Asset, ModelProfile } from '../types/model';
+import type { Asset, ModelProfile, SceneAngle } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
 import {
   REFERENCE_ROLE_LABEL,
   planReferenceImages,
   previousShotOf,
   referenceRolesOf,
+  sameStyle,
   type ReferenceRole,
   type ReferenceSlot,
 } from '../domain/image/referencePlan';
@@ -126,7 +127,7 @@ interface ImageState {
    */
   generateAllFrames: (kind: FrameKind) => Promise<void>;
   clearBatchSummary: () => void;
-  generateForScene: (sceneId: string) => Promise<void>;
+  generateForScene: (sceneId: string, angle?: SceneAngle) => Promise<void>;
   /** 生成镜头的某一帧（首帧 / 动作关键帧 / 尾帧） */
   generateForFrame: (shotId: string, kind: FrameKind, useReference?: boolean) => Promise<void>;
 }
@@ -324,14 +325,63 @@ export const useImage = create<ImageState>((set, get) => ({
     });
   },
 
-  generateForScene: async (sceneId) => {
+  /**
+   * 出场景参考板。
+   *
+   * `angle`（v0.46）：
+   *  - `master`：纯文生图，和以前一样。
+   *  - `reverse`：**拿主视角板当参考图去改**，而不是从零再画一间屋子。
+   *    重画出来的门和草料会挪位置，那就不是同一个地方了。
+   *    没有主视角板时直接报错——没有参照物就无从「转过去」。
+   */
+  generateForScene: async (sceneId, angle = 'master') => {
     const project = useAppStore.getState().project;
     if (!project) return;
     const key = taskKey('scene-plate', sceneId);
     if (get().pending) return;
 
-    const prompt = buildScenePlatePrompt(project, sceneId);
+    const prompt = buildScenePlatePrompt(project, sceneId, angle);
     if (!prompt) return;
+
+    let referenceImages: string[] = [];
+    let referenceLabels: string[] = [];
+    let referencePhrases: string[] = [];
+
+    if (angle === 'reverse') {
+      const scene = project.scenes.find((s) => s.id === sceneId);
+      const plates = await listAssetsFor(project.id, sceneId);
+      const master = plates
+        .filter(
+          (a) =>
+            a.kind === 'scene-plate' &&
+            a.dataUrl &&
+            a.angle !== 'reverse' &&
+            sameStyle(a.styleTags, project.brief.styleTags),
+        )
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+
+      if (!master?.dataUrl) {
+        set((s) => ({
+          feedback: {
+            ...s.feedback,
+            [key]: {
+              kind: 'error',
+              message: `「${scene?.name ?? '这个场景'}」还没有主视角参考板，出不了反打板。`,
+              warnings: [
+                '反打板是把主视角那张转过去，不是重新画一间屋子——重画出来的门会换位置。所以要先有主视角板。',
+              ],
+            },
+          },
+        }));
+        return;
+      }
+
+      referenceImages = [master.dataUrl];
+      referenceLabels = [`${scene?.name ?? '这个场景'} · 主视角板（用来转成反打）`];
+      referencePhrases = [
+        'the master view of this room, used as the starting point for the reverse angle',
+      ];
+    }
 
     await runGeneration({
       key,
@@ -342,10 +392,25 @@ export const useImage = create<ImageState>((set, get) => ({
         promptSnapshot: prompt.positive,
         lockPhrases: prompt.lockPhrases,
         styleTags: [...project.brief.styleTags],
+        ...(angle !== 'master' ? { angle } : {}),
+        ...(angle === 'reverse'
+          ? {
+              // 场景板不是「第几帧」，所以 kind 留空。
+              // 但职责说明必须给：否则会走到「保持那张角色参考图里的人」那句旧分支上去，
+              // 而这张参考图里根本没有角色。
+              frameRole: {
+                hasFirstFrameAnchor: false,
+                hasPreviousEndAnchor: false,
+                roles: referencePhrases,
+                sheetDetails: [] as ('full-body' | 'face')[],
+              },
+            }
+          : {}),
       },
       prompt,
-      preferReference: false,
-      referenceImages: [],
+      preferReference: referenceImages.length > 0,
+      referenceImages,
+      referenceLabels,
       set,
       get,
     });
@@ -479,6 +544,8 @@ export const useImage = create<ImageState>((set, get) => ({
     let referenceRoles: ReferenceRole[] = [];
     /** 因风格不符被跳过的参考图，生成完要如实告诉用户 */
     let staleRoles: ReferenceRole[] = [];
+    /** 这一镜要反打板但没有，退回了主视角板（v0.46）。生成完要如实说 */
+    let scenePlateFellBack = false;
     if (useReference) {
       const shot = project.shots.find((s) => s.id === shotId);
       const previous = previousShotOf(project, shotId);
@@ -518,6 +585,8 @@ export const useImage = create<ImageState>((set, get) => ({
         styleTags: project.brief.styleTags,
         // 景别决定用全身图还是头像：全景读体型，近景读脸（v0.46）
         ...(shot ? { shotSize: shot.shotSize } : {}),
+        // 朝向决定用哪张场景板：反打镜头拿反打板（v0.46）
+        ...(shot?.viewAngle ? { viewAngle: shot.viewAngle } : {}),
         characterNames,
         sources: {
           ownFrames,
@@ -535,6 +604,7 @@ export const useImage = create<ImageState>((set, get) => ({
       }
       referenceRoles = referenceRolesOf(plan);
       staleRoles = plan.staleSkipped;
+      scenePlateFellBack = plan.scenePlateFellBack === true;
     }
     const frameRole = {
       kind,
@@ -581,6 +651,7 @@ export const useImage = create<ImageState>((set, get) => ({
       referenceImages,
       referenceLabels,
       staleSkipped: staleRoles.map((role) => REFERENCE_ROLE_LABEL[role]),
+      ...(scenePlateFellBack ? { scenePlateFellBack: true } : {}),
       set,
       get,
     });
@@ -602,6 +673,10 @@ interface RunArgs {
    * 如果不说，他会以为参考图机制失灵了。
    */
   staleSkipped?: string[];
+  /**
+   * 这一镜要反打板但没有，退回了主视角板（v0.46）。见 `ReferencePlan.scenePlateFellBack`。
+   */
+  scenePlateFellBack?: boolean;
   set: StoreApi<ImageState>['setState'];
   get: StoreApi<ImageState>['getState'];
 }
@@ -733,6 +808,19 @@ async function runGeneration(args: RunArgs): Promise<void> {
         ]
       : [];
 
+  /**
+   * 这一镜要反打板，但没有反打板 → 悄悄退回了主视角板（v0.46）。
+   *
+   * 必须说。不说的话，用户拿到的是「把主视角构图焊在他身上」的图，
+   * 只会觉得反打功能没生效，却不知道原因是没有那张板。
+   */
+  const fallbackWarnings = args.scenePlateFellBack
+    ? [
+        '这一镜标成了反打视角，但这个场景还没有反打板，所以暂时用了主视角板当参考图。' +
+          '去「场景设定」给这个场景补一张反打板，再重出这一镜，朝向才会真的转过去。',
+      ]
+    : [];
+
   set((s) => ({
     feedback: {
       ...s.feedback,
@@ -740,14 +828,14 @@ async function runGeneration(args: RunArgs): Promise<void> {
         kind:
           built.assets.length === 0
             ? 'error'
-            : built.warnings.length > 0 || staleWarnings.length > 0
+            : built.warnings.length > 0 || staleWarnings.length > 0 || fallbackWarnings.length > 0
               ? 'info'
               : 'ok',
         message:
           built.assets.length > 0
             ? `${prompt.subjectLabel}已生成并保存到本机${referenceNote}。`
             : '图生成出来了，但没能下载到本地。请稍后重试。',
-        warnings: [...built.warnings, ...staleWarnings],
+        warnings: [...built.warnings, ...staleWarnings, ...fallbackWarnings],
       },
     },
   }));

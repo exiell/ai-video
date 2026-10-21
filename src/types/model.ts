@@ -252,6 +252,28 @@ export const CAMERA_MOVE_EN: Record<CameraMove, string> = {
   handheld: 'subtle handheld camera shake',
 };
 
+/**
+ * 场景的视角（v0.46）。
+ *
+ * 【为什么需要它】一个场景只出一张图时，镜头一旦转到反方向就无图可用。
+ * 模型只能拿主视角那张当参考，于是**把主视角的构图焊在这一镜上**——
+ * 表现就是「角色在动，画面钉在原地」，或者干脆把房间重新发明一遍，
+ * 门窗跑到另一侧去了。
+ *
+ * 现在的做法是**从主视角派生一张反打板**，而不是凭空再画一间屋子。
+ * 理由与 OrbitSheets 的立场一致：一个地点不是一张角色图，
+ * 新的视角只能从已有画面「继续」，不能「发明」——发明出来的不是同一间屋子。
+ *
+ * 只做两档，因为覆盖的是最常见的对话正反打。
+ * 90° 侧面留给以后：它需要更多轴线信息才判得准，先不做半成品。
+ */
+export type SceneAngle = 'master' | 'reverse';
+
+export const SCENE_ANGLE_LABEL: Record<SceneAngle, string> = {
+  master: '主视角',
+  reverse: '反打视角',
+};
+
 export interface Shot {
   id: string;
   /** 镜号，展示用。重排时自动生成，不保证连续。 */
@@ -321,6 +343,17 @@ export interface Shot {
    * 类型可选：老项目与手写镜头没有这个字段，缺失时由衔接说明推断。
    */
   transitionType?: 'continuation' | 'cut';
+
+  /**
+   * 这一镜看的是场景的哪一面（v0.46）。
+   *
+   * 【为什么和 `cameraPosition` 分开】`cameraPosition` 说的是**机位高低**
+   * （仰拍、俯拍、与桌面齐平），自由中文；`viewAngle` 说的是**朝向**，
+   * 只有两档且必须机器可读——参考图编排要靠它去挑对应的那张场景板。
+   *
+   * 缺省视为 `master`：老项目没有这个字段，镜头都按主视角处理。
+   */
+  viewAngle?: SceneAngle;
 }
 
 // ---------------------------------------------------------------------------
@@ -485,7 +518,14 @@ export interface ImageRequest {
    * 后两帧的机位会各自漂移，三张图放一起就不像同一个镜头。
    */
   frameRole?: {
-    kind: 'first-frame' | 'action-peak' | 'end-frame';
+    /**
+     * 出的是哪一帧。
+     *
+     * 【v0.46】改成可选：出场景板（尤其是反打板）时也要传参考图说明，
+     * 但那不是「第几帧」。用 `kind: undefined` 表达，比硬塞一个
+     * `'first-frame'` 诚实——那会让提示词凭空多出「这是本镜第一帧」的话。
+     */
+    kind?: 'first-frame' | 'action-peak' | 'end-frame';
     /** 参考图里含本镜首帧（锁本镜构图） */
     hasFirstFrameAnchor: boolean;
     /** 参考图里含上一镜尾帧（锁跨镜连续） */
@@ -755,6 +795,14 @@ export interface Asset extends Versioned {
   styleTags?: string[];
   /** 是否用了参考图锚定（L3），以及当时一共传了几张 */
   referenceCount?: number;
+
+  /**
+   * 这张场景板是从哪个角度看这间屋子（v0.46）。
+   *
+   * 只有 `kind === 'scene-plate'` 用得上。老素材没有这个字段，
+   * 一律按主视角处理——**不能因为升级就把历史场景板全部作废**。
+   */
+  angle?: SceneAngle;
 
   /** base64 的字节数，用于设置页统计用量 */
   byteSize?: number;

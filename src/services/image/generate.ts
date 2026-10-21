@@ -364,11 +364,22 @@ export interface AssetDraft {
   /** 生成时项目的风格关键词，存进素材便于日后判断「这张图还合不合现在的风格」 */
   styleTags?: string[];
   /**
+   * 这张场景板是从哪个角度看的（v0.46）。只有 `kind === 'scene-plate'` 用得上。
+   *
+   * 不写 `master` 而是干脆不写：老素材也没有这个字段，
+   * 两者都按主视角处理，于是升级不需要迁移任何数据。
+   */
+  angle?: 'master' | 'reverse';
+  /**
    * 出的是哪一帧，以及参考图里是否含本镜首帧。
    * 它会**存进素材记录**，便于事后核对「这张图当时是拿什么当锚点的」。
+   *
+   * 【v0.46】`kind` 改成可选：出场景板（尤其是反打板）时也要给参考图写职责，
+   * 但那不是「第几帧」。用空 `kind` 表达，比硬塞一个 `'first-frame'` 诚实——
+   * 那会让提示词凭空多出「这是本镜第一帧」的话。
    */
   frameRole?: {
-    kind: 'first-frame' | 'action-peak' | 'end-frame';
+    kind?: 'first-frame' | 'action-peak' | 'end-frame';
     /** 参考图里含本镜首帧（锁本镜构图） */
     hasFirstFrameAnchor: boolean;
     /** 参考图里含上一镜尾帧（锁跨镜连续） */
@@ -379,6 +390,18 @@ export interface AssetDraft {
     shotSizeEn?: string;
     /** 这一镜的机位 */
     cameraPositionEn?: string;
+    /**
+     * 角色参考图分别是全身图还是头像；空数组表示「这次没有角色参考图」。
+     *
+     * 【v0.46】补上。类型里一直缺这个字段，于是 store 里算好的 `sheetDetails`
+     * 在类型层面根本传不进来——漏掉它，`withReferenceInstruction` 就会走
+     * 「保持那张角色参考图里人物的脸与体型」的旧分支，哪怕那张图里没有人。
+     */
+    sheetDetails?: ('full-body' | 'face')[];
+    /** 这次传了几个角色的形象图（>1 时要明说「这些是不同的人」） */
+    characterCount?: number;
+    /** 用的哪张场景板；反打时为 'reverse' */
+    sceneAngle?: 'master' | 'reverse';
   };
   seed?: number;
 }
@@ -428,6 +451,7 @@ export function toAssets(
       ...(draft.model !== undefined ? { model: draft.model } : {}),
       ...(draft.lockPhrases !== undefined ? { lockPhrases: draft.lockPhrases } : {}),
       ...(draft.styleTags !== undefined ? { styleTags: draft.styleTags } : {}),
+      ...(draft.angle !== undefined ? { angle: draft.angle } : {}),
       ...(draft.referenceCount !== undefined ? { referenceCount: draft.referenceCount } : {}),
       byteSize: Math.floor((base64Part.length * 3) / 4),
     });

@@ -1,4 +1,4 @@
-﻿import type { CSSProperties } from 'react';
+import type { CSSProperties } from 'react';
 import home from '../assets/icons/tabler-home.svg?url';
 import book from '../assets/icons/tabler-book.svg?url';
 import users from '../assets/icons/tabler-users.svg?url';
@@ -14,6 +14,9 @@ import plus from '../assets/icons/tabler-plus.svg?url';
 import sparkles from '../assets/icons/tabler-sparkles.svg?url';
 import movie from '../assets/icons/tabler-movie.svg?url';
 import photo from '../assets/icons/tabler-photo.svg?url';
+import volume from '../assets/icons/tabler-volume.svg?url';
+import scissors from '../assets/icons/tabler-scissors.svg?url';
+import lock from '../assets/icons/tabler-lock.svg?url';
 import listCheck from '../assets/icons/tabler-list-check.svg?url';
 import fileText from '../assets/icons/tabler-file-text.svg?url';
 import palette from '../assets/icons/tabler-palette.svg?url';
@@ -52,6 +55,9 @@ const ICONS = {
   sparkles,
   movie,
   photo,
+  volume,
+  scissors,
+  lock,
   'list-check': listCheck,
   'file-text': fileText,
   palette,

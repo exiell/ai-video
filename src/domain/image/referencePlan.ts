@@ -1,4 +1,5 @@
-import type { ModelCapabilities, Project, Shot, ShotSize } from '../../types/model';
+import type { ModelCapabilities, Project, SceneAngle, Shot, ShotSize } from '../../types/model';
+import { SCENE_ANGLE_LABEL } from '../../types/model';
 
 /**
  * 跨镜参考图编排（方案.md §7.6.10，【v0.21 新增】）
@@ -93,6 +94,13 @@ export interface ReferencePlan {
    * 所以尾帧与场景板在争这一个位置，界面上要把这个取舍显示出来。
    */
   aspectRatioOwner?: ReferenceRole;
+  /**
+   * 这一镜要反打板，但没有反打板，于是退回了主视角板（v0.46）。
+   *
+   * 界面必须把这件事说出来。悄悄退回的后果是：用户以为自己在看反打，
+   * 拿到的却是把主视角构图焊在他身上的图——越看越不明白哪里不对。
+   */
+  scenePlateFellBack?: boolean;
 }
 
 /**
@@ -167,6 +175,13 @@ export interface RefAsset {
   createdAt: string;
   /** 生成这张图时项目的风格关键词。老素材没有这个字段，按「兼容」处理 */
   styleTags?: string[];
+  /**
+   * 这是从哪个角度看这间屋子（v0.46，只有场景板用得上）。
+   *
+   * 老素材没有这个字段，一律按主视角处理——不能因为加了个字段
+   * 就把所有历史场景板作废。
+   */
+  angle?: SceneAngle;
 }
 
 export interface ReferenceSource {
@@ -268,6 +283,45 @@ const FULL_BODY_SHOT_SIZES: ReadonlySet<ShotSize> = new Set<ShotSize>([
 const DEFAULT_SHOT_SIZE: ShotSize = 'medium';
 
 /**
+ * 挑这一镜该用哪张场景板（v0.46）。
+ *
+ * 【为什么要按朝向挑】原来场景板只有一张，而且是无条件取「最新一张」。
+ * 一旦场景出了反打板，最新那张反而是反打视角——主视角的镜头会拿到
+ * 一张看着反方向的参考图，比完全没有参考图更糟。
+ *
+ * 【为什么找不到要退回主视角】宁可给一张主视角的板，也不要让模型手上什么都没有。
+ * 但**必须让调用方知道退回了**，好在界面上说清「这一镜要反打板，你还没出」。
+ * 悄悄退回正是这一轮里反复出现的毛病：看起来在工作，其实少了一环。
+ */
+function pickScenePlate(
+  assets: RefAsset[] | undefined,
+  style: string[] | undefined,
+  want: SceneAngle,
+): { url: string | undefined; angle: SceneAngle | undefined; fellBack: boolean } {
+  if (!assets || assets.length === 0) return { url: undefined, angle: undefined, fellBack: false };
+
+  const usable = assets
+    .filter((a) => a.kind === 'scene-plate' && a.dataUrl && sameStyle(a.styleTags, style))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const isReverse = (a: RefAsset): boolean => a.angle === 'reverse';
+
+  if (want === 'reverse') {
+    const hit = usable.find(isReverse);
+    if (hit?.dataUrl) return { url: hit.dataUrl, angle: 'reverse', fellBack: false };
+    const master = usable.find((a) => !isReverse(a));
+    if (master?.dataUrl) return { url: master.dataUrl, angle: 'master', fellBack: true };
+    return { url: undefined, angle: undefined, fellBack: false };
+  }
+
+  // 主视角镜头：只认主视角板，**不**退到反打板。
+  // 反打板是在主视角板的基础上改出来的，拿它当主视角的参考图只会越改越偏。
+  const master = usable.find((a) => !isReverse(a));
+  return master?.dataUrl
+    ? { url: master.dataUrl, angle: 'master', fellBack: false }
+    : { url: undefined, angle: undefined, fellBack: false };
+}
+
+/**
  * 编排这一帧的参考图。
  *
  * 优先级（槽位不够时从后往前丢）：
@@ -316,9 +370,18 @@ export function planReferenceImages(args: {
    * 也不要给模型两个打架的指令。
    */
   styleTags?: string[];
+  /**
+   * 这一镜看的是场景的哪一面（v0.46）。
+   *
+   * 只影响一件事：场景参考板用哪张。主视角镜头拿主视角板，
+   * 反打镜头拿反打板；没有反打板时退回主视角板并**上报退回了**。
+   * 不传按主视角处理（老数据）。
+   */
+  viewAngle?: SceneAngle;
 }): ReferencePlan {
   const { kind, capabilities, previous, sources, styleTags, characterNames } = args;
   const shotSize = args.shotSize ?? DEFAULT_SHOT_SIZE;
+  const viewAngle: SceneAngle = args.viewAngle ?? 'master';
   const limit = capabilities.maxReferenceImages || 0;
 
   /** 这一批素材里有没有因为风格不符被跳过的，用于如实告知 */
@@ -337,6 +400,7 @@ export function planReferenceImages(args: {
     dataUrl: string | undefined;
     owner?: string;
     detail?: 'full-body' | 'face';
+    angle?: SceneAngle;
   }[] = [];
 
   if (kind === 'first-frame') {
@@ -372,7 +436,26 @@ export function planReferenceImages(args: {
       ...(owner ? { owner } : {}),
     });
   });
-  candidates.push({ role: 'scene-plate', dataUrl: pick(sources.scenePlates, 'scene-plate') });
+  /**
+   * 场景板（v0.46 起按朝向挑）。
+   *
+   * `pick()` 原来在这里被调用，取「最新一张 scene-plate」。加了反打板之后
+   * 这个规则会把主视角的镜头指向反打板——所以改成按朝向挑。
+   */
+  const plate = pickScenePlate(sources.scenePlates, styleTags, viewAngle);
+  if (
+    !plate.url &&
+    sources.scenePlates?.some(
+      (a) => a.kind === 'scene-plate' && a.dataUrl && !sameStyle(a.styleTags, styleTags),
+    )
+  ) {
+    staleSkipped.push('scene-plate');
+  }
+  candidates.push({
+    role: 'scene-plate',
+    dataUrl: plate.url,
+    ...(plate.angle ? { angle: plate.angle } : {}),
+  });
 
   const slots: ReferenceSlot[] = [];
   const dropped: ReferenceRole[] = [];
@@ -390,7 +473,9 @@ export function planReferenceImages(args: {
           ? `${candidate.owner ? `${candidate.owner} · ` : ''}${
               candidate.detail === 'full-body' ? '全身多视图（锁体型）' : '头部特写（锁脸）'
             }`
-          : REFERENCE_ROLE_LABEL[candidate.role],
+          : candidate.role === 'scene-plate' && candidate.angle === 'reverse'
+            ? `${REFERENCE_ROLE_LABEL['scene-plate']}（${SCENE_ANGLE_LABEL.reverse}）`
+            : REFERENCE_ROLE_LABEL[candidate.role],
       ...(candidate.owner ? { owner: candidate.owner } : {}),
       ...(candidate.detail ? { detail: candidate.detail } : {}),
     });
@@ -405,6 +490,7 @@ export function planReferenceImages(args: {
     dropped,
     staleSkipped: [...new Set(staleSkipped)],
     aspectRatioOwner: lastRoleOf(slots),
+    ...(plate.fellBack ? { scenePlateFellBack: true } : {}),
   };
 }
 

@@ -2,10 +2,11 @@ import type {
   ModelCapabilities,
   PromptNote,
   PromptLine,
+  SceneAngle,
   ShotSize,
   TargetPlatform,
 } from '../../types/model';
-import { PLATFORM_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
+import { PLATFORM_LABEL, SCENE_ANGLE_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
 import {
   buildCharacterSheetSpec,
   type CharacterSheetKind,
@@ -325,14 +326,33 @@ export function buildCharacterSheetPrompt(
 }
 
 /**
+ * 反打视角的场景板指令（v0.46）。
+ *
+ * 【为什么是一句「同一个房间」而不是重新描述一遍】反打板是**从主视角那张改出来的**，
+ * 不是凭空再画一间屋子。凭空画出来的不是同一个地方——门会换位置、草料会挪地方，
+ * 而这正是「镜头一转，场景就错了」的根因。
+ *
+ * 【为什么这里不重写光的方向】主光在提示词里已经用**房间坐标**写死了
+ * （「门外」「门口方向」），房间没有翻面，光就没有翻面。
+ * 若这里再补一句「光从画面左侧来」，画面左右一翻就和主视角那张自相矛盾。
+ */
+export const SCENE_REVERSE_INSTRUCTION =
+  'the same room seen from the opposite direction, the camera has turned 180 degrees and now looks at the wall behind the original viewpoint, same architecture, same materials, same door and same fixed objects seen from the other side, same light source, same colour palette';
+
+/**
  * 场景参考板提示词。
  *
  * 刻意要求「空无一人」：场景板的作用是固定空间、固定元素与光线，
  * 里面站了人反而会干扰后续把角色放进去。
+ *
+ * `angle`（v0.46）：默认主视角。反打视角只是**多加一句方向说明**，
+ * 空间结构与主光方向**原样不动**——它们写的是房间自己的方位，不随镜头翻面。
+ * 真正让反打成立的是「用主视角那张板当参考图去改」，那一步在 store 里。
  */
 export function buildScenePlatePrompt(
   project: BuildImagePromptOptions['project'],
   sceneId: string,
+  angle: SceneAngle = 'master',
 ): ImagePromptInput | null {
   const scene = project.scenes.find((s) => s.id === sceneId);
   if (!scene) return null;
@@ -388,6 +408,18 @@ export function buildScenePlatePrompt(
     reason: '色调是观众判断「换了地方」最直接的线索。',
   });
 
+  if (angle === 'reverse') {
+    notes.push({
+      fragment: SCENE_REVERSE_INSTRUCTION,
+      label: '反打视角',
+      reason:
+        '这句话的唯一作用是告诉模型「还是这间屋子，只是转过身看」。' +
+        '这张板会拿主视角那张当参考图去改，而不是从零重画——' +
+        '重画出来的门和草料会挪位置，那不是同一个地方。' +
+        '光的方向这里不再写一遍：主光已经用房间坐标写死了，房间没有翻面，光就没有翻面。',
+    });
+  }
+
   /**
    * 场景板的正向词去重（v0.45 补）。
    *
@@ -409,6 +441,9 @@ export function buildScenePlatePrompt(
   );
 
   const positive = dedupePhrases([
+    // 反打视角：方向说明放最前。它是这张板和主视角板**全部的差别**，
+    // 放在中段会被「空场景板」那些通用词盖过去。
+    ...(angle === 'reverse' ? [SCENE_REVERSE_INSTRUCTION] : []),
     plateSummary,
     // 空间结构与主光：v0.45 起进正文。
     // 顺序放在最前，因为提示词前段权重更高，而这两项正是「这是不是同一个地方」的依据。
@@ -423,7 +458,10 @@ export function buildScenePlatePrompt(
   ]).join(', ');
 
   return {
-    subjectLabel: `场景「${scene.name}」参考板`,
+    subjectLabel:
+      angle === 'reverse'
+        ? `场景「${scene.name}」参考板（${SCENE_ANGLE_LABEL.reverse}）`
+        : `场景「${scene.name}」参考板`,
     positive,
     negative: project.brief.negativePrompt,
     aspectRatio: project.brief.aspectRatio,

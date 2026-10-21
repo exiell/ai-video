@@ -5,7 +5,8 @@ import { useSettings } from '../store/settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { consistencyAdvice } from '../domain/image/prompts';
 import { ASSET_KIND_LABEL } from '../types/model';
-import type { Asset } from '../types/model';
+import type { Asset, SceneAngle } from '../types/model';
+import { SCENE_ANGLE_LABEL } from '../types/model';
 import { ImageLightbox, type LightboxState } from './ImageLightbox';
 import { ImagePromptView } from './ImagePromptView';
 
@@ -31,6 +32,8 @@ export interface GenerateOption {
   sheetKind?: 'turnaround' | 'face';
   /** 出的是哪一帧（只有镜头用得上） */
   frameKind?: 'first-frame' | 'action-peak' | 'end-frame';
+  /** 出的是场景的哪个角度（只有场景用得上，v0.46） */
+  angle?: SceneAngle;
 }
 
 export function ImagePanel({
@@ -87,7 +90,7 @@ export function ImagePanel({
       return;
     }
     if (target === 'scene') {
-      void generateForScene(refId);
+      void generateForScene(refId, option.angle ?? 'master');
       return;
     }
     // frameKind 由调用方指定；没给就是首帧（最常用的那一种）
@@ -239,6 +242,13 @@ export function AssetGallery({
             </button>
             <figcaption className="hint" style={{ marginTop: 4 }}>
               <span className="tag">{ASSET_KIND_LABEL[asset.kind]}</span>
+              {/* 场景板要标出角度：主视角和反打板缩略图长得很像，不标会拿错 */}
+              {asset.kind === 'scene-plate' ? (
+                <>
+                  {' '}
+                  <span className="tag">{SCENE_ANGLE_LABEL[asset.angle ?? 'master']}</span>
+                </>
+              ) : null}
               <br />
               {new Date(asset.createdAt).toLocaleString('zh-CN')}
               {asset.model ? ` · ${asset.model}` : ''}

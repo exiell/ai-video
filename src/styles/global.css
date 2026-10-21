@@ -5134,43 +5134,42 @@ select {
 
 /* 动作是展开前后都露在外面的主字段，给它最大的输入面积 */
 .shot-primary {
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 .shot-primary > .field-label {
-  margin-bottom: 4px;
+  margin-bottom: 6px;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .shot-primary > input[type='text'] {
-  min-height: 42px;
-  padding: 9px 12px;
+  min-height: 44px;
+  padding: 10px 13px;
   border-color: var(--field-border);
   background: var(--field-bg);
   font-size: 14px;
 }
 
-/* 字段说明：比字段名小、比占位符稳，不再和字段名同一层 */
+/* 字段说明：比字段名小、放在填写区下面，不再和字段名同一层 */
 .field-help {
-  margin: 0 0 7px;
+  margin: 6px 0 0;
   color: var(--text-dim);
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.shot-primary > .field-help {
+  margin-top: 7px;
 }
 
 .shot-more .field-label {
-  margin-bottom: 5px;
+  margin-bottom: 6px;
   color: var(--text);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.shot-more .field-label .hint {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .shot-more input[type='text'],
@@ -5179,6 +5178,20 @@ select {
 .shot-more .select-trigger {
   border-color: var(--field-border);
   background: var(--field-bg);
+  font-size: 14px;
+}
+
+.shot-more input[type='text'],
+.shot-more input[type='number'],
+.shot-more .select-trigger {
+  min-height: 40px;
+  padding: 8px 11px;
+}
+
+.shot-more textarea {
+  min-height: 84px;
+  padding: 9px 11px;
+  line-height: 1.55;
 }
 
 .shot-more input[type='text']:hover,
@@ -5187,38 +5200,92 @@ select {
   border-color: var(--text-faint);
 }
 
-/* 两个字段并排时，给字段名和填写区留出稳定的呼吸 */
-.shot-more .shot-fields {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px 20px;
-  margin-top: 0;
-}
-
-/* 分区标题横跨整行，用一条细线把不同的填写任务分开 */
-.shot-section-title {
+/* 分区栏在左，字段恢复单列：标题离开字段列，眼睛不用横向找归属 */
+.shot-sections {
   display: flex;
-  grid-column: 1 / -1;
-  align-items: baseline;
-  gap: 8px;
-  margin: 4px 0 0;
-  padding-top: 17px;
+  flex-direction: column;
+}
+
+.shot-section {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 760px);
+  gap: 32px;
+  padding: 20px 0;
+}
+
+.shot-section + .shot-section {
   border-top: 1px solid var(--border);
+}
+
+.shot-section:first-child {
+  padding-top: 2px;
+}
+
+.shot-section:last-child {
+  padding-bottom: 0;
+}
+
+.shot-section-rail {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  column-gap: 10px;
+  align-content: start;
+  padding-top: 1px;
+}
+
+.shot-section-icon {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 9%, var(--bg-card));
+  color: var(--accent);
+}
+
+.shot-section-title {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
   color: var(--text);
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
 }
 
-.shot-fields > .shot-section-title:first-child {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
-}
-
-.shot-section-title span {
+.shot-section-desc {
+  grid-column: 2;
+  grid-row: 2;
+  margin: 6px 0 0;
   color: var(--text-dim);
-  font-size: 11px;
-  font-weight: 400;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.shot-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  max-width: 760px;
+}
+
+.shot-section-body > div {
+  min-width: 0;
+}
+
+.shot-section-body .shot-scene {
+  margin: 0;
+}
+
+.shot-output {
+  margin-top: 22px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
 }
 
 /* 景别、运镜说明放在参数旁边，不占表单格子 */
@@ -5226,7 +5293,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  margin: 0 0 14px;
+  margin: 0 0 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
@@ -5236,18 +5303,20 @@ select {
 }
 
 /* 焦点落在哪个字段，字段名跟着变色，长表单里更容易定位 */
-.shot-more .shot-fields > div:focus-within > .field-label,
+.shot-section-body > div:focus-within > .field-label,
 .shot-primary:focus-within > .field-label {
   color: var(--accent);
 }
 
-.shot-fields > div:has(.field-flagged) > .field-label,
+.shot-section-body > div:has(.field-flagged) > .field-label,
 .shot-primary:has(.field-flagged) > .field-label {
   color: var(--warning);
 }
 
 @media (max-width: 1080px) {
-  .shot-more .shot-fields {
+  .shot-section {
     grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 18px 0;
   }
 }

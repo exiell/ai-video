@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
-import { Field, Info } from '../components/bits';
+import { Field, Info, RichText } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
@@ -383,15 +383,28 @@ export function ScenesPage() {
                   label="场景参考板"
                   options={[
                     {
-                      label: '生成场景参考板',
+                      label: '生成主视角板',
                       useReference: false,
+                      angle: 'master',
+                    },
+                    {
+                      label: '生成反打板',
+                      useReference: true,
+                      angle: 'reverse',
                     },
                   ]}
                   footer={
-                    <AssetGallery
-                      assets={galleryFor(scene.id)}
-                      emptyHint="还没有生成过场景板。"
-                    />
+                    <>
+                      <AssetGallery
+                        assets={galleryFor(scene.id)}
+                        emptyHint="还没有生成过场景板。"
+                      />
+                      <div className="field-help" style={{ marginTop: 8 }}>
+                        <RichText>
+                          {'**反打板是从主视角板转过去的**，不是重新画一间屋子——重画的门和草料会挪位置，那就不是同一个地方了。所以要先有主视角板。分镜里标成「反打视角」的镜头，出图时会自动用它。'}
+                        </RichText>
+                      </div>
+                    </>
                   }
                 />
 
