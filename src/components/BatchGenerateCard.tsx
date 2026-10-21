@@ -3,7 +3,7 @@ import { useImage } from '../store/image';
 import { useAppStore } from '../store/app';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { useSettings } from '../store/settings';
-import { RichText } from './bits';
+import { RichText, WhyDetails } from './bits';
 
 /**
  * 批量出图按钮 + 进度
@@ -141,12 +141,17 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
         ))}
       </div>
 
+      {/*
+        【v0.44】这段是「补原理」，不是「不看你就会填错」——
+        默认按钮已经叫「全部三帧（按镜头顺序）」，照着点就是对的。
+        所以收进折叠里，不占布局。
+      */}
       {tasks.includes('all-frames') ? (
-        <div className="hint" style={{ marginTop: 8 }}>
+        <WhyDetails summary="为什么按镜头顺序，而不是先全部首帧">
           <RichText>
-            {'三帧**按镜头顺序**出：第 1 镜首帧 → 关键帧 → 尾帧，然后第 2 镜…… 这样每一镜的尾帧都在下一镜首帧之前就绪，跨镜才接得住。后面三个「只补」按钮是返工用的：某一类帧失败时单独重跑，不用整批重来。'}
+            {'参考图是一层一层接起来的：本镜首帧接上一镜尾帧，本镜的关键帧和尾帧再接自己的首帧。\n\n按帧类型分批（先全部首帧、再全部关键帧、再全部尾帧）的话，跑第一轮时尾帧一张都还没有，每一镜的首帧就拿不到「上一镜长什么样」这个锚点。首帧又是另外两帧的锚点，误差会一路传下去，而且不会有任何报错。\n\n按镜头跑就没有这个问题：第 1 镜的首帧→关键帧→尾帧出完，第 2 镜的首帧才开工，那时上一镜的尾帧已经在了。\n\n后面三个「只补」按钮是返工用的：某一类帧失败或想重画时单独跑，不用整批重来。'}
           </RichText>
-        </div>
+        </WhyDetails>
       ) : null}
 
       {batch ? (
