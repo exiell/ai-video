@@ -14,7 +14,6 @@ import { useImage } from '../store/image';
 import { CameraMoveHint, ShotSizeHint } from '../components/TermHint';
 import {
   CAMERA_MOVE_LABEL,
-  SCENE_ANGLE_LABEL,
   SHOT_SIZE_LABEL,
   type CameraMove,
   type Shot,
@@ -537,27 +536,14 @@ export function StoryboardPage() {
                         </div>
 
                         {/*
-                          朝向（v0.46）。
-                          与「机位」分开：机位说的是高低（仰拍俯拍），朝向说的是看哪一面墙。
-                          后者必须机器可读，因为出图时要靠它去挑对应的那张场景板。
+                          反打视角的「朝向」下拉（v0.47 加、v0.47 后撤）。
+
+                          撤掉的原因：实测反打板交出来的是原图的左右镜像，
+                          而场景卡的方位是按房间坐标写的，一镜像就和文字打架。
+                          底层没有删（Shot.viewAngle、按朝向挑板的逻辑都留着），
+                          只是界面不再暴露。已有项目里 viewAngle: 'reverse' 的镜头
+                          会自动退回主视角板，并在出图结果里说明这件事。
                         */}
-                        <div>
-                          <div className="field-label">朝向</div>
-                          <SelectMenu
-                            value={shot.viewAngle ?? 'master'}
-                            options={[
-                              { value: 'master', label: SCENE_ANGLE_LABEL.master },
-                              { value: 'reverse', label: SCENE_ANGLE_LABEL.reverse },
-                            ]}
-                            ariaLabel={`第 ${shot.number} 镜的朝向`}
-                            onChange={(value) =>
-                              patch(shot, { viewAngle: value === 'reverse' ? 'reverse' : 'master' })
-                            }
-                          />
-                          <div className="field-help">
-                            看这间屋子的哪一面。反打要先去场景页给这个场景出一张反打板，否则会退回主视角板。
-                          </div>
-                        </div>
 
                         <div>
                           <div className="field-label">来源场次</div>

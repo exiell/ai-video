@@ -163,6 +163,33 @@ describe('导出 · 图片提示词.md', () => {
     expect(imagePromptsToMarkdown(fresh())).toContain('三帧要一起出');
   });
 
+  /**
+   * 反打板（v0.47 加、v0.47 后撤）。
+   *
+   * 界面已经不提供入口，所以导出的图片提示词里**不该再出现一个用不上的段落**。
+   * 但底层留着：项目里还有镜头标着反打视角时，把那段提示词一起导出去，
+   * 否则那些老项目会悄悄丢掉它们正在用的东西。
+   */
+  describe('反打板只在项目真的用到时才导出', () => {
+    it('没有反打镜头时，导出里没有反打段落', () => {
+      const md = imagePromptsToMarkdown(fresh());
+      expect(md).not.toContain('反打视角板');
+      expect(md).not.toContain('反打板不是重新画一间屋子');
+    });
+
+    it('有镜头标了反打视角时，反打段落还在', () => {
+      const project = fresh();
+      const shot = project.shots[0];
+      expect(shot).toBeDefined();
+      shot!.viewAngle = 'reverse';
+      const md = imagePromptsToMarkdown(project);
+      expect(md).toContain('反打视角板');
+      expect(md).toContain('反打板不是重新画一间屋子');
+      // 主视角那段不能被反打的加入挤掉
+      expect(md).toContain('· 主视角板');
+    });
+  });
+
   it('空项目给的是可执行的下一步，不是空白文件', () => {
     const empty = fresh();
     empty.characters = [];

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
-import { Field, Info, RichText } from '../components/bits';
+import { Field, Info } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
@@ -381,30 +381,24 @@ export function ScenesPage() {
                   refId={scene.id}
                   target="scene"
                   label="场景参考板"
+                  /*
+                    反打板（v0.47 加、v0.47 后撤）：实测效果不好——模型交出来的
+                    是原图的左右镜像，而场景卡的方位是按房间坐标写的，一镜像就
+                    和文字打架。底层没有删（类型、提示词、按朝向挑板的逻辑都留着），
+                    只是界面不再提供入口。想再试的时候把这里加回来即可。
+                  */
                   options={[
                     {
-                      label: '生成主视角板',
+                      label: '生成场景参考板',
                       useReference: false,
                       angle: 'master',
                     },
-                    {
-                      label: '生成反打板',
-                      useReference: true,
-                      angle: 'reverse',
-                    },
                   ]}
                   footer={
-                    <>
-                      <AssetGallery
-                        assets={galleryFor(scene.id)}
-                        emptyHint="还没有生成过场景板。"
-                      />
-                      <div className="field-help" style={{ marginTop: 8 }}>
-                        <RichText>
-                          {'**反打板是从主视角板转过去的**，不是重新画一间屋子——重画的门和草料会挪位置，那就不是同一个地方了。所以要先有主视角板。分镜里标成「反打视角」的镜头，出图时会自动用它。'}
-                        </RichText>
-                      </div>
-                    </>
+                    <AssetGallery
+                      assets={galleryFor(scene.id)}
+                      emptyHint="还没有生成过场景板。"
+                    />
                   }
                 />
 
