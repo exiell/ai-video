@@ -3056,6 +3056,14 @@ table.simple tbody tr:last-child td {
   color: var(--accent);
 }
 
+.wizard-step.pending .wizard-state {
+  color: var(--warning);
+}
+
+.wizard-step.pending .wizard-dot {
+  border-color: var(--warning);
+}
+
 .guide-rail-note {
   margin: 18px 0 0;
   padding-top: 14px;

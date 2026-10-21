@@ -59,6 +59,7 @@
 
 - **下拉列表**：设置里的默认模型和语言、故事里的画面比例、分镜里每一镜的景别 / 运镜 / 场景 / 转场 / 来源场次、角色类型、连续性锁方面，全部改成自定义 listbox；展开时菜单淡入 + 下移 5px，chevron 旋转，选项 hover 有底色变化，选中项有勾；支持 ↑ / ↓ / Home / End / Enter / Esc 和点外面关闭。
 - **设置 → 外观**：三张外观卡片，hover 轻微抬起，切换时页面背景、卡片、按钮做 0.16–0.2s 的颜色过渡；不闪白。
+- **故事向导**：完成状态按内容判断。写了正文才把「填写故事」标为已完成；切换步骤、前进再回退都不会抹掉或凭空增加完成态。当前步完成时显示「当前 · 已完成」，没写完的前一步显示「未完成」。
 - **分镜详情**：点「展开」时新增字段淡入下移；下拉打开时整张镜头卡提高层级，不会被下一张卡压住。
 - **角色 / 场景详情**：点「展开」时卡片高度用 `0fr → 1fr` 过渡 0.28s，身份、变体、连续性锁整块淡入；按钮 chevron 同步旋转。
 - **展开按钮**：分镜、角色、场景的「展开 / 收起」都带一个会旋转的 chevron，点下去先有反馈。
@@ -96,6 +97,7 @@
 - `.taste-skill/themes/appearance-night.jpg`：设置里的外观页（暗房选中）；`.taste-skill/themes/select-open.jpg`：自定义下拉展开
 - `.taste-skill/motion/storyboard-menu.jpg`：分镜里的景别下拉展开；`storyboard-expanded.jpg`：镜头详情展开；`shot-located.jpg`：从检查页跳到第 3 镜的定位描边
 - `.taste-skill/motion/characters-role-menu.jpg`：角色类型下拉；`characters-expanded.jpg` / `scenes-expanded.jpg`：角色与场景展开；`characters-reveal-mid.jpg`：角色卡展开到一半时的高度过渡
+- `.taste-skill/guide/rail-initial.jpg` / `rail-next.jpg`：故事向导完成态按内容判断，前进/回退都保持
 - 上一轮（单外观）截图仍在 `.taste-skill/after/`。
 
 

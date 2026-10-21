@@ -188,6 +188,34 @@ export function GuidePage() {
   }
 
   /**
+   * 每一步是否真的完成，按内容判断，不看当前停在第几步。
+   *
+   * 之前用 `index < step` 推导「已完成」：只要点过下一步，上一步就自动变成已完成；
+   * 再切回去，又因为 `index < step` 不成立而消失。这会误导用户，也把「导航位置」
+   * 和「内容是否写完」混成了一件事。
+   *
+   * 第 0 步默认已经选中「我自己的故事」，这是一个有效选择，所以算完成；
+   * 第 3 步是总结/下一步，不是表单，不参与完成判定。
+   */
+  const completed = [
+    story.source === 'original' || story.source === 'generated',
+    story.body.trim().length > 0,
+    project.name.trim().length > 0 &&
+      project.brief.targetDuration > 0 &&
+      project.brief.platforms.length > 0 &&
+      project.brief.aspectRatio.trim().length > 0 &&
+      project.brief.styleTags.length > 0,
+    false,
+  ];
+
+  function stepState(index: number): string {
+    if (index === step) return completed[index] ? '当前 · 已完成' : '当前';
+    if (completed[index]) return '已完成';
+    if (index < step && index < STEPS.length - 1) return '未完成';
+    return '';
+  }
+
+  /**
    * 改风格的影响。
    *
    * 三条路径共用这份评估：手动改关键词、点预设、以及「问 AI」改稿。
@@ -214,22 +242,28 @@ export function GuidePage() {
           <div className="guide-rail-title">
             写故事 · {step + 1} / {STEPS.length}
           </div>
-          {STEPS.map((label, index) => (
-            <button
-              key={label}
-              type="button"
-              className={`wizard-step${index === step ? ' active' : ''}${index < step ? ' done' : ''}`}
-              onClick={() => setStep(index)}
-            >
-              <span className="wizard-dot" aria-hidden="true" />
-              <span>{label}</span>
-              <span className="wizard-state">
-                {index === step ? '当前' : index < step ? '已完成' : ''}
-              </span>
-            </button>
-          ))}
+          {STEPS.map((label, index) => {
+            const done = completed[index];
+            const pending = index < step && !done && index < STEPS.length - 1;
+            return (
+              <button
+                key={label}
+                type="button"
+                className={`wizard-step${index === step ? ' active' : ''}${done ? ' done' : ''}${
+                  pending ? ' pending' : ''
+                }`}
+                aria-current={index === step ? 'step' : undefined}
+                onClick={() => setStep(index)}
+              >
+                <span className="wizard-dot" aria-hidden="true" />
+                <span>{label}</span>
+                <span className="wizard-state">{stepState(index)}</span>
+              </button>
+            );
+          })}
           <p className="guide-rail-note">
             不知道选哪个就按默认值走。所有内容随时可以回来改，不会因为点了下一步就定死。
+            完成状态按内容判断：内容齐了才算完成，切换步骤不会改动它。
           </p>
         </aside>
 
