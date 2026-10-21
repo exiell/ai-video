@@ -431,11 +431,39 @@ describe('尺度锚定 · 镜头之间角色与环境比例不能变', () => {
     const shot = project.shots.find((s) => s.sceneId)!;
     const scene = project.scenes.find((s) => s.id === shot.sceneId)!;
     const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
-    expect(prompt.positive).toContain('same size relative to the character');
+    expect(prompt.positive).toContain('fixed objects keep their true size relative to the character');
     // 固定元素本身仍然在提示词里（由场景描述带出）
     expect(prompt.positive).toContain(scene.fixedElements[0]!);
     // 并且要有一条说明解释为什么
     expect(prompt.notes.some((n) => n.label === '尺度锚点')).toBe(true);
+  });
+
+  it('人物占比换成一个能算的数，且说明里标明是本工具自定换算', () => {
+    const project = structuredClone(sampleProject);
+    const shot = project.shots.find((s) => s.sceneId)!;
+    const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
+    // 这一镜是「大远景」，按表应该是八分之一画高
+    expect(shot.shotSize).toBe('extreme-wide');
+    expect(prompt.positive).toContain('about one eighth of the frame height');
+    // 旧写法里那句「as in other shots」没有指代对象，必须消失
+    expect(prompt.positive).not.toContain('as in other shots');
+    const note = prompt.notes.find((n) => n.label === '人物占比');
+    expect(note?.reason).toContain('不是行业标准');
+  });
+
+  it('缺接触会让角色像贴上去的，所以全景要有地面接触；特写不谈接触', () => {
+    const project = structuredClone(sampleProject);
+    const shot = project.shots.find((s) => s.sceneId)!;
+    const wide = buildFramePrompt(project, shot.id, 'first-frame')!;
+    expect(wide.positive).toContain('the same ground plane as the fixed objects');
+
+    // 特写里脚根本不在画面内，再要求「脚踩地面」是自相矛盾的指令
+    project.shots = project.shots.map((s) =>
+      s.id === shot.id ? { ...s, shotSize: 'extreme-close-up' } : s,
+    );
+    const closeUp = buildFramePrompt(project, shot.id, 'first-frame')!;
+    expect(closeUp.positive).not.toContain('ground plane');
+    expect(closeUp.positive).toContain('the face fills the frame');
   });
 
   it('场景没登记固定元素时不会硬造尺度锚点', () => {
@@ -445,7 +473,7 @@ describe('尺度锚定 · 镜头之间角色与环境比例不能变', () => {
       s.id === shot.sceneId ? { ...s, fixedElements: [] } : s,
     );
     const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
-    expect(prompt.positive).not.toContain('same size relative to the character');
+    expect(prompt.positive).not.toContain('fixed objects keep their true size');
   });
 
   it('尺度锚点的说明写清了它防的是什么', () => {
@@ -491,7 +519,7 @@ describe('提示词去重 · 同一件事只说一遍', () => {
     const prompt = buildFramePrompt(project, shot.id, 'first-frame')!;
 
     // 锚点还在
-    expect(prompt.positive).toContain('same size relative to the character');
+    expect(prompt.positive).toContain('fixed objects keep their true size relative to the character');
     // 而且不重复点名——场景描述里已经说过物件在哪了，
     // 再说一遍等于给模型两个版本
     const el = scene.fixedElements.find((e) => scene.identity.summaryEn.toLowerCase().includes(e.toLowerCase()));

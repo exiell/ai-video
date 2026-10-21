@@ -8,6 +8,7 @@ import {
   previousShotOf,
   referenceRolesOf,
   type ReferenceRole,
+  type ReferenceSlot,
 } from '../domain/image/referencePlan';
 import { useAppStore } from './app';
 import { currentTransport, useSettings } from './settings';
@@ -142,6 +143,48 @@ const REFERENCE_ROLE_PHRASE: Record<ReferenceRole, string> = {
   'character-sheet': 'the character design sheet, defining face, hairstyle, body proportions and outfit',
   'scene-plate': 'the empty scene reference plate, defining the location layout, fixed objects and light direction',
 };
+
+/**
+ * 一张参考图的职责说明（v0.46）。
+ *
+ * ===========================================================================
+ * 角色形象图为什么不能只写一句通用的话
+ * ===========================================================================
+ * 原来所有角色参考图共用一句「the character design sheet, …」。两个角色同框时
+ * 发出去的是：
+ *
+ *   Image 2 is the character design sheet, defining face, hairstyle, body proportions and outfit.
+ *   Image 3 is the character design sheet, defining face, hairstyle, body proportions and outfit.
+ *
+ * 两句话一模一样，模型不知道哪张是谁。于是「把两个人的特征混在一张脸上」
+ * 成了可以预期的结果。名字本来就在角色卡上，写进去就行。
+ *
+ * 第二件事：**形象图是一张多格设定稿，不是一个角色**。
+ * 全身图是六格排成一行（正面/侧面/背面/四分之三/俯视/仰视），
+ * 头像是三格。直接丢进去，模型可能把分格排版一起画出来，
+ * 或者把同一个人画好几次。所以要明说「它是什么、怎么用、别照着排版画」。
+ *
+ * 第三件事：**全身图能锁体型，头像不能**。对着一张只有头的图要求
+ * 「保持体型比例」，是在要求模型保持它看不见的东西。
+ */
+function referenceRolePhrase(slot: ReferenceSlot): string {
+  if (slot.role !== 'character-sheet') return REFERENCE_ROLE_PHRASE[slot.role];
+
+  const who = slot.owner ? `${slot.owner}'s` : 'the';
+  const sheet =
+    slot.detail === 'full-body'
+      ? `${who} character turnaround sheet, showing the same person in several views`
+      : `${who} character head reference sheet, showing the same head in several views`;
+  const whatToTake =
+    slot.detail === 'full-body'
+      ? 'defining face, hairstyle, build, body proportions and outfit'
+      : 'defining facial features, hairstyle and head shape; the body is not shown in this image';
+  return (
+    `${sheet}, ${whatToTake}. ` +
+    'Use it only to keep that one person consistent — pick the view in that sheet that matches this camera angle. ' +
+    'Do not copy the panel layout and do not draw that person more than once'
+  );
+}
 
 const FRAME_BATCH_LABEL: Record<FrameKind, string> = {
   'first-frame': '首帧',
@@ -429,6 +472,10 @@ export const useImage = create<ImageState>((set, get) => ({
 
     const referenceImages: string[] = [];
     const referenceLabels: string[] = [];
+    /** 逐张写职责用的英文说明，与 referenceImages 严格同序（v0.46） */
+    const referencePhrases: string[] = [];
+    /** 角色参考图分别是全身图还是头像，决定「锁脸」那句话怎么写（v0.46） */
+    const sheetDetails: ('full-body' | 'face')[] = [];
     let referenceRoles: ReferenceRole[] = [];
     /** 因风格不符被跳过的参考图，生成完要如实告诉用户 */
     let staleRoles: ReferenceRole[] = [];
@@ -453,8 +500,12 @@ export const useImage = create<ImageState>((set, get) => ({
       const ownFrames = await listAssetsFor(project.id, shotId);
       const previousFrames = previous ? await listAssetsFor(project.id, previous.id) : undefined;
       const characterSheets: Awaited<ReturnType<typeof listAssetsFor>>[] = [];
+      const characterNames: string[] = [];
       for (const characterId of shot?.characterIds ?? []) {
         characterSheets.push(await listAssetsFor(project.id, characterId));
+        characterNames.push(
+          project.characters.find((c) => c.id === characterId)?.name ?? 'the character',
+        );
       }
       const scenePlates = shot?.sceneId
         ? await listAssetsFor(project.id, shot.sceneId)
@@ -465,6 +516,9 @@ export const useImage = create<ImageState>((set, get) => ({
         capabilities: caps,
         previous,
         styleTags: project.brief.styleTags,
+        // 景别决定用全身图还是头像：全景读体型，近景读脸（v0.46）
+        ...(shot ? { shotSize: shot.shotSize } : {}),
+        characterNames,
         sources: {
           ownFrames,
           ...(previousFrames ? { previousFrames } : {}),
@@ -476,6 +530,8 @@ export const useImage = create<ImageState>((set, get) => ({
       for (const slot of plan.slots) {
         referenceImages.push(slot.dataUrl);
         referenceLabels.push(slot.label);
+        referencePhrases.push(referenceRolePhrase(slot));
+        if (slot.role === 'character-sheet' && slot.detail) sheetDetails.push(slot.detail);
       }
       referenceRoles = referenceRolesOf(plan);
       staleRoles = plan.staleSkipped;
@@ -485,7 +541,16 @@ export const useImage = create<ImageState>((set, get) => ({
       hasFirstFrameAnchor: referenceRoles.includes('own-first-frame'),
       hasPreviousEndAnchor: referenceRoles.includes('previous-end-frame'),
       // 逐张写职责时用的英文说明，必须与传图顺序一致
-      roles: referenceRoles.map((role) => REFERENCE_ROLE_PHRASE[role]),
+      roles: referencePhrases,
+      /**
+       * 空数组是**有意义的**：本镜一个角色都没有（纯空镜）。
+       * 传了空数组，提示词里就不会出现「保持人物面部特征」这句
+       * ——画面里没有人，要求保持人物的脸只会让模型硬塞一个人进去。
+       * 所以这里不能写成「没角色就不传」，那不传会退回旧行为。
+       */
+      sheetDetails,
+      // 几个角色同框。两个以上时要额外提醒「这是不同的人，别混成一个」
+      characterCount: sheetDetails.length,
       // 承接镜时用来明说「取景可以改、地方不能动」
       ...(prompt.shotSizeEn ? { shotSizeEn: prompt.shotSizeEn } : {}),
       ...(prompt.cameraPositionEn ? { cameraPositionEn: prompt.cameraPositionEn } : {}),

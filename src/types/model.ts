@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AniGuide 数据模型 —— 唯一真源
  *
  * 设计要点（对应 方案.md v0.6 §5.5）：
@@ -491,6 +491,15 @@ export interface ImageRequest {
     hasPreviousEndAnchor?: boolean;
     /** 各张参考图的职责，按传图顺序 */
     roles?: string[];
+    /**
+     * 角色参考图分别是哪一种（v0.46）：全身多视图还是头部特写。
+     *
+     * 决定「锁脸」那句话怎么写——对着一张只有头的图要求保持体型比例，
+     * 是在要求模型保持它看不见的东西。见 `withReferenceInstruction`。
+     */
+    sheetDetails?: ('full-body' | 'face')[];
+    /** 几个角色同框（v0.46）。两个以上时要额外提醒「这是不同的人」 */
+    characterCount?: number;
     /** 这一镜的景别（英文）。承接镜时用来明说「取景可以改、地方不能动」 */
     shotSizeEn?: string;
     /** 这一镜的机位 */

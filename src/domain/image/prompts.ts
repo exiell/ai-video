@@ -2,6 +2,7 @@ import type {
   ModelCapabilities,
   PromptNote,
   PromptLine,
+  ShotSize,
   TargetPlatform,
 } from '../../types/model';
 import { PLATFORM_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
@@ -9,6 +10,61 @@ import {
   buildCharacterSheetSpec,
   type CharacterSheetKind,
 } from './characterSheet';
+
+/**
+ * 人物在这一档景别里应该占画面高度的多少（v0.46 新增）。
+ *
+ * ===========================================================================
+ * 这是什么，以及它**不是**什么
+ * ===========================================================================
+ * 这是**本项目自定的换算**，不是行业标准。各家摄影教材给的数字有出入，
+ * 这里取的是「一眼看过去对不对」的常用值。界面上的说明与导出的提示词文件
+ * 都照实标注了这一点，不许它冒充行业规范。
+ *
+ * ===========================================================================
+ * 为什么需要它
+ * ===========================================================================
+ * 原来说明的是「固定物体相对角色的大小不随镜头改变」。这句话看着没问题，
+ * 实际上**没有指代对象**：模型只生成一张图，看不到「别的镜头」。
+ * 于是它每次按构图需要自由决定人有多高——同一个房间里的同一张桌子，
+ * 在 A 镜里到腰高、在 B 镜里到胸口高。用户看到的就是「人物大小不合理」。
+ *
+ * 换成一句能算的话：**这一档景别里，人应该占画面高度的几成。**
+ * 它至少给了模型一个可以对齐的数，而不是一个它无从查证的承诺。
+ */
+const SUBJECT_HEIGHT_SHARE: Record<ShotSize, string> = {
+  'extreme-wide': 'the character occupies about one eighth of the frame height',
+  wide: 'the character occupies about one quarter of the frame height',
+  full: 'the character occupies about three quarters of the frame height with the head near the top and the feet near the bottom',
+  medium: 'the character occupies most of the frame height with the crop at about the waist',
+  'close-up': 'the character occupies most of the frame height from the shoulders up',
+  'extreme-close-up': 'the face fills the frame',
+};
+
+/** 这一档景别里地面和脚看不看得见。看不见就不谈接触，否则是自相矛盾的指令。 */
+const GROUND_VISIBLE: ReadonlySet<ShotSize> = new Set<ShotSize>([
+  'extreme-wide',
+  'wide',
+  'full',
+  'medium',
+]);
+
+/**
+ * 接触与遮挡（v0.46 新增）。
+ *
+ * 缺了「接触」，画出来的人就像**贴**在背景上的剪影：脚不落地、影子没有平面。
+ * 这是「人物像 P 上去的」最直接的技术原因，而不是模型不够好。
+ *
+ * 缺了「遮挡」，人就永远画在场景**前面**而不是**里面**——
+ * 该被桌角挡住的小腿会完整地穿过桌子。
+ */
+const GROUND_CONTACT = 'the character stands on the same ground plane as the fixed objects with the shadow falling on that plane';
+
+const OCCLUSION = 'objects in front of the character overlap and hide part of the body';
+
+export function subjectHeightShare(shotSize: ShotSize): string {
+  return SUBJECT_HEIGHT_SHARE[shotSize];
+}
 
 /**
  * 出图提示词引擎（方案.md §3.2 M3/M4）
@@ -277,28 +333,43 @@ export function buildFramePrompt(
   }
 
   /**
-   * 尺度锚定。
+   * 尺度锚定（v0.23 起，v0.46 重写）。
    *
-   * 【v0.23 新增】针对用户实测反馈的一个具体问题：
-   * **镜头之间角色的「大小比例」会变**——同一个房间里的同一张桌子，
-   * 在 A 镜里到腰高、在 B 镜里到胸口高。
+   * 【v0.23 的原始问题】镜头之间角色的「大小比例」会变——同一个房间里的
+   * 同一张桌子，在 A 镜里到腰高、在 B 镜里到胸口高。
+   * 根因是提示词里注入了固定元素，却从没说过这些东西与角色之间的尺寸关系。
    *
-   * 根因：提示词里注入了固定元素，却**从没说过这些东西与角色之间的尺寸关系**。
-   * 模型知道「画面里有草垛」，但不知道「草垛比人矮」。
-   * 于是它每次按构图需要自由调动这些东西的大小，看起来就是空间在缩放。
+   * 【v0.46 修的是这句本身】原来写的是
+   * 「fixed objects keep the same size relative to the character as in other shots of this scene」。
+   * 「as in other shots」在这一次单图生成里**没有指代对象**——模型看不到别的镜头。
+   * 这句话实际上等于没说，所以那个老问题一直没被真正解决。
    *
-   * 修法是让**固定元素同时充当尺度参照物**：明说它们的相对大小不随镜头改变。
-   * 这是现有素材就能做到的事，不需要用户额外填任何字段。
+   * 现在换成两句能落地的：
+   *  1. 固定物体与角色的真实尺寸关系不变（去掉「别的镜头」这种空指代）
+   *  2. **人物占画面高度的几成**——一个模型可以照着算的数（见 `SUBJECT_HEIGHT_SHARE`）
    */
   if (scene && scene.fixedElements.length > 0) {
     notes.push({
-      fragment: 'fixed objects keep the same size relative to the character as in other shots of this scene',
+      fragment: 'fixed objects keep their true size relative to the character',
       label: '尺度锚点',
       reason:
         '固定元素（上面已列出）同时充当尺度参照物。这里只声明「它们的相对大小不随镜头改变」，' +
         '不再重复点名具体物件——场景描述里已经说过它们在哪儿了。' +
         '不声明这一点，模型会为了凑构图把桌椅、门窗、草垛随手放大或缩小，' +
         '那正是「镜头之间角色与环境比例变了」的原因。',
+    });
+  }
+
+  if (characters.length > 0) {
+    notes.push({
+      fragment: SUBJECT_HEIGHT_SHARE[shot.shotSize as ShotSize] ?? '',
+      label: '人物占比',
+      reason:
+        '这一档景别里人物应该占画面高度的多少。' +
+        '**这是本工具自定的换算，不是行业标准**——各家摄影教材给的数字有出入，' +
+        '这里取的是「一眼看过去对不对」的常用值，写出来只是为了让模型有个能对齐的数。' +
+        '原来这一句写的是「相对大小不随镜头改变（as in other shots）」，' +
+        '而模型在这次生成里根本看不到别的镜头，所以那句话一直没起作用。',
     });
   }
 
@@ -436,12 +507,27 @@ export function buildFramePrompt(
     ...identityFirst,
     sceneSummary,
     ...extraElements,
-    // 尺度锚点：固定元素的相对大小不随镜头改变。
+    // 尺度锚点：固定物体的真实尺寸与角色的关系不随镜头改变。
     // 它含有固定元素名，但**不能被去重删掉**——它是一句独立的指令，
     // 不是元素的重复列举。（删掉它就会退回「桌椅随手放大缩小」的老问题。）
     scene && scene.fixedElements.length > 0
-      ? 'fixed objects keep the same size relative to the character as in other shots of this scene'
+      ? 'fixed objects keep their true size relative to the character'
       : '',
+    // 人物占比 + 接触 + 遮挡（v0.46）。
+    // 画面里没有角色时全部跳过——空镜里要求「人物占四分之一画高」
+    // 只会让模型硬塞一个人进去。
+    //
+    // 条件用 `characters.length` 而不是 `characterDescriptions.length`，
+    // 为的是和上面「人物占比」那条 note 的条件**字面一致**。
+    // 两者按构造恒等（每个角色至少落到一个兜底描述），但两个条件写成不同样子，
+    // 以后有人改一边就会让「说明里讲了、正文里没讲」悄悄发生。
+    ...(characters.length > 0
+      ? [
+          SUBJECT_HEIGHT_SHARE[shot.shotSize as ShotSize] ?? '',
+          GROUND_VISIBLE.has(shot.shotSize as ShotSize) ? GROUND_CONTACT : '',
+          OCCLUSION,
+        ]
+      : []),
     // 景别用自然英文（``extreme wide establishing shot``），
     // 不再注入枚举值 ``extreme-wide`` —— 后者不是英语，还带连字符
     SHOT_SIZE_EN[shot.shotSize as keyof typeof SHOT_SIZE_EN] ?? shot.shotSize,

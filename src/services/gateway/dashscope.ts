@@ -178,6 +178,28 @@ export interface ReferenceInstructionInput {
    * 一句笼统的「保持参考图一致」等于什么也没说。
    */
   roles?: string[];
+  /**
+   * 角色参考图分别是哪一种：全身多视图还是头部特写（v0.46）。
+   *
+   * 【为什么必须知道】原来这里无条件追加一句「保持面部、发型和**体型比例**」。
+   * 可是默认配置下的角色参考图是一张**头部特写**——里面根本没有身体。
+   * 那句话等于要求模型保持它看不见的东西，模型只能猜，
+   * 猜出来的身高体型还要和场景里的桌椅门窗对齐，于是「人物大小不合理」。
+   *
+   * 传了这个，说明才会跟着图走：
+   *  - 全身图在 → 要求保持体型比例（它看得见）
+   *  - 只有头像 → 改成「身高体型按场景里写明的固定物体来定」
+   *
+   * 不传时退回旧行为（兼容只给了张数的调用点）。
+   */
+  sheetDetails?: ('full-body' | 'face')[];
+  /**
+   * 几个角色同框（v0.46）。两个以上时要额外提醒「这是不同的人」。
+   *
+   * 两张角色参考图在提示词里曾经是**同一句话**，模型分不清谁是谁。
+   * 现在每张都写了名字，这句话是第二道保险。
+   */
+  characterCount?: number;
   /** 出的是哪一帧 */
   frameKind?: 'first-frame' | 'action-peak' | 'end-frame';
   /** 这一镜的景别（英文），用于承接镜时明说取景可以改 */
@@ -205,6 +227,19 @@ export function withReferenceInstruction(
         .slice(0, input.referenceCount)
         .map((role, index) => `Image ${index + 1} is ${role}.`)
         .join(' '),
+    );
+  }
+
+  /**
+   * 多个角色同框时明说「这是不同的人」。
+   *
+   * 不是多余的强调：两张形象图在提示词里长得几乎一样，
+   * 而「把两个人的特征混在一张脸上」是这类模型的常见失败方式。
+   */
+  if ((input.characterCount ?? 0) > 1) {
+    parts.push(
+      'Those character references are different people. ' +
+        'Keep each of them as a separate individual with their own face and build, and never blend them into one person.',
     );
   }
 
@@ -250,9 +285,39 @@ export function withReferenceInstruction(
       parts.push('This image depicts the end of that same continuous shot.');
     }
   }
-  parts.push(
-    'Keep the facial features, hairstyle and body proportions of the person in the character reference image exactly.',
-  );
+  /**
+   * 锁脸 / 锁体型的那句话，跟着参考图**实际是什么**走。
+   *
+   * 【v0.46 修】原来这里无条件追加一句「保持面部、发型和体型比例」。
+   * 默认配置下的角色参考图是一张头部特写，里面没有身体——
+   * 那句话在要求模型保持它看不见的东西，模型只能猜。
+   *
+   * `sheetDetails` 是空的（一个角色都没有）时**什么都不说**：
+   * 画面里没有人，却要求「保持人物面部特征」，只会让模型硬塞一个人进去。
+   */
+  const details = input.sheetDetails;
+  if (!details) {
+    // 旧调用点只给了张数，不知道参考图是什么，沿用原来那句
+    parts.push(
+      'Keep the facial features, hairstyle and body proportions of the person in the character reference image exactly.',
+    );
+  } else {
+    const hasFull = details.includes('full-body');
+    const hasFace = details.includes('face');
+    if (hasFull) {
+      parts.push(
+        'Keep the facial features, hairstyle, build and body proportions of that character exactly as drawn in the turnaround reference.',
+      );
+    }
+    if (hasFace) {
+      parts.push(
+        hasFull
+          ? 'Where a head reference is also given, match its facial features and hairstyle exactly.'
+          : 'Match the facial features and hairstyle in that head reference exactly. ' +
+            'Take height, build and the volume of the clothing from the fixed objects described in this scene, not from that image, because that image shows the head only.',
+      );
+    }
+  }
   return `${parts.join(' ')} ${prompt}`;
 }
 

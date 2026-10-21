@@ -179,6 +179,10 @@ export async function generateImages(
           hasPreviousEndAnchor: req.frameRole?.hasPreviousEndAnchor ?? false,
           ...(req.frameRole?.roles ? { roles: req.frameRole.roles } : {}),
           ...(req.frameRole ? { frameKind: req.frameRole.kind } : {}),
+          ...(req.frameRole?.sheetDetails ? { sheetDetails: req.frameRole.sheetDetails } : {}),
+          ...(req.frameRole?.characterCount !== undefined
+            ? { characterCount: req.frameRole.characterCount }
+            : {}),
           ...(req.frameRole?.shotSizeEn ? { shotSizeEn: req.frameRole.shotSizeEn } : {}),
           ...(req.frameRole?.cameraPositionEn
             ? { cameraPositionEn: req.frameRole.cameraPositionEn }

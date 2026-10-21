@@ -1,4 +1,4 @@
-import type { ModelCapabilities, Project, Shot } from '../../types/model';
+import type { ModelCapabilities, Project, Shot, ShotSize } from '../../types/model';
 
 /**
  * 跨镜参考图编排（方案.md §7.6.10，【v0.21 新增】）
@@ -49,6 +49,23 @@ export interface ReferenceSlot {
   dataUrl: string;
   /** 界面上显示用的说明 */
   label: string;
+  /**
+   * 这张形象图是谁的（v0.46）。
+   *
+   * 【为什么必须带上名字】原来两张角色参考图在提示词里是**同一句话**：
+   * 「Image 2 is the character design sheet… Image 3 is the character design sheet…」
+   * ——模型不知道哪张是林冲哪张是陆谦。两个角色同框时这正是
+   * 「人物和场景错配」的一条具体机制。名字就在角色卡上，用上就行。
+   */
+  owner?: string;
+  /**
+   * 角色参考图是全身多视图还是头部特写（v0.46）。
+   *
+   * 两种图的职责不一样：全身图能锁体型，头像只能锁脸。
+   * 职责说明必须跟着变——对着一张只有头的图要求「保持体型比例」，
+   * 是在要求模型保持它看不见的东西。
+   */
+  detail?: 'full-body' | 'face';
 }
 
 export interface ReferencePlan {
@@ -194,12 +211,61 @@ function newestOf(
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.dataUrl;
 }
 
-/** 角色_head特写优先于全身图——脸只能靠图，体型服装文字能说清 */
-function pickCharacterSheet(assets: RefAsset[], style?: string[]): string | undefined {
-  return (
-    newestOf(assets, 'character-sheet-face', style) ?? newestOf(assets, 'character-sheet', style)
-  );
+/**
+ * 角色参考图该用哪一张。
+ *
+ * ===========================================================================
+ * 【v0.46 改】原来无条件优先头部特写，理由是「脸只能靠图，体型服装文字能说清」
+ * ===========================================================================
+ * 这句话在近景成立，在**远景不成立**。
+ *
+ * 头部特写那张图里**根本没有身体**——而它恰恰是「人物大小不合理」的源头：
+ * 模型手上关于这个角色的视觉信息只有三个头，身高、肩宽、腿长只能自己猜，
+ * 猜出来还要和场景里的桌椅门窗对齐，于是同一个人在 A 镜里到腰高、
+ * 在 B 镜里到胸口高。
+ *
+ * 更浪费的是：每个角色都会出全身多视图（`generateAllCharacterSheets` 先出全身、
+ * 再拿它当参考出头像），所以这张画了身体的图**一直存在**，只是从来没被选中过。
+ *
+ * 现在的规则按景别分档：
+ *  - 全景及更远（`full` / `wide` / `extreme-wide`）：用全身多视图。这一档读的就是体型与轮廓。
+ *  - 中景及更近：用头部特写。这一档读的是脸，身体已经被画幅裁掉大半。
+ *
+ * 哪一档缺图就退回另一档——缺图时退回，比干脆不给参考图强得多。
+ */
+function pickCharacterSheet(
+  assets: RefAsset[],
+  style: string[] | undefined,
+  preferFullBody: boolean,
+): { url: string | undefined; detail: 'full-body' | 'face' } {
+  const full = newestOf(assets, 'character-sheet', style);
+  const face = newestOf(assets, 'character-sheet-face', style);
+  if (preferFullBody) {
+    return full ? { url: full, detail: 'full-body' } : { url: face, detail: 'face' };
+  }
+  return face ? { url: face, detail: 'face' } : { url: full, detail: 'full-body' };
 }
+
+/**
+ * 哪些景别该用全身图。
+ *
+ * 判据是「这一档里观众能不能看出体型」。全景、远景、大远景里人是画面的一小部分，
+ * 比例错了最刺眼；中景以下身体被裁掉大半，读的是脸。
+ */
+const FULL_BODY_SHOT_SIZES: ReadonlySet<ShotSize> = new Set<ShotSize>([
+  'full',
+  'wide',
+  'extreme-wide',
+]);
+
+/**
+ * 没传景别时按哪一档处理。
+ *
+ * 真实调用方（`store/image.ts`）**总是**会传景别，这个默认值只服务于
+ * 测试与历史数据。选 `medium` 是为了保持改动前的行为（优先头像），
+ * 避免老调用方在不知不觉中换了参考图。
+ */
+const DEFAULT_SHOT_SIZE: ShotSize = 'medium';
 
 /**
  * 编排这一帧的参考图。
@@ -221,6 +287,19 @@ export function planReferenceImages(args: {
   previous: Shot | undefined;
   sources: ReferenceSource;
   /**
+   * 这一镜的景别（v0.46）。
+   *
+   * 只影响一件事：角色参考图用全身多视图还是头部特写。见 `pickCharacterSheet`。
+   */
+  shotSize?: ShotSize;
+  /**
+   * 出场角色的名字，与 `sources.characterSheets` 一一对应（v0.46）。
+   *
+   * 用来把「这一张是谁的形象图」写进提示词。不传时退化成通用说法
+   * （「the character turnaround sheet」），比不写强，但多角色时还是会混。
+   */
+  characterNames?: string[];
+  /**
    * 当前项目的风格关键词（v0.41）。
    *
    * 【为什么要有这个参数】踩过一个很贵的坑：改完风格之后重出首尾帧，
@@ -238,7 +317,8 @@ export function planReferenceImages(args: {
    */
   styleTags?: string[];
 }): ReferencePlan {
-  const { kind, capabilities, previous, sources, styleTags } = args;
+  const { kind, capabilities, previous, sources, styleTags, characterNames } = args;
+  const shotSize = args.shotSize ?? DEFAULT_SHOT_SIZE;
   const limit = capabilities.maxReferenceImages || 0;
 
   /** 这一批素材里有没有因为风格不符被跳过的，用于如实告知 */
@@ -252,7 +332,12 @@ export function planReferenceImages(args: {
   };
 
   const continuity = isContinuousWithPrevious(previous);
-  const candidates: { role: ReferenceRole; dataUrl: string | undefined }[] = [];
+  const candidates: {
+    role: ReferenceRole;
+    dataUrl: string | undefined;
+    owner?: string;
+    detail?: 'full-body' | 'face';
+  }[] = [];
 
   if (kind === 'first-frame') {
     // 出首帧时，上一镜尾帧是唯一的构图锚点
@@ -273,13 +358,20 @@ export function planReferenceImages(args: {
     candidates.push({ role: 'own-first-frame', dataUrl: pick(sources.ownFrames, 'first-frame') });
   }
 
-  for (const sheet of sources.characterSheets) {
-    const url = pickCharacterSheet(sheet, styleTags);
-    if (!url && sheet.some((a) => a.dataUrl && !sameStyle(a.styleTags, styleTags))) {
+  const preferFullBody = FULL_BODY_SHOT_SIZES.has(shotSize);
+  sources.characterSheets.forEach((sheet, index) => {
+    const picked = pickCharacterSheet(sheet, styleTags, preferFullBody);
+    if (!picked.url && sheet.some((a) => a.dataUrl && !sameStyle(a.styleTags, styleTags))) {
       staleSkipped.push('character-sheet');
     }
-    candidates.push({ role: 'character-sheet', dataUrl: url });
-  }
+    const owner = characterNames?.[index];
+    candidates.push({
+      role: 'character-sheet',
+      dataUrl: picked.url,
+      detail: picked.detail,
+      ...(owner ? { owner } : {}),
+    });
+  });
   candidates.push({ role: 'scene-plate', dataUrl: pick(sources.scenePlates, 'scene-plate') });
 
   const slots: ReferenceSlot[] = [];
@@ -293,7 +385,14 @@ export function planReferenceImages(args: {
     slots.push({
       role: candidate.role,
       dataUrl: candidate.dataUrl,
-      label: REFERENCE_ROLE_LABEL[candidate.role],
+      label:
+        candidate.role === 'character-sheet' && candidate.detail
+          ? `${candidate.owner ? `${candidate.owner} · ` : ''}${
+              candidate.detail === 'full-body' ? '全身多视图（锁体型）' : '头部特写（锁脸）'
+            }`
+          : REFERENCE_ROLE_LABEL[candidate.role],
+      ...(candidate.owner ? { owner: candidate.owner } : {}),
+      ...(candidate.detail ? { detail: candidate.detail } : {}),
     });
   }
 
