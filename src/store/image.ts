@@ -661,6 +661,24 @@ async function runGeneration(args: RunArgs): Promise<void> {
       aspectRatio: prompt.aspectRatio,
       count: 1,
       ...(referenceImages.length > 0 ? { referenceImages } : {}),
+      /*
+        【v0.46 修】这里原来**没有**这一行。
+
+        `draft.frameRole` 一直在被构造、一直被存进素材，却从来没进过请求体。
+        后果是 `withReferenceInstruction` 每次都走 `sheetDetails === undefined`
+        的旧分支，无论参考图里是什么，都无条件追加那句
+        「Keep the facial features, hairstyle and body proportions of the person
+        in the character reference image exactly.」
+
+        也就是说 v0.44 做的「逐张说明参考图职责」「头像不再被要求保持体型」
+        「两个角色明说是不同的人」，**一次都没有真正到达模型**。
+        测试当时只测了 `withReferenceInstruction` 本身，没测这条线，
+        所以全绿而线上无效。
+
+        现在把它接上。`draft.frameRole` 就是这一帧的参考图说明，
+        与素材里存的那份是同一个对象，不会两边说法不一致。
+      */
+      ...(draft.frameRole ? { frameRole: draft.frameRole } : {}),
     },
     ...(transport ? { transport } : {}),
   });
