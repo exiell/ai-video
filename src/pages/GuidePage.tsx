@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { Field, WhyDetails } from '../components/bits';
+import { ConfirmDialog, Field, WhyDetails } from '../components/bits';
 import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { TermHint } from '../components/TermHint';
 import { SelectMenu } from '../components/SelectMenu';
 import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
+import { assessStyleChange } from '../domain/help/styleChange';
+import { useImage } from '../store/image';
 import type { StoryScene, TargetPlatform } from '../types/model';
 import { PLATFORM_LABEL } from '../types/model';
 import { newId } from '../services/storage';
@@ -124,6 +126,15 @@ export function GuidePage() {
   const navigate = useNavigate();
   const project = useAppStore((s) => s.project);
   const patchBrief = useAppStore((s) => s.patchBrief);
+  const assetCount = useImage((s) => s.assetCount);
+  const refreshAssetCount = useImage((s) => s.refreshAssetCount);
+  /** 待确认的风格切换（null 表示没有挂起的对话） */
+  const [pendingTags, setPendingTags] = useState<string[] | null>(null);
+
+  // 进页面时统计一次图片总数：改风格提示要用它说「有多少张图会是旧风格」
+  useEffect(() => {
+    void refreshAssetCount();
+  }, [refreshAssetCount]);
   const patchStory = useAppStore((s) => s.patchStory);
   const patchProject = useAppStore((s) => s.patchProject);
   const createEmptyProject = useAppStore((s) => s.createEmptyProject);
@@ -162,6 +173,19 @@ export function GuidePage() {
   function removeStoryScene(id: string) {
     patchStory({ scenes: story.scenes.filter((s) => s.id !== id) });
   }
+
+  /**
+   * 改风格的影响。
+   *
+   * 三条路径共用这份评估：手动改关键词、点预设、以及「问 AI」改稿。
+   * 三处各写一份文案必然分叉，所以判定和措辞都在 domain/help/styleChange.ts 里。
+   */
+  const styleImpact = assessStyleChange({
+    characters: project?.characters.length ?? 0,
+    scenes: project?.scenes.length ?? 0,
+    shots: project?.shots.length ?? 0,
+    imageCount: assetCount,
+  });
 
   return (
     <>
@@ -463,6 +487,54 @@ export function GuidePage() {
             </div>
           </Field>
 
+          {/*
+            改风格的影响提示（v0.42）。
+
+            为什么常驻显示而不是弹窗：风格这一节的三个入口（中文意图、生成关键词、
+            点预设）都可能被改，弹窗只能在某个具体动作上拦；而用户真正需要知道的是
+            「在已经做出内容之后改风格，代价是什么」——这件事在他动手之前就该看见。
+
+            弹窗只留给「点预设」这种一步替换整套词的离散动作。
+          */}
+          {styleImpact.needed ? (
+            <div className="issue warning" style={{ marginBottom: 14 }}>
+              <div className="issue-title">
+                已经做过内容了 —— 现在改风格会有代价
+              </div>
+              <div className="issue-line">
+                你的项目里已经有
+                {[
+                  project.characters.length > 0 ? `${project.characters.length} 个角色` : '',
+                  project.scenes.length > 0 ? `${project.scenes.length} 个场景` : '',
+                  project.shots.length > 0 ? `${project.shots.length} 个镜头` : '',
+                  assetCount > 0 ? `${assetCount} 张图` : '',
+                ]
+                  .filter(Boolean)
+                  .join('、')}
+                。改风格不会自动更新它们：
+              </div>
+              <ul className="issue-line" style={{ paddingLeft: 20, margin: '4px 0 0' }}>
+                {styleImpact.risks.map((risk, i) => (
+                  <li key={i}>
+                    <RichText>{risk}</RichText>
+                  </li>
+                ))}
+              </ul>
+              <details className="why">
+                <summary>如果还是要改，按这个顺序做</summary>
+                <div className="why-body">
+                  <ol style={{ paddingLeft: 20, margin: 0 }}>
+                    {styleImpact.steps.map((step, i) => (
+                      <li key={i} style={{ marginBottom: 4 }}>
+                        <RichText>{step}</RichText>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </details>
+            </div>
+          ) : null}
+
           <Field
             label="风格倾向（随便写，中文就行）"
             hint="这一段是你自己的备忘，同时也告诉模型「这部片子该是什么调子」——它会据此写出贴合风格的角色与场景描述。"
@@ -505,9 +577,17 @@ export function GuidePage() {
                     原来点已选中的预设只是把同一套词再写一遍，等于没法退回「不用预设」。
                     用户想改回空白、或想完全手写关键词时就没有出路了。
                   */
-                  onClick={() =>
-                    patchBrief({ styleTags: active ? [] : [...preset.tags] })
-                  }
+                  /*
+                    已经做过内容时，点预设等于**一步替换整套风格词**——
+                    这是最容易被低估的操作（看起来只是换个按钮）。
+                    所以它走确认对话框；手动改关键词则用上面那块常驻提示，
+                    不会每敲一个字弹一次。
+                  */
+                  onClick={() => {
+                    const next = active ? [] : [...preset.tags];
+                    if (styleImpact.needed) setPendingTags(next);
+                    else patchBrief({ styleTags: next });
+                  }}
                   title={active ? '再点一下取消这个预设' : preset.description}
                   aria-pressed={active}
                 >
@@ -723,6 +803,52 @@ export function GuidePage() {
           <p className="aside-note">不用一次写对。所有内容随时可以回来改。</p>
         </aside>
       </div>
+
+      {/*
+        点预设的确认（v0.42）。
+
+        只在这一步弹窗：它是一步替换整套风格词的离散动作，点错了代价很大。
+        手动改关键词不弹（那会变成每敲一个字弹一次），改为用上面那块常驻提示。
+      */}
+      <ConfirmDialog
+        open={pendingTags !== null}
+        title="改风格会影响已经做好的内容"
+        confirmLabel="我明白，改吧"
+        cancelLabel="先不改"
+        onCancel={() => setPendingTags(null)}
+        onConfirm={() => {
+          if (pendingTags !== null) patchBrief({ styleTags: pendingTags });
+          setPendingTags(null);
+        }}
+      >
+        <div>
+          你的项目里已经有
+          {[
+            project.characters.length > 0 ? `${project.characters.length} 个角色` : '',
+            project.scenes.length > 0 ? `${project.scenes.length} 个场景` : '',
+            project.shots.length > 0 ? `${project.shots.length} 个镜头` : '',
+            assetCount > 0 ? `${assetCount} 张图` : '',
+          ]
+            .filter(Boolean)
+            .join('、')}
+          。换成新风格之后：
+        </div>
+        <ul>
+          {styleImpact.risks.map((risk, i) => (
+            <li key={i}>
+              <RichText>{risk}</RichText>
+            </li>
+          ))}
+        </ul>
+        <div style={{ marginTop: 12, color: 'var(--text)' }}>要改的话，按这个顺序：</div>
+        <ol>
+          {styleImpact.steps.map((step, i) => (
+            <li key={i}>
+              <RichText>{step}</RichText>
+            </li>
+          ))}
+        </ol>
+      </ConfirmDialog>
     </>
   );
 }

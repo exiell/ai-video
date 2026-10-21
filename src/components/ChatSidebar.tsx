@@ -1,6 +1,8 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { useChat, type ChatBubble } from '../store/chat';
 import { useAppStore } from '../store/app';
+import { useImage } from '../store/image';
+import { assessStyleChange } from '../domain/help/styleChange';
 import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
 import { currentLlmName } from '../services/llm/readiness';
 import { RichText } from './bits';
@@ -331,8 +333,30 @@ function EditGroup({ group, isActive }: { group: EditGroupData; isActive: boolea
 function EditCard({ edit, isActive }: { edit: ChatEditProposal; isActive: boolean }) {
   const selected = useChat((s) => s.selected);
   const toggleEdit = useChat((s) => s.toggleEdit);
+  const project = useAppStore((s) => s.project);
+  const assetCount = useImage((s) => s.assetCount);
   const checked = selected.has(edit.id);
   const isDelete = edit.op === 'delete';
+
+  /**
+   * 这条提议是不是在改风格？
+   *
+   * 「问 AI」是改风格的第三条路径（前两条是手动改和点预设）。
+   * 用户可能只说「换成水墨风」，模型就会提议改 `brief.styleTags`——
+   * 而这一条同样会让已生成的图失效。风险提示必须跟他手动改时一样。
+   */
+  const touchesStyle =
+    edit.op === 'set' &&
+    edit.target.kind === 'brief' &&
+    (edit.target.field === 'styleTags' || edit.target.field === 'styleTone');
+  const styleImpact = touchesStyle
+    ? assessStyleChange({
+        characters: project?.characters.length ?? 0,
+        scenes: project?.scenes.length ?? 0,
+        shots: project?.shots.length ?? 0,
+        imageCount: assetCount,
+      })
+    : null;
 
   return (
     <label
@@ -394,6 +418,31 @@ function EditCard({ edit, isActive }: { edit: ChatEditProposal; isActive: boolea
             {edit.reason}
           </div>
         ) : null}
+        {styleImpact?.needed ? (
+          <div className="issue warning" style={{ margin: '8px 0 0', padding: '8px 10px' }}>
+            <div className="issue-title">改风格会影响已经做好的内容</div>
+            <ul className="issue-line" style={{ paddingLeft: 18, margin: '4px 0 0' }}>
+              {styleImpact.risks.map((risk, i) => (
+                <li key={i} style={{ marginBottom: 3 }}>
+                  <RichText>{risk}</RichText>
+                </li>
+              ))}
+            </ul>
+            <details className="why">
+              <summary>如果还是要改，按这个顺序做</summary>
+              <div className="why-body">
+                <ol style={{ paddingLeft: 18, margin: 0 }}>
+                  {styleImpact.steps.map((step, i) => (
+                    <li key={i} style={{ marginBottom: 3 }}>
+                      <RichText>{step}</RichText>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </details>
+          </div>
+        ) : null}
+
         {edit.sideEffect ? (
           <div className="hint" style={{ marginTop: 2, color: 'var(--warning)' }}>
             副作用：{edit.sideEffect}

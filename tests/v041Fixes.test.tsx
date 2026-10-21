@@ -99,6 +99,15 @@ describe('引导向导 · 风格预设要能取消', () => {
     act(() => (stepBtn as HTMLButtonElement).click());
   }
 
+  /** 点对话框里的确认按钮 */
+  function confirmDialog(el: HTMLElement): void {
+    const btn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('我明白，改吧'),
+    );
+    if (!btn) throw new Error('确认对话框没出现');
+    act(() => (btn as HTMLButtonElement).click());
+  }
+
   function presetButton(el: HTMLElement): HTMLButtonElement {
     const found = [...el.querySelectorAll('button')].find(
       (b) =>
@@ -109,10 +118,18 @@ describe('引导向导 · 风格预设要能取消', () => {
     return found as HTMLButtonElement;
   }
 
-  it('点一下选中，把整组英文风格词写进项目', () => {
+  it('**点预设先弹确认**，确认后才写进项目', () => {
+    /*
+      v0.42：项目里已经有角色/场景/分镜时，点预设等于一步替换整套风格词。
+      这是最容易被低估的操作（看起来只是换个按钮），所以要走确认。
+    */
     const el = render(<GuidePage />);
     goToStyleStep(el);
     act(() => presetButton(el).click());
+    // 还没确认 → 不应生效
+    expect(useAppStore.getState().project!.brief.styleTags).toEqual([]);
+    // 确认之后才生效
+    confirmDialog(el);
     expect(useAppStore.getState().project!.brief.styleTags).toEqual(preset.tags);
     cleanup(el);
   });
@@ -125,6 +142,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     const el = render(<GuidePage />);
     goToStyleStep(el);
     act(() => presetButton(el).click());
+    confirmDialog(el);
     expect(useAppStore.getState().project!.brief.styleTags).toEqual(preset.tags);
 
     // 重新渲染后按钮已变成选中态，再点一次应当清空
@@ -136,6 +154,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     ) as HTMLButtonElement;
     expect(activeBtn, '选中态没显示出来').toBeTruthy();
     act(() => activeBtn.click());
+    confirmDialog(el2);
     expect(useAppStore.getState().project!.brief.styleTags).toEqual([]);
     cleanup(el2);
   });

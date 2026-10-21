@@ -20,7 +20,7 @@ import {
   buildScenePlatePrompt,
   type ImagePromptInput,
 } from '../domain/image/prompts';
-import { deleteAsset, listAssetsFor, saveAssets } from '../services/storage';
+import { deleteAsset, listAssets, listAssetsFor, saveAssets } from '../services/storage';
 import {
   type CharacterSheetKind,
 } from '../domain/image/characterSheet';
@@ -68,12 +68,22 @@ interface ImageState {
   feedback: Record<string, ImageTaskFeedback | undefined>;
   /** refId → 素材列表 */
   gallery: Record<string, Asset[]>;
+  /**
+   * 本项目已经生成并存在本机的图片总数。
+   *
+   * 为什么单独记一个数：改风格前要提示「你有 N 张图会是旧风格」，
+   * 而 `gallery` 是按 refId 分片加载的，随时可能不全。这个数在每次生成 /
+   * 删除 / 进项目时刷新，是**项目级的准确值**。
+   */
+  assetCount: number;
   /** 批量生成进度。非空表示正在批量跑。 */
   batch: BatchProgress | null;
   /** 批量完成后的总结 */
   batchSummary: string | null;
 
   loadGallery: (refId: string) => Promise<void>;
+  /** 重新统计本项目图片总数（进项目、生成完、删除后调用） */
+  refreshAssetCount: () => Promise<void>;
   clearFeedback: (key: string) => void;
   removeAsset: (refId: string, assetId: string) => Promise<void>;
 
@@ -163,8 +173,23 @@ export const useImage = create<ImageState>((set, get) => ({
   pending: null,
   feedback: {},
   gallery: {},
+  assetCount: 0,
   batch: null,
   batchSummary: null,
+
+  refreshAssetCount: async () => {
+    const project = useAppStore.getState().project;
+    if (!project) {
+      set({ assetCount: 0 });
+      return;
+    }
+    try {
+      const all = await listAssets(project.id);
+      set({ assetCount: all.filter((a) => a.dataUrl).length });
+    } catch {
+      // 统计失败不该影响主流程：保守地保留旧值
+    }
+  },
 
   loadGallery: async (refId) => {
     const project = useAppStore.getState().project;
@@ -183,6 +208,7 @@ export const useImage = create<ImageState>((set, get) => ({
   removeAsset: async (refId, assetId) => {
     await deleteAsset(assetId);
     await get().loadGallery(refId);
+    await get().refreshAssetCount();
   },
 
   generateForCharacter: async (characterId, useReference = false, kind = 'turnaround') => {
@@ -476,7 +502,7 @@ function confirmOverwrite(refId: string, kind: Asset['kind']): boolean {
 }
 
 async function runGeneration(args: RunArgs): Promise<void> {
-  const { key, draft, prompt, preferReference, referenceImages, set } = args;
+  const { key, draft, prompt, preferReference, referenceImages, set, get } = args;
   const referenceLabels = args.referenceLabels ?? [];
   const staleSkipped = args.staleSkipped ?? [];
   // 非批量时才确认：批量出图是用户主动发起的，每张都弹窗会没法用
@@ -536,6 +562,8 @@ async function runGeneration(args: RunArgs): Promise<void> {
     if (project) {
       const assets = await listAssetsFor(project.id, refId);
       set((s) => ({ gallery: { ...s.gallery, [refId]: assets } }));
+      // 总数变了 —— 改风格提示要用它算「有多少张图是旧风格」
+      await get().refreshAssetCount();
     }
   }
 

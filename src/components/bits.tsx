@@ -157,6 +157,71 @@ export function Info({
   );
 }
 
+/**
+ * 需要用户明确点头才继续的对话框。
+ *
+ * 【为什么不用 window.confirm】这里要说的不是一句「确定吗」，
+ * 而是「风险是什么、要改的话按什么顺序做」——多段文字 + 列表。
+ * 原生 confirm 只能塞一段纯文本，塞进去会变成一坨没人读的墙。
+ *
+ * 可访问性照 lightbox 的做法：role="dialog" + aria-modal，
+ * Esc 关闭，点背景关闭，打开时焦点落在取消按钮上（默认不鼓励确认）。
+ */
+export function ConfirmDialog({
+  open,
+  title,
+  confirmLabel = '确定',
+  cancelLabel = '取消',
+  onConfirm,
+  onCancel,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  children: ReactNode;
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    cancelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onCancel]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      className="confirm-backdrop"
+      onClick={onCancel}
+    >
+      <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
+        <div className="confirm-title">{title}</div>
+        <div className="confirm-body">{children}</div>
+        <div className="confirm-actions">
+          <button type="button" className="btn" ref={cancelRef} onClick={onCancel}>
+            {cancelLabel}
+          </button>
+          <button type="button" className="btn btn-blue" onClick={onConfirm}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** 带标签的表单字段 */
 export function Field({
   label,
