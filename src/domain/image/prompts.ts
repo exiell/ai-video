@@ -337,7 +337,25 @@ export function buildCharacterSheetPrompt(
  * 若这里再补一句「光从画面左侧来」，画面左右一翻就和主视角那张自相矛盾。
  */
 export const SCENE_REVERSE_INSTRUCTION =
-  'the same room seen from the opposite direction, the camera has turned 180 degrees and now looks at the wall behind the original viewpoint, same architecture, same materials, same door and same fixed objects seen from the other side, same light source, same colour palette';
+  'the camera has moved to the opposite end of the same room and turned 180 degrees, so it now faces the wall that was behind it; the door and the fixed objects from the reference image are now behind the camera or at the very edge of the frame; this is a new viewpoint inside the same space and left and right in the room stay where they are, the picture is not flipped or mirrored; same architecture, same materials, same light source, same colour palette';
+
+/**
+ * 反打板专用负面词（v0.47 补）。
+ *
+ * 【为什么需要】实测反馈：`Qwen-Image-Edit` 拿到「同一扇门从另一侧看」这句之后，
+ * 交出来的是**原图的左右镜像**。镜像是最省力的「看起来不一样」，
+ * 但它恰恰不是反打：房间没有转，是照片被翻了过来。
+ *
+ * 后果不是「不够像」，而是**和文字打架**。场景卡里的 `spatialStructure`
+ * 是按房间坐标写的（「门内左侧供桌，右侧墙角堆着草料」），每次出图都会原样发出去；
+ * 镜像板却把供桌放在画面右侧。于是同一个场景，文字说左、参考图在右，
+ * 前后镜头的左右关系也跟着乱——这比没有反打板更糟。
+ *
+ * 正向句里已经写了「不翻面」，但图像模型对正向句里的否定式响应很弱，
+ * 所以负面词里再明确列一遍。这几个词只加在反打板上，主视角板不受影响。
+ */
+export const SCENE_REVERSE_NEGATIVE =
+  'mirrored image, horizontal flip, left-right reversed, copy of the reference image';
 
 /**
  * 场景参考板提示词。
@@ -457,13 +475,20 @@ export function buildScenePlatePrompt(
     QUALITY_TAIL,
   ]).join(', ');
 
+  const negativeParts = [project.brief.negativePrompt];
+  if (angle === 'reverse') {
+    // 只加在反打板上。这里**不进 `notes`** —— `notes` 是「正向词是怎么拼出来的」，
+    // 把一个不在正向词里的片段列进去会让人去正文里找它、找不到。
+    negativeParts.push(SCENE_REVERSE_NEGATIVE);
+  }
+
   return {
     subjectLabel:
       angle === 'reverse'
         ? `场景「${scene.name}」参考板（${SCENE_ANGLE_LABEL.reverse}）`
         : `场景「${scene.name}」参考板`,
     positive,
-    negative: project.brief.negativePrompt,
+    negative: negativeParts.filter((part) => part.trim()).join(', '),
     aspectRatio: project.brief.aspectRatio,
     lockPhrases: locks,
     notes,

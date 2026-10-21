@@ -9,6 +9,7 @@ import { getDb, saveAssets } from '../src/services/storage';
 import { withReferenceInstruction } from '../src/services/gateway/dashscope';
 import {
   SCENE_REVERSE_INSTRUCTION,
+  SCENE_REVERSE_NEGATIVE,
   buildScenePlatePrompt,
 } from '../src/domain/image/prompts';
 import { planReferenceImages, type RefAsset } from '../src/domain/image/referencePlan';
@@ -58,6 +59,55 @@ describe('反打板提示词', () => {
     const master = buildScenePlatePrompt(sampleProject, TEMPLE, 'master');
     expect(implicit?.positive).toBe(master?.positive);
     expect(implicit?.subjectLabel).toBe(master?.subjectLabel);
+  });
+
+  /**
+   * 【实测反馈】用户跑出来的是**原图的左右镜像**——房间没转，是照片被翻了一下。
+   *
+   * 镜像不只是「不够像」：场景卡的方位是按房间坐标写的（「门内左侧供桌」），
+   * 镜像板把供桌放在右侧，文字与参考图直接打架，前后镜头的左右也跟着乱。
+   */
+  describe('别把反打做成镜像', () => {
+    it('正向词里明确说了不是翻面', () => {
+      const reverse = buildScenePlatePrompt(sampleProject, TEMPLE, REVERSE);
+      expect(reverse?.positive).toContain('not flipped or mirrored');
+      // 说清机位真的动了，而不是把画面反过来
+      expect(reverse?.positive).toContain('turned 180 degrees');
+      expect(reverse?.positive).toContain('faces the wall that was behind it');
+    });
+
+    it('反打板的负面词里有镜像，主视角板没有', () => {
+      const reverse = buildScenePlatePrompt(sampleProject, TEMPLE, REVERSE);
+      const master = buildScenePlatePrompt(sampleProject, TEMPLE, 'master');
+      expect(reverse?.negative).toContain(SCENE_REVERSE_NEGATIVE);
+      expect(master?.negative).not.toContain(SCENE_REVERSE_NEGATIVE);
+      // 负面词要能被读出来（不是塞进正向词里)
+      expect(reverse?.positive).not.toContain('mirrored image');
+    });
+
+    it('项目自己的负面提示词仍然保留，排在前面', () => {
+      const project = structuredClone(sampleProject);
+      project.brief.negativePrompt = 'lowres, bad hands';
+      const reverse = buildScenePlatePrompt(project, TEMPLE, REVERSE);
+      expect(reverse?.negative.startsWith('lowres, bad hands')).toBe(true);
+      expect(reverse?.negative).toContain(SCENE_REVERSE_NEGATIVE);
+    });
+
+    it('项目没填负面提示词时不会留下开头的逗号', () => {
+      const project = structuredClone(sampleProject);
+      project.brief.negativePrompt = '';
+      const reverse = buildScenePlatePrompt(project, TEMPLE, REVERSE);
+      expect(reverse?.negative).toBe(SCENE_REVERSE_NEGATIVE);
+    });
+
+    it('负面词不进 notes（notes 讲的是正向词怎么拼的）', () => {
+      const reverse = buildScenePlatePrompt(sampleProject, TEMPLE, REVERSE);
+      const fragments = (reverse?.notes ?? []).map((n) => n.fragment);
+      expect(fragments).not.toContain(SCENE_REVERSE_NEGATIVE);
+      for (const fragment of fragments) {
+        expect(reverse?.positive).toContain(fragment);
+      }
+    });
   });
 
   /**
@@ -357,5 +407,87 @@ describe('镜头标了反打但没有反打板', () => {
     const feedback = allFeedback();
     const warnings = feedback.flatMap((f) => f.warnings).join(' ');
     expect(warnings).toContain('还没有反打板');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 「这里已经有 1 张…了」这条确认
+// ---------------------------------------------------------------------------
+//
+// 【v0.47 修】原来只按 kind 统计，所以主视角板在图库里的时候，出反打板会弹
+// 「这里已经有 1 张「场景参考板」了」——可那是另一张板，用户并没在覆盖什么。
+// 这条提示读起来像要覆盖主视角板，把人劝退在半路。
+
+describe('「已经有图了」的确认按角度分开算', () => {
+  function inGallery(angles: ('master' | 'reverse')[]) {
+    const assets = angles.map((angle, index) => ({
+      ...dbAsset(`g-${angle}-${index}`, angle === 'master' ? undefined : angle),
+      angle: angle === 'master' ? undefined : angle,
+    }));
+    useImage.setState({ gallery: { [TEMPLE]: assets } });
+  }
+
+  it('只有主视角板时，出反打板不弹确认', async () => {
+    inGallery(['master']);
+    await saveAssets([dbAsset('master-plate')]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await useImage.getState().generateForScene(TEMPLE, 'reverse');
+    expect(confirm).not.toHaveBeenCalled();
+    // 确实发出去了，不是被这条确认拦住的
+    expect(captured.length).toBe(1);
+    confirm.mockRestore();
+  });
+
+  it('已经有反打板时，出反打板要弹，且点名是哪个角度', async () => {
+    inGallery(['master', 'reverse']);
+    await saveAssets([dbAsset('master-plate'), dbAsset('reverse-plate', 'reverse')]);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await useImage.getState().generateForScene(TEMPLE, 'reverse');
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const message = String(confirm.mock.calls[0]?.[0] ?? '');
+    expect(message).toContain(SCENE_ANGLE_LABEL.reverse);
+    expect(message).toContain('1 张');
+    // 取消之后不该真的去生成
+    expect(captured.length).toBe(0);
+    confirm.mockRestore();
+  });
+
+  it('只有反打板时，出主视角板不弹确认', async () => {
+    inGallery(['reverse']);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await useImage.getState().generateForScene(TEMPLE, 'master');
+    expect(confirm).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it('角色形象图不受影响，仍然按 kind 统计', async () => {
+    const now = new Date().toISOString();
+    // 必须用真实角色 id：buildCharacterSheetPrompt 找不到角色会直接返回 null，
+    // 那样根本走不到确认这一步，测试会「因为提前返回」而假通过。
+    const characterId = sampleProject.characters[0]!.id;
+    useImage.setState({
+      gallery: {
+        [characterId]: [
+          {
+            id: 'sheet',
+            projectId: sampleProject.id,
+            kind: 'character-sheet' as const,
+            refId: characterId,
+            dataUrl: 'data:image/png;base64,x',
+            mimeType: 'image/png',
+            promptSnapshot: 'x',
+            createdAt: now,
+            updatedAt: now,
+            schemaVersion: 1,
+          },
+        ],
+      },
+    });
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    await useImage.getState().generateForCharacter(characterId, false, 'turnaround');
+    expect(confirm).toHaveBeenCalledTimes(1);
+    const message = String(confirm.mock.calls[0]?.[0] ?? '');
+    expect(message).not.toContain(SCENE_ANGLE_LABEL.reverse);
+    confirm.mockRestore();
   });
 });

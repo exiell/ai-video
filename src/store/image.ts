@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { Asset, ModelProfile, SceneAngle } from '../types/model';
-import { ASSET_KIND_LABEL } from '../types/model';
+import { ASSET_KIND_LABEL, SCENE_ANGLE_LABEL } from '../types/model';
 import {
   REFERENCE_ROLE_LABEL,
   planReferenceImages,
@@ -691,12 +691,35 @@ interface RunArgs {
  * 批量生成不走这个确认——那本身就是用户主动发起的批量动作，
  * 每张都弹一次会让批量变得没法用。批量卡片上已经写明了它会做什么。
  */
-function confirmOverwrite(refId: string, kind: Asset['kind']): boolean {
+function confirmOverwrite(
+  refId: string,
+  kind: Asset['kind'],
+  angle?: SceneAngle,
+): boolean {
   const existing = useImage.getState().gallery[refId] ?? [];
-  const sameKind = existing.filter((asset) => asset.kind === kind && asset.dataUrl);
+  const wantAngle: SceneAngle = angle ?? 'master';
+  /**
+   * 只统计**同一种东西**。
+   *
+   * 【v0.47 修】原来只按 `kind` 算，于是主视角板已经在图库里的时候，
+   * 出反打板会弹一句「这里已经有 1 张「场景参考板」了」——可那是**另一张板**，
+   * 用户根本没在覆盖什么东西。这条提示读起来像是要覆盖主视角板，把人劝退。
+   *
+   * 现在场景板按角度分开算：出反打板只在已经有反打板时才问。
+   */
+  const sameKind =
+    kind === 'scene-plate'
+      ? existing.filter(
+          (asset) =>
+            asset.kind === kind && asset.dataUrl && (asset.angle ?? 'master') === wantAngle,
+        )
+      : existing.filter((asset) => asset.kind === kind && asset.dataUrl);
   if (sameKind.length === 0) return true;
 
-  const label = ASSET_KIND_LABEL[kind];
+  const label =
+    kind === 'scene-plate'
+      ? `${ASSET_KIND_LABEL[kind]}（${SCENE_ANGLE_LABEL[wantAngle]}）`
+      : ASSET_KIND_LABEL[kind];
   return window.confirm(
     `这里已经有 ${sameKind.length} 张「${label}」了。\n\n` +
       '继续生成会**新增**一张，旧的仍然保留（可以在图库里对比后删掉不要的）。\n\n' +
@@ -709,7 +732,10 @@ async function runGeneration(args: RunArgs): Promise<void> {
   const referenceLabels = args.referenceLabels ?? [];
   const staleSkipped = args.staleSkipped ?? [];
   // 非批量时才确认：批量出图是用户主动发起的，每张都弹窗会没法用
-  if (!useImage.getState().batch && !confirmOverwrite(draft.refId, draft.kind)) {
+  if (
+    !useImage.getState().batch &&
+    !confirmOverwrite(draft.refId, draft.kind, draft.angle)
+  ) {
     return;
   }
 
