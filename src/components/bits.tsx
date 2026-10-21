@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * 把文案里的 `**重点**` 渲染成加粗。
@@ -198,7 +199,20 @@ export function ConfirmDialog({
 
   if (!open) return null;
 
-  return (
+  /**
+   * 必须 portal 到 document.body。
+   *
+   * 【踩过的坑】`position: fixed` 并**不能保证**相对视口定位 ——
+   * 只要任一祖先有非 none 的 `transform` / `filter` / `backdrop-filter` /
+   * `will-change`，它就会变成相对那个祖先定位。
+   *
+   * 实际撞上的是 `.shot-more`：它的入场动画 `animation: ... both` 末帧是
+   * `transform: translateY(0)`，`both` 把它永久保留下来 —— 于是弹窗被限制在
+   * 一张镜头卡片里，顶部还被裁掉（长内容时滚不到）。
+   *
+   * 光改动画不够：以后任何一个卡片加动画都会再犯。挂到 body 上才是通解。
+   */
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -218,7 +232,8 @@ export function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

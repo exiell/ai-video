@@ -23,6 +23,12 @@ import { planReferenceImages, sameStyle } from '../src/domain/image/referencePla
 
 let container: HTMLDivElement | null = null;
 
+function purgePortals(): void {
+  // 弹窗现在是 portal 到 body 的，root 卸载后也要清掉，否则会串到下一条测试
+  document.querySelectorAll('.confirm-backdrop').forEach((n) => n.remove());
+}
+
+
 function render(node: React.ReactElement): HTMLDivElement {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -38,6 +44,7 @@ function render(node: React.ReactElement): HTMLDivElement {
 
 function cleanup(el: HTMLDivElement): void {
   el.remove();
+  purgePortals();
 }
 
 // ---------------------------------------------------------------------------
@@ -100,8 +107,9 @@ describe('引导向导 · 风格预设要能取消', () => {
   }
 
   /** 点对话框里的确认按钮 */
-  function confirmDialog(el: HTMLElement): void {
-    const btn = [...el.querySelectorAll('button')].find((b) =>
+  function confirmDialog(): void {
+    // 弹窗 portal 到 body，不在页面容器里
+    const btn = [...document.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('我明白，改吧'),
     );
     if (!btn) throw new Error('确认对话框没出现');
@@ -129,7 +137,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     // 还没确认 → 不应生效
     expect(useAppStore.getState().project!.brief.styleTags).toEqual([]);
     // 确认之后才生效
-    confirmDialog(el);
+    confirmDialog();
     expect(useAppStore.getState().project!.brief.styleTags).toEqual(preset.tags);
     cleanup(el);
   });
@@ -142,7 +150,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     const el = render(<GuidePage />);
     goToStyleStep(el);
     act(() => presetButton(el).click());
-    confirmDialog(el);
+    confirmDialog();
     expect(useAppStore.getState().project!.brief.styleTags).toEqual(preset.tags);
 
     // 重新渲染后按钮已变成选中态，再点一次应当清空
@@ -154,7 +162,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     ) as HTMLButtonElement;
     expect(activeBtn, '选中态没显示出来').toBeTruthy();
     act(() => activeBtn.click());
-    confirmDialog(el2);
+    confirmDialog();
     expect(useAppStore.getState().project!.brief.styleTags).toEqual([]);
     cleanup(el2);
   });

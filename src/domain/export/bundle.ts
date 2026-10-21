@@ -5,6 +5,7 @@ import { continuitySheetMarkdown } from '../checks/continuity';
 import {
   charactersToMarkdown,
   checkReportToMarkdown,
+  imagePromptsToMarkdown,
   promptsToMarkdown,
   safeFileName,
   scenesToMarkdown,
@@ -235,6 +236,15 @@ export function buildExportManifest(
   for (const { fileName, content } of promptsToMarkdown(project)) {
     entries.push({ path: `提示词/${fileName}`, content });
   }
+
+  /**
+   * 图片提示词（v0.43）。
+   *
+   * 单独一份，因为它和「提示词/」下的视频提示词是两种东西：
+   * 那些是每镜一段、拿去生成视频的；这一份是角色/场景/三帧的出图依据。
+   * 有了它，用户可以用本工具没接的模型出图。
+   */
+  entries.push({ path: '图片提示词.md', content: imagePromptsToMarkdown(project) });
 
   const assets = options.assets ?? [];
   if (assets.length > 0) {

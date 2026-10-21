@@ -313,6 +313,8 @@ function describeText(path: string): string {
   if (path === '拍摄进度表.md') return '逐镜执行清单，可以打勾';
   if (path === '镜头衔接表.md') return '每一镜怎么接到下一镜；做尾帧、写转场、剪辑时对着它走';
   if (path === '一致性总览.md') return '逐张记录每张图当时锁了什么、用了哪张参考图';
+  if (path === '图片提示词.md')
+    return '角色 / 场景 / 三帧的出图提示词。拿到任何模型里都能出图，不限本工具支持的厂商';
   if (path === '项目数据.json') return '备份用。导入它可以完整恢复这个项目的文本部分';
   if (path.startsWith('提示词/')) return '可直接粘贴的英文正文 + 中文对照 + 逐项说明';
   return '';

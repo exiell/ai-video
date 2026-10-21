@@ -1,6 +1,12 @@
 ﻿import type { CheckReport, Project } from '../../types/model';
 import { PLATFORM_LABEL } from '../../types/model';
 import { buildAllPrompts } from '../prompt';
+import {
+  buildCharacterSheetPrompt,
+  buildFramePrompt,
+  buildScenePlatePrompt,
+  type ImagePromptInput,
+} from '../image/prompts';
 
 /**
  * 导出引擎（方案.md v0.6 §7.2 任务 7）
@@ -395,6 +401,155 @@ export function shootingProgressToMarkdown(project: Project): string {
 // ---------------------------------------------------------------------------
 // 提示词包
 // ---------------------------------------------------------------------------
+
+/**
+ * 图片提示词（v0.43）。
+ *
+ * ===========================================================================
+ * 为什么单独一份文件
+ * ===========================================================================
+ * 视频提示词早就导出了，**图片提示词一直没有**。而它是这个工具最有价值的产出之一：
+ * 它同时是「角色形象图」「场景参考板」「每一镜的三帧」的生成依据。
+ *
+ * 少了它，用户就只能在本工具接的那 8 家厂商里出图。多了它，
+ * 提示词可以拿去任何模型里用 —— 这个工具的出图部分就不再被厂商绑死。
+ *
+ * 每段都给：用途、正向、负向、画幅、逐项说明（为什么这么拼）。
+ * 逐项说明不是装饰：用户改风格或换模型时，要知道哪一句是干什么的。
+ */
+export function imagePromptsToMarkdown(project: Project): string {
+  const out: string[] = [];
+
+  out.push(`# ${project.name} · 图片提示词`);
+  out.push('');
+  out.push('> 这一份是**出图**用的提示词（角色形象图、场景参考板、每一镜的三帧）。');
+  out.push('> 视频提示词在「提示词」目录下，是另一回事。');
+  out.push('');
+  out.push('用本工具没接的模型也能出图：把「正向」整段复制过去，');
+  out.push('「负向」单独填进负向提示词框（不要混进正文），画幅按下面写的设。');
+  out.push('');
+  out.push(`画幅：${project.brief.aspectRatio || '未设置'}`);
+  out.push('');
+  out.push('| 项 | 数量 |');
+  out.push('|---|---|');
+  out.push(`| 角色 | ${project.characters.length} |`);
+  out.push(`| 场景 | ${project.scenes.length} |`);
+  out.push(`| 镜头 | ${project.shots.length} |`);
+  out.push('');
+
+  let section = 0;
+
+  /** 一段提示词怎么排版 */
+  const emit = (title: string, subject: string, input: ImagePromptInput | null): void => {
+    if (!input) return;
+    section += 1;
+    out.push(`## ${section}. ${title}`);
+    out.push('');
+    out.push(`对象：${subject}`);
+    out.push('');
+    out.push('### 正向（复制这段）');
+    out.push('');
+    out.push('```');
+    out.push(input.positive);
+    out.push('```');
+    out.push('');
+    if (input.negative.trim()) {
+      out.push('### 负向（单独填，别混进正文）');
+      out.push('');
+      out.push('```');
+      out.push(input.negative);
+      out.push('```');
+      out.push('');
+    }
+    out.push(`### 画幅`);
+    out.push('');
+    out.push(input.aspectRatio);
+    out.push('');
+    if (input.lockPhrases.length > 0) {
+      out.push('### 注入的连续性锁');
+      out.push('');
+      for (const phrase of input.lockPhrases) out.push(`- \`${phrase}\``);
+      out.push('');
+    }
+    if (input.notes.length > 0) {
+      out.push('### 这句是怎么拼出来的');
+      out.push('');
+      for (const note of input.notes) {
+        out.push(`- **${note.label}**：${note.reason}`);
+        out.push(`  - 片段：\`${note.fragment}\``);
+      }
+      out.push('');
+    }
+  };
+
+  if (project.characters.length > 0) {
+    out.push('# 角色形象图');
+    out.push('');
+    out.push('> 分两种，各自解决一个问题：全身多视图锁体型、比例、服装轮廓；');
+    out.push('> 头部特写**锁脸**。全身图里的脸只有几十像素，锁不住面部特征。');
+    out.push('');
+    for (const character of project.characters) {
+      emit(
+        `角色「${character.name}」· 全身多视图`,
+        `${character.identity.summary || character.name}`,
+        buildCharacterSheetPrompt(project, character.id, 'turnaround'),
+      );
+      emit(
+        `角色「${character.name}」· 头部特写`,
+        `${character.identity.summary || character.name}`,
+        buildCharacterSheetPrompt(project, character.id, 'face'),
+      );
+    }
+  }
+
+  if (project.scenes.length > 0) {
+    out.push('# 场景参考板');
+    out.push('');
+    out.push('> 刻意要求画面里没有人。场景板的作用是固定空间结构与光线，');
+    out.push('> 站了人反而会干扰后续把角色放进去。');
+    out.push('');
+    for (const scene of project.scenes) {
+      emit(
+        `场景「${scene.name}」· 参考板`,
+        `${scene.identity.summary || scene.name}`,
+        buildScenePlatePrompt(project, scene.id),
+      );
+    }
+  }
+
+  if (project.shots.length > 0) {
+    out.push('# 镜头三帧');
+    out.push('');
+    out.push('> 首帧是图生视频的输入图；动作关键帧决定动作的力度与节奏；');
+    out.push('> 尾帧是下一镜首帧的接续点，也是首尾帧视频的收尾锚点。');
+    out.push('> **同一镜的三帧要一起出**——只出后两帧，它们就没有首帧当构图锚点了。');
+    out.push('');
+    const frames: { kind: 'first-frame' | 'action-peak' | 'end-frame'; label: string }[] = [
+      { kind: 'first-frame', label: '首帧' },
+      { kind: 'action-peak', label: '动作关键帧' },
+      { kind: 'end-frame', label: '尾帧' },
+    ];
+    for (const shot of project.shots) {
+      for (const frame of frames) {
+        emit(
+          `第 ${shot.number} 镜 · ${frame.label}`,
+          shot.action || shot.startState || '（这一镜还没写动作）',
+          buildFramePrompt(project, shot.id, frame.kind),
+        );
+      }
+    }
+  }
+
+  if (section === 0) {
+    out.push('# （还没有可出的图）');
+    out.push('');
+    out.push('先去「角色」「场景」建卡，或者在「分镜」里写出起点和终点，');
+    out.push('这里才会出现对应的图片提示词。');
+    out.push('');
+  }
+
+  return out.join('\n');
+}
 
 export function promptsToMarkdown(project: Project): { fileName: string; content: string }[] {
   const bundles = buildAllPrompts(project);

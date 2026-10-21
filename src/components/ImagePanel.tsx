@@ -8,6 +8,7 @@ import { ASSET_KIND_LABEL } from '../types/model';
 import { RichText } from './bits';
 import type { Asset } from '../types/model';
 import { ImageLightbox, type LightboxState } from './ImageLightbox';
+import { ImagePromptView } from './ImagePromptView';
 
 /**
  * 出图按钮 + 图库（方案.md §3.2 M3/M4）
@@ -123,6 +124,15 @@ export function ImagePanel({
             {busy ? '生成中…' : option.label}
           </button>
         ))}
+
+        {/*
+          【v0.43】提示词必须看得见。
+
+          它的意义不只是「检查一下」：提示词是可以独立交付的东西。
+          用户想用本工具没接的模型出图，或者只是想拿这段英文去别的地方试，
+          都应该能直接拿到。原来它算完就进了请求体，界面上从不出现。
+        */}
+        <ImagePromptView refId={refId} target={target} options={options} />
       </div>
 
       {options.some((o) => o.hint) ? (

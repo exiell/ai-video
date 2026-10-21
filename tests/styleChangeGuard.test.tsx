@@ -32,6 +32,12 @@ import { assessStyleChange, styleChangeSummary } from '../src/domain/help/styleC
 
 let container: HTMLDivElement | null = null;
 
+function purgePortals(): void {
+  // 弹窗现在是 portal 到 body 的，root 卸载后也要清掉，否则会串到下一条测试
+  document.querySelectorAll('.confirm-backdrop').forEach((n) => n.remove());
+}
+
+
 function render(node: React.ReactElement): HTMLDivElement {
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -46,6 +52,7 @@ function render(node: React.ReactElement): HTMLDivElement {
 
 function cleanup(el: HTMLDivElement): void {
   el.remove();
+  purgePortals();
 }
 
 // ---------------------------------------------------------------------------
@@ -119,6 +126,7 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
   }
 
   beforeEach(() => {
+    purgePortals();
     useAppStore.setState({ project: structuredClone(sampleProject) });
     useImage.setState({ gallery: {}, assetCount: 0 });
   });
@@ -162,9 +170,9 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
     act(() => genBtn!.click());
 
     // 闸门拦住 → 弹确认，而不是直接调模型
-    expect(el.innerHTML).toContain('role="dialog"');
-    expect(el.textContent).toContain('改风格会影响已经做好的内容');
-    expect(el.textContent).toContain('按这个顺序做');
+    expect(document.body.innerHTML).toContain('role="dialog"');
+    expect(document.body.textContent).toContain('改风格会影响已经做好的内容');
+    expect(document.body.textContent).toContain('按这个顺序做');
     cleanup(el);
   });
 
@@ -181,7 +189,7 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
       b.textContent?.includes('用这段中文生成英文关键词'),
     ) as HTMLButtonElement;
     act(() => genBtn.click());
-    expect(el.innerHTML).not.toContain('role="dialog"');
+    expect(document.body.innerHTML).not.toContain('role="dialog"');
     cleanup(el);
   });
 
@@ -253,10 +261,9 @@ describe('问 AI · 改风格的提议也要带风险提示', () => {
     act(() => (applyBtn as HTMLButtonElement).click());
 
     // 弹窗出现，且带完整风险清单
-    const html = el.innerHTML;
-    expect(html).toContain('role="dialog"');
-    expect(el.textContent).toContain('这一批改动会换掉全片风格');
-    expect(el.textContent).toContain('按这个顺序');
+    expect(document.body.innerHTML).toContain('role="dialog"');
+    expect(document.body.textContent).toContain('这一批改动会换掉全片风格');
+    expect(document.body.textContent).toContain('按这个顺序');
     cleanup(el);
   });
 
@@ -267,7 +274,8 @@ describe('问 AI · 改风格的提议也要带风险提示', () => {
       b.textContent?.includes('应用勾选的改动'),
     ) as HTMLButtonElement;
     act(() => applyBtn.click());
-    const cancel = [...el.querySelectorAll('button')].find((b) =>
+    // 弹窗 portal 到 body
+    const cancel = [...document.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('先不应用'),
     ) as HTMLButtonElement;
     act(() => cancel.click());
