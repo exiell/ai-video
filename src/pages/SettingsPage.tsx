@@ -199,12 +199,6 @@ export function SettingsPage() {
 
       {tab === 'models' ? (<>
       <div className="card">
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          <RichText>
-            {'Key 在「连接与 Key」那一页按厂商填——同一个厂商的对话模型与出图模型共用一个 Key，只填一次。'}
-          </RichText>
-        </p>
-
         <div className="settings-select-row">
           <span className="settings-select-label">写故事与分镜</span>
           <SelectMenu
@@ -232,46 +226,6 @@ export function SettingsPage() {
 
         <div className="hint">
           不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。
-        </div>
-      </div>
-
-      <div className="card settings-next">
-        <div className="settings-next-head">
-          <div>
-            <h3 className="card-title">选好模型之后</h3>
-            <p>模型只是「用哪个」，真正能不能生成还差一个 Key。</p>
-          </div>
-          <Link className="btn btn-blue" to="/settings/connection">
-            去填 Key
-          </Link>
-        </div>
-        <div className="settings-next-grid">
-          <div>
-            <b>一个厂商一个 Key</b>
-            <span>同一家的对话和出图共用一个 Key，只填一次。</span>
-          </div>
-          <div>
-            <b>填完先测连接</b>
-            <span>「连接与 Key」里有测试按钮，会告诉你直连还是被跨域拦了。</span>
-          </div>
-          <div>
-            <b>没配也能先看</b>
-            <span>示例项目不需要 Key；先看完整产出，再决定要不要填。</span>
-          </div>
-        </div>
-      </div>
-
-      <div className="card settings-picks">
-        <h3 className="card-title">这两个默认值怎么来的</h3>
-        <div className="settings-picks-grid">
-          <div>
-            <b>写故事与分镜：DeepSeek 快速版</b>
-            <span>中文叙事稳定，价格低。分镜字段多、需要反复改，快模型够用，也省得每次等太久。</span>
-          </div>
-          <div>
-            <b>生成画面：通义千问图生图</b>
-            <span>支持参考图，适合把角色形象图和首帧当锚点。三张参考图能同时锁人、锁场景、锁构图。</span>
-          </div>
         </div>
       </div>
 
@@ -587,9 +541,6 @@ export function SettingsPage() {
       <div className="card">
         <h3 className="card-title">
           存储与备份
-          {imageStats && imageStats.count > 0 ? (
-            <span className="tag tag-warning">有 {imageStats.count} 张图未备份</span>
-          ) : null}
         </h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           图片只在这个浏览器里，清缓存就没了。

@@ -671,7 +671,6 @@ export function HomePage() {
               <button type="button" className="btn btn-primary" onClick={openBlank}>
                 新建空项目
               </button>
-              <p className="start-note">建完可以随时改；所有内容只保存在这台电脑，不会上传。</p>
             </section>
           </div>
 
@@ -710,9 +709,7 @@ export function HomePage() {
         {!loaded ? (
           <div className="empty">读取中…</div>
         ) : records.length === 0 ? (
-          <div className="empty">
-            还没有保存过的项目。所有数据只存在你自己的浏览器里，不会上传到任何服务器。
-          </div>
+          <div className="empty">还没有保存过的项目。</div>
         ) : (
           <div className="saved-table">
             <div className="saved-row saved-head">

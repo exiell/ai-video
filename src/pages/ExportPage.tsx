@@ -1,4 +1,4 @@
-﻿import { Info } from '../components/bits';
+import { Info } from '../components/bits';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -239,21 +239,23 @@ export function ExportPage() {
         </div>
       ) : null}
 
-      <div className="card">
-        <h3 className="card-title">怎么用这个包</h3>
-        <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
-          <li>打开「拍摄进度表.md」，从第 1 镜开始做。</li>
-          <li>
-            对着「提示词/即梦.md」（或你选的平台），把每一镜的<b>英文正文</b>复制过去生成图。
-          </li>
-          <li>图满意了再拿去生成视频——先出图能省很多钱。</li>
-          <li>每一镜做完，在进度表上打勾。</li>
-          <li>
-            遇到「看起来不像同一个人 / 同一个地方」时，先翻「一致性总览.md」看当时锁了什么，
-            再翻「穿帮检查单.md」看有没有哪条锁没带上。
-          </li>
-        </ol>
-      </div>
+      <details className="why export-howto">
+        <summary>拿到包之后怎么用</summary>
+        <div className="why-body">
+          <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
+            <li>打开「拍摄进度表.md」，从第 1 镜开始做。</li>
+            <li>
+              对着「提示词/即梦.md」（或你选的平台），把每一镜的<b>英文正文</b>复制过去生成图。
+            </li>
+            <li>图满意了再拿去生成视频——先出图能省很多钱。</li>
+            <li>每一镜做完，在进度表上打勾。</li>
+            <li>
+              遇到「看起来不像同一个人 / 同一个地方」时，先翻「一致性总览.md」看当时锁了什么，
+              再翻「穿帮检查单.md」看有没有哪条锁没带上。
+            </li>
+          </ol>
+        </div>
+      </details>
 
       <div className="card">
         <h3 className="card-title">导入项目文件</h3>

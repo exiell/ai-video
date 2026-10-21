@@ -312,9 +312,6 @@ export function StoryboardPage() {
             <Icon name="sparkles" size={14} className="tools-icon" />
             用模型生成
           </span>
-          <span className="tools-drawer-hint">
-            从故事拆角色、场景和分镜，或批量出图；需要先在设置里配好 Key。
-          </span>
           <span className="tools-drawer-toggle">展开</span>
         </summary>
         <div className="tools-drawer-body">

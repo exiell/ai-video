@@ -4,7 +4,7 @@ import { useImage } from '../store/image';
 import { useAppStore } from '../store/app';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { useSettings } from '../store/settings';
-import { RichText, stripRichMarks } from './bits';
+import { stripRichMarks } from './bits';
 
 /**
  * 批量出图按钮 + 进度
@@ -114,17 +114,6 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             {TASK_LABEL[task]}（{counts[task]}）
           </button>
         ))}
-      </div>
-
-      <div className="hint" style={{ marginTop: 6 }}>
-        每个按钮做什么
-        <Info label="五个按钮分别生成什么">
-          {tasks.map((task) => (
-            <div key={task} style={{ marginBottom: 4 }}>
-              <b>{TASK_LABEL[task]}</b>：<RichText>{TASK_HINT[task]}</RichText>
-            </div>
-          ))}
-        </Info>
       </div>
 
       {batch ? (

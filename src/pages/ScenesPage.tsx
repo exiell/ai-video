@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
-import { Field, WhyDetails, Info } from '../components/bits';
+import { Field, Info } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
 import { AssetGallery, ImagePanel } from '../components/ImagePanel';
@@ -90,49 +90,51 @@ export function ScenesPage() {
       {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
       <AiFlowGuide variant="compact" />
 
-      <div className="card">
-        <h3 className="card-title">场景一致性靠什么保证？</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          三个字段，都要写成<b>能直接贴进提示词的短语</b>：
-        </p>
-        <table className="simple">
-          <thead>
-            <tr>
-              <th style={{ width: 110 }}>字段</th>
-              <th>作用</th>
-              <th>例子</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>固定元素</td>
-              <td>观众认出「还是这地方」的依据，3–5 条</td>
-              <td>
-                <code>rows of wooden desks facing a green blackboard</code>
-              </td>
-            </tr>
-            <tr>
-              <td>主光方向</td>
-              <td>决定同一处地方在不同镜头里像不像同一个时刻</td>
-              <td>傍晚，暖光从右侧窗户斜射</td>
-            </tr>
-            <tr>
-              <td>主色调</td>
-              <td>观众判断「换了地方」最直接的线索</td>
-              <td>暖橙 + 灰绿</td>
-            </tr>
-          </tbody>
-        </table>
-        <WhyDetails>
-          为什么光线和色调也算「场景一致性」？因为观众判断「这是不是同一个地方」，
-          靠的主要不是墙上的裂缝，而是<b>光的方向和整体色调</b>。
-          <br />
-          <br />
-          一个傍晚的教室写成「正午顶光」，观众立刻会觉得不对劲——即使桌椅黑板一个没变。
-          检查引擎会把这种冲突指出来；如果是剧情有意安排的（比如时间真的从白天到了晚上），
-          给它建一个<b>变体</b>，引擎就知道这是有意的，不再报冲突。
-        </WhyDetails>
-      </div>
+      <details className="why scene-consistency">
+        <summary>场景一致性靠什么保证？</summary>
+        <div className="why-body">
+          <p style={{ fontSize: 13, marginTop: 0 }}>
+            三个字段，都要写成<b>能直接贴进提示词的短语</b>：
+          </p>
+          <table className="simple">
+            <thead>
+              <tr>
+                <th style={{ width: 110 }}>字段</th>
+                <th>作用</th>
+                <th>例子</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>固定元素</td>
+                <td>观众认出「还是这地方」的依据，3–5 条</td>
+                <td>
+                  <code>rows of wooden desks facing a green blackboard</code>
+                </td>
+              </tr>
+              <tr>
+                <td>主光方向</td>
+                <td>决定同一处地方在不同镜头里像不像同一个时刻</td>
+                <td>傍晚，暖光从右侧窗户斜射</td>
+              </tr>
+              <tr>
+                <td>主色调</td>
+                <td>观众判断「换了地方」最直接的线索</td>
+                <td>暖橙 + 灰绿</td>
+              </tr>
+            </tbody>
+          </table>
+          <p>
+            为什么光线和色调也算「场景一致性」？因为观众判断「这是不是同一个地方」，
+            靠的主要不是墙上的裂缝，而是<b>光的方向和整体色调</b>。
+          </p>
+          <p>
+            一个傍晚的教室写成「正午顶光」，观众立刻会觉得不对劲——即使桌椅黑板一个没变。
+            检查引擎会把这种冲突指出来；如果是剧情有意安排的（比如时间真的从白天到了晚上），
+            给它建一个<b>变体</b>，引擎就知道这是有意的，不再报冲突。
+          </p>
+        </div>
+      </details>
 
       {project.scenes.length > 0 ? <BatchGenerateCard tasks={['scenes']} /> : null}
 
@@ -395,13 +397,6 @@ export function ScenesPage() {
                 />
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>⑤ 变体（随剧情变）</h4>
-                <p className="hint" style={{ marginTop: 0 }}>
-                  「被打碎了窗户」是变体，不是新场景
-                  <Info label="为什么登记变体">
-                    时间从白天到晚上、窗户被打碎，这些都算变体。
-                    登记之后检查引擎会豁免对应的光线/色调冲突——因为那是你有意安排的。
-                  </Info>
-                </p>
                 {scene.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>
                     <input

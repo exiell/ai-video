@@ -113,18 +113,6 @@ export function CharactersPage() {
       {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
       <AiFlowGuide variant="compact" />
 
-      <div className="card">
-        <h3 className="card-title">连续性锁怎么写</h3>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          写成<b>能直接贴进提示词的短语</b>
-          <Info label="怎么写、举个例">
-            中文英文都可以，但英文通常更稳。例：
-            <code>pine-green lapel service jacket</code>、
-            <code>a long wooden spear with a tarnished steel head</code>
-          </Info>
-        </p>
-      </div>
-
       {project.characters.length > 0 ? <BatchGenerateCard tasks={['characters']} /> : null}
 
       {project.characters.length === 0 ? (
@@ -275,7 +263,14 @@ export function CharactersPage() {
                   />
                 </Field>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>② 连续性锁（必须跨镜保持）</h4>
+                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>
+                  ② 连续性锁（必须跨镜保持）
+                  <Info label="怎么写、举个例">
+                    写成能直接贴进提示词的短语。中文英文都可以，但英文通常更稳。例：
+                    <code>pine-green lapel service jacket</code>、
+                    <code>a long wooden spear with a tarnished steel head</code>
+                  </Info>
+                </h4>
                 {character.continuityLocks.map((lock) => (
                   <div className="row" key={lock.id} style={{ marginBottom: 8 }}>
                     <input
@@ -354,13 +349,6 @@ export function CharactersPage() {
                 </button>
 
                 <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>③ 变体（随剧情变）</h4>
-                <p className="hint" style={{ marginTop: 0 }}>
-                  「换了件外套」是变体，不是新角色
-                    <Info label="为什么登记变体">
-                      登记之后，检查引擎就知道这个变化是你<b>有意安排</b>的，
-                      不会再把它报成前后冲突。
-                    </Info>
-                </p>
                 {character.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>
                     <input

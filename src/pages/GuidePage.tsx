@@ -317,53 +317,10 @@ export function GuidePage() {
             </div>
           ) : null}
 
-          <div className="guide-ahead">
-            <div className="guide-ahead-head">
-              <h4>下一步会让你写这些</h4>
-              <span>现在不用填</span>
-            </div>
-            <div className="guide-ahead-grid">
-              <div>
-                <b>故事正文</b>
-                <span>一段话就够：谁、在哪、发生了什么、最后怎么了。</span>
-              </div>
-              <div>
-                <b>主要人物</b>
-                <span>谁和谁的关系最关键，谁在挡着主角。</span>
-              </div>
-              <div>
-                <b>冲突与结局</b>
-                <span>主角想要什么，最后停在哪一帧画面上。</span>
-              </div>
-            </div>
-          </div>
-
           <div className="guide-sample">
             <div className="aside-label">一个写好的开头长这样</div>
             <p>一个被诬陷的武人被发配草料场，在风雪夜里听见门外三人密谋，推门而出。</p>
             <span>一句话里有主角、处境、转折，和最后一个动作。</span>
-          </div>
-
-          <div className="guide-skeleton">
-            <div className="aside-label">把它拆成四格，就不会卡住</div>
-            <div className="skeleton-grid">
-              <div>
-                <b>谁</b>
-                <span>林冲，被发配的武人</span>
-              </div>
-              <div>
-                <b>想要</b>
-                <span>活下去，回到东京</span>
-              </div>
-              <div>
-                <b>挡着</b>
-                <span>陆谦带人放火烧草料场</span>
-              </div>
-              <div>
-                <b>停在</b>
-                <span>他推门而出，长枪指向三人</span>
-              </div>
-            </div>
           </div>
         </div>
       ) : null}
@@ -550,27 +507,31 @@ export function GuidePage() {
                 已经做过内容了 —— 现在改风格会有代价
               </div>
               <div className="issue-line">
-                你的项目里已经有
-                {[
-                  project.characters.length > 0 ? `${project.characters.length} 个角色` : '',
-                  project.scenes.length > 0 ? `${project.scenes.length} 个场景` : '',
-                  project.shots.length > 0 ? `${project.shots.length} 个镜头` : '',
-                  assetCount > 0 ? `${assetCount} 张图` : '',
-                ]
-                  .filter(Boolean)
-                  .join('、')}
-                。改风格不会自动更新它们：
+                改风格不会自动更新已经做好的角色、场景和镜头。
               </div>
-              <ul className="issue-line" style={{ paddingLeft: 20, margin: '4px 0 0' }}>
-                {styleImpact.risks.map((risk, i) => (
-                  <li key={i}>
-                    <RichText>{risk}</RichText>
-                  </li>
-                ))}
-              </ul>
               <details className="why">
-                <summary>如果还是要改，按这个顺序做</summary>
+                <summary>看会受哪些影响、按这个顺序做</summary>
                 <div className="why-body">
+                  <div className="issue-line">
+                    你的项目里已经有
+                    {[
+                      project.characters.length > 0 ? `${project.characters.length} 个角色` : '',
+                      project.scenes.length > 0 ? `${project.scenes.length} 个场景` : '',
+                      project.shots.length > 0 ? `${project.shots.length} 个镜头` : '',
+                      assetCount > 0 ? `${assetCount} 张图` : '',
+                    ]
+                      .filter(Boolean)
+                      .join('、')}
+                    。改风格不会自动更新它们：
+                  </div>
+                  <ul className="issue-line" style={{ paddingLeft: 20, margin: '4px 0 0' }}>
+                    {styleImpact.risks.map((risk, i) => (
+                      <li key={i}>
+                        <RichText>{risk}</RichText>
+                      </li>
+                    ))}
+                  </ul>
+                  <div style={{ marginTop: 8 }}>要改的话，按这个顺序做：</div>
                   <ol style={{ paddingLeft: 20, margin: 0 }}>
                     {styleImpact.steps.map((step, i) => (
                       <li key={i} style={{ marginBottom: 4 }}>
@@ -689,22 +650,7 @@ export function GuidePage() {
             />
           </Field>
 
-          {project.brief.styleTags.length > 0 ? (
-            <div className="issue" style={{ borderLeftColor: 'var(--accent)', marginBottom: 12 }}>
-              <div className="issue-title">这几行就是全片统一的风格</div>
-              <div className="issue-line">
-                它们会被<b>原样</b>写进每一张图的提示词——角色形象图、场景参考板、每一镜的关键帧。
-                所以只要这几行不变，全片的质感就是一致的。
-              </div>
-              <div className="issue-line" style={{ marginTop: 6 }}>
-                {project.brief.styleTags.map((tag) => (
-                  <code key={tag} style={{ marginRight: 6, display: 'inline-block' }}>
-                    {tag}
-                  </code>
-                ))}
-              </div>
-            </div>
-          ) : (
+          {project.brief.styleTags.length === 0 ? (
             <div className="issue warning" style={{ marginBottom: 12 }}>
               <div className="issue-title">还没有选风格</div>
               <div className="issue-line">
@@ -712,7 +658,7 @@ export function GuidePage() {
                 上面点一下就好。
               </div>
             </div>
-          )}
+          ) : null}
 
           <Field
             label="负向词（你不想要的东西）"
@@ -747,8 +693,9 @@ export function GuidePage() {
           */}
           <AiFlowGuide />
 
-          <div className="card">
-            <h3 className="card-title">也可以全程手动：一步步来</h3>
+          <details className="why manual-guide">
+            <summary>也可以全程手动：一步步来</summary>
+            <div className="why-body">
             <p style={{ color: 'var(--text-dim)', marginTop: 0 }}>
               <RichText>
                 {'不想让 AI 生成，或者生成结果你不满意想自己重来，就按这个顺序走。每一步都写清了**点哪里、会发生什么、做完怎么判断可以往下走**。卡在哪一步就回到这一步看。'}
@@ -803,7 +750,8 @@ export function GuidePage() {
                 看帮助与术语
               </Link>
             </div>
-          </div>
+            </div>
+          </details>
         </>
       ) : null}
 
@@ -818,7 +766,7 @@ export function GuidePage() {
         </button>
         <div className="row">
           <span className="wizard-actions-note">
-            {step === STEPS.length - 1 ? '故事写完后，下一步是把故事拆成分镜' : '切换步骤不会提交表单，随时可以回来改'}
+            {step === STEPS.length - 1 ? '故事写完后，下一步是把故事拆成分镜' : ''}
           </span>
           {step < STEPS.length - 1 ? (
             <button
@@ -836,36 +784,7 @@ export function GuidePage() {
         </div>
       </div>
     </div>
-
-        <aside className="guide-aside">
-          <section className="aside-card">
-            <div className="aside-label">写完这一段，你会得到</div>
-            <ul className="aside-list">
-              <li>
-                <b>一句话故事</b>
-                <span>导出方案和拍摄进度表的开头</span>
-              </li>
-              <li>
-                <b>场次拆分</b>
-                <span>按地点或时间切，防止漏拍一整场</span>
-              </li>
-              <li>
-                <b>角色与场景线索</b>
-                <span>下一步建卡时直接接着写</span>
-              </li>
-            </ul>
-          </section>
-
-          <section className="aside-card">
-            <div className="aside-label">写不出来就先回答</div>
-            <p className="aside-question">主角是谁？他想要什么？</p>
-            <p className="aside-question">什么挡着他？</p>
-            <p className="aside-question">最后停在哪一帧画面？</p>
-          </section>
-
-          <p className="aside-note">不用一次写对。所有内容随时可以回来改。</p>
-        </aside>
-      </div>
+  </div>
 
       {/*
         点预设的确认（v0.42）。
