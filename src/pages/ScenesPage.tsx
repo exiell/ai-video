@@ -385,7 +385,6 @@ export function ScenesPage() {
                     {
                       label: '生成场景参考板',
                       useReference: false,
-                      hint: '刻意不画人。用来固定空间结构、固定元素与光线。',
                     },
                   ]}
                   footer={

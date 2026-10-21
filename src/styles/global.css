@@ -517,6 +517,18 @@ details.why .why-body {
   line-height: 1.6;
 }
 
+.consistency-advice {
+  margin-top: 10px;
+}
+
+.shot-guide {
+  margin-top: 2px;
+}
+
+.shot-lock-details {
+  margin-top: 4px;
+}
+
 table.simple {
   width: 100%;
   border-collapse: collapse;

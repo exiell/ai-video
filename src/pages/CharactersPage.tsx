@@ -451,25 +451,22 @@ export function CharactersPage() {
                       label: '① 生成全身多视图',
                       useReference: false,
                       sheetKind: 'turnaround',
-                      hint: '六个视角：正、侧、背、四分之三、俯视、仰视。锁体型、比例、服装轮廓、发型长度。',
                     },
                     {
                       label: '② 生成头部特写',
                       useReference: false,
                       sheetKind: 'face',
-                      hint: '正、侧、背三个头部特写。脸占满画面，比全身图里的脸大几十倍——锁脸主要靠这张。',
                     },
                     {
                       label: '③ 用已有形象图重出一张',
                       useReference: true,
                       sheetKind: 'face',
-                      hint: '拿已有的另一类形象图当参考图再生成，让脸和身体互相锚定，避免两张图不是同一个人。',
                     },
                   ]}
                 />
                 <AssetGallery
                   assets={galleryFor(character.id)}
-                  emptyHint="还没有生成过形象图。建议先出「全身多视图」，再出「头部特写」。"
+                  emptyHint="还没有生成过形象图。"
                 />
 
                 <WhyDetails>

@@ -5,7 +5,6 @@ import { useSettings } from '../store/settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { consistencyAdvice } from '../domain/image/prompts';
 import { ASSET_KIND_LABEL } from '../types/model';
-import { RichText } from './bits';
 import type { Asset } from '../types/model';
 import { ImageLightbox, type LightboxState } from './ImageLightbox';
 import { ImagePromptView } from './ImagePromptView';
@@ -32,8 +31,6 @@ export interface GenerateOption {
   sheetKind?: 'turnaround' | 'face';
   /** 出的是哪一帧（只有镜头用得上） */
   frameKind?: 'first-frame' | 'action-peak' | 'end-frame';
-  /** 按钮说明，显示在按钮下方 */
-  hint?: string;
 }
 
 export function ImagePanel({
@@ -135,24 +132,15 @@ export function ImagePanel({
         <ImagePromptView refId={refId} target={target} options={options} />
       </div>
 
-      {options.some((o) => o.hint) ? (
-        <div className="hint" style={{ marginTop: 6 }}>
-          {options
-            .filter((o) => o.hint)
-            .map((o, index) => (
-              <div key={index}>
-                <b>{o.label}</b>：<RichText>{o.hint}</RichText>
-              </div>
-            ))}
-        </div>
-      ) : null}
-
       {advice ? (
-        <div className="hint" style={{ marginTop: 8 }}>
-          <b>一致性级别：{advice.level}</b> —— {advice.summary}
-          <br />
-          {advice.hint}
-        </div>
+        <details className="why consistency-advice">
+          <summary>一致性 {advice.level}</summary>
+          <div className="why-body">
+            {advice.summary}
+            <br />
+            {advice.hint}
+          </div>
+        </details>
       ) : null}
 
       {feedbacks.map((feedback, index) => (

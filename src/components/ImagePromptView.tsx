@@ -178,12 +178,6 @@ export function ImagePromptView({
                   : '（你现在还没填出图 Key，直接复制去别处出图完全可行。）'}
               </div>
 
-              <div className="hint" style={{ marginTop: 6 }}>
-                <RichText>
-                  {'注意：勾了「锁角色」这类带参考图的按钮时，工具会**额外**附一段「每张参考图扮演什么角色」的说明。那段只在传参考图时才有意义，复制到别处时不需要它——你自己把参考图一起传进去就行。'}
-                </RichText>
-              </div>
-
               {entries.map((entry) => (
                 <section key={entry.title} style={{ marginTop: 18 }}>
                   <div className="field-label" style={{ marginBottom: 6 }}>

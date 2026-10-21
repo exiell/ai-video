@@ -1,10 +1,8 @@
-import { Info } from './bits';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useAppStore } from '../store/app';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { useSettings } from '../store/settings';
-import { stripRichMarks } from './bits';
 
 /**
  * 批量出图按钮 + 进度
@@ -29,18 +27,6 @@ const TASK_LABEL: Record<BatchTask, string> = {
   'first-frame': '全部镜头首帧',
   'action-peak': '全部动作关键帧',
   'end-frame': '全部尾帧',
-};
-
-const TASK_HINT: Record<BatchTask, string> = {
-  characters:
-    '每个角色两张：先全身多视图，再头部特写（后者会拿前者当参考，保证两张图是同一个人）。',
-  scenes: '每个场景一张空场景板，用来固定空间、固定元素与光线。',
-  'first-frame':
-    '每个镜头一张。**首帧是图生视频的输入图，必须先有它**——没有首帧就没法开始做视频。',
-  'action-peak':
-    '每个镜头一张，画动作最有张力的那一瞬。它决定动作的力度与节奏；只给首尾帧，模型可能把动作演得软绵绵。',
-  'end-frame':
-    '每个镜头一张。尾帧是下一镜首帧的接续点，也是首尾帧生视频的收尾锚点。做首尾帧视频时必须有它。',
 };
 
 export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
@@ -77,17 +63,6 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
   return (
     <div className="card">
       <h3 className="card-title">批量生成</h3>
-      <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-        一次跑完，<b>按首帧 → 尾帧 → 动作关键帧的顺序</b>
-        <Info label="为什么要按顺序、能不能并发">
-          三帧有先后：后面的帧会自动拿前面的当构图锚点。顺序反了锚点就没了，
-          三帧的机位可能对不上。
-          <br />
-          <br />
-          另外接口有限流，并发只会换来报错，所以这里一张一张来。
-          中途某一项失败不会中断整批。
-        </Info>
-      </p>
 
       {!hasImageKey ? (
         <div className="issue warning" style={{ marginBottom: 12 }}>
@@ -108,8 +83,6 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             className="btn"
             disabled={batch !== null || !hasImageKey || counts[task] === 0}
             onClick={() => run(task)}
-            // 原生 title 属性只收字符串，不能放 JSX —— 所以这里只去掉标记
-            title={stripRichMarks(TASK_HINT[task])}
           >
             {TASK_LABEL[task]}（{counts[task]}）
           </button>

@@ -572,21 +572,21 @@ export function consistencyAdvice(
   if (capabilities.referenceImage) {
     return {
       level: 'L3',
-      summary: `当前模型（${providerName}）支持参考图，可以用「图生图」把角色锚定住。`,
-      hint: `先出一张角色定妆图，满意之后把它当作参考图去生成关键帧——这是这套工具里一致性最好的一级。参考图最多可传 ${capabilities.maxReferenceImages} 张。`,
+      summary: `当前模型（${providerName}）支持参考图，一致性可以到 L3。`,
+      hint: `先出一张定妆图，再拿它当参考图生成关键帧，是这套工具最稳的做法；最多可传 ${capabilities.maxReferenceImages} 张。`,
     };
   }
   if (capabilities.seed) {
     return {
       level: 'L2',
-      summary: `当前模型（${providerName}）支持固定种子，但**不支持参考图**，一致性只能到 L2。`,
-      hint: '种子能让「同样的提示词」结果稳定，但换动作或构图后形象仍会漂。若想让角色更稳，建议换一个支持参考图的模型。',
+      summary: `当前模型（${providerName}）支持固定种子，但不支持参考图，一致性到 L2。`,
+      hint: '换动作或构图后形象仍会漂；要更稳就换支持参考图的模型。',
     };
   }
   return {
     level: 'L1',
-    summary: `当前模型（${providerName}）既不支持参考图也不支持固定种子，一致性只能靠文字描述，是最弱的一级。`,
-    hint: '把角色卡里的连续性锁写得尽量具体（颜色、材质、标志物），能改善多少算多少。',
+    summary: `当前模型（${providerName}）只能靠文字描述，一致性最弱。`,
+    hint: '把连续性锁写得具体（颜色、材质、标志物），能改善多少算多少。',
   };
 }
 

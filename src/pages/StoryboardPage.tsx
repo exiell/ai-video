@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { SummaryBar, Info } from '../components/bits';
+import { SummaryBar } from '../components/bits';
 import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
@@ -112,14 +112,6 @@ function FrameOrderHint({
             {'首帧是**后两帧的构图锚点**，现在后两帧已经出了，机位可能对不上。建议先出首帧，再重出后两帧。'}
           </RichText>
         </div>
-      </div>
-    );
-  }
-
-  if (hasFirstFrame && !hasActionPeak && !hasEndFrame) {
-    return (
-      <div className="hint" style={{ marginBottom: 8 }}>
-        首帧有了。接着出<b>尾帧</b>（做首尾帧视频用）或<b>动作关键帧</b>（加大动作力度）。
       </div>
     );
   }
@@ -348,11 +340,7 @@ export function StoryboardPage() {
       <div className="shot-list">
         {project.shots.map((shot, index) => {
           const scene = project.scenes.find((s) => s.id === shot.sceneId);
-          const next = project.shots[index + 1];
           const prevShot = project.shots[index - 1];
-          const inferred = prevShot
-            ? inferTransitionType(prevShot)
-            : undefined;
           const locks = project.characters.flatMap((c) =>
             c.continuityLocks.filter((l) => shot.activeLockIds.includes(l.id)),
           );
@@ -521,11 +509,7 @@ export function StoryboardPage() {
                     </div>
 
                     <div>
-                      <div className="field-label">景别说明</div>
                       <ShotSizeHint value={shot.shotSize} />
-                      <div className="field-label" style={{ marginTop: 8 }}>
-                        运镜说明
-                      </div>
                       <CameraMoveHint value={shot.cameraMove} />
                     </div>
 
@@ -612,26 +596,6 @@ export function StoryboardPage() {
                           })
                         }
                       />
-                      <div className="hint">
-                        {index === 0 ? (
-                          <>这是第一镜，无需承接。</>
-                        ) : (
-                          <>
-                            承接会拿上一镜尾帧当锚点
-                            <Info label="承接和跳切有什么区别">
-                              「承接」用于连续动作：出这一镜首帧时会自动拿上一镜尾帧当参考图，
-                              两镜才真的接得住。「跳切」用于换地方、跳时间、或者有意断开——它不拿锚点，
-                              否则会把两个不该相连的镜头焊在一起。
-                            </Info>
-                            {inferred ? (
-                              <>
-                                <br />（按上一镜推断为「
-                                {inferred === 'continuation' ? '承接' : '跳切'}」，可直接改。）
-                              </>
-                            ) : null}
-                          </>
-                        )}
-                      </div>
                     </div>
 
                     <div className="wide">
@@ -644,21 +608,6 @@ export function StoryboardPage() {
                         onChange={(e) => patch(shot, { continuityNote: e.target.value })}
                         placeholder="例：他保持这个姿势不动，下一镜从同一机位推进；或：直接切到第二天早上"
                       />
-                      <div className="hint">
-                        {next ? (
-                          <>
-                            下一镜（第 {next.number} 镜）从
-                            <b>{next.startState || '（还没写）'}</b>开始，尾帧要能接住它。
-                          </>
-                        ) : (
-                          <>最后一镜，写一句收尾说明即可。</>
-                        )}
-                        <Info label="这一栏是干什么的">
-                          它同时管三件事：<b>尾帧图该画成什么样</b>、视频提示词里的转场怎么写、
-                          剪辑时的落点在哪。所以写清这一镜结束时画面停在哪，
-                          而不是写「接下来会发生什么」。
-                        </Info>
-                      </div>
                     </div>
 
                     <div>
@@ -675,7 +624,7 @@ export function StoryboardPage() {
 
                   <div style={{ marginTop: 12 }}>
                     <div className="field-label">
-                      连续性锁（这一镜必须保持不变的可见事实）
+                      连续性锁
                       {isFlagged(shot.id, 'activeLockIds') ? (
                         <span className="tag tag-error">有角色没勾锁</span>
                       ) : null}
@@ -736,33 +685,39 @@ export function StoryboardPage() {
                       )}
                     </div>
                     {locks.length > 0 ? (
-                      <div className="hint" style={{ marginTop: 6 }}>
-                        已锁定：
-                        {locks.map((l) => (
-                          <code key={l.id} style={{ marginLeft: 4 }}>
-                            {l.phrase}
-                          </code>
-                        ))}
-                        <br />
-                        这些短语会被原样写进每一镜的提示词。
-                      </div>
+                      <details className="why shot-lock-details">
+                        <summary>已锁定 {locks.length} 条</summary>
+                        <div className="why-body">
+                          {locks.map((l) => (
+                            <code key={l.id} style={{ marginRight: 6 }}>
+                              {l.phrase}
+                            </code>
+                          ))}
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            这些短语会被原样写进这一镜的提示词。
+                          </div>
+                        </div>
+                      </details>
                     ) : null}
                   </div>
 
                   {scene ? (
-                    <div className="hint" style={{ marginTop: 10 }}>
-                      当前场景「{scene.name}」的固定元素：
-                      {scene.fixedElements.length > 0
-                        ? scene.fixedElements.map((el) => (
-                            <code key={el} style={{ marginLeft: 4 }}>
-                              {el}
-                            </code>
-                          ))
-                        : '（还没登记）'}
-                      <br />
-                      主光方向：{scene.lightDirection || '（未填）'} · 主色调：
-                      {scene.mainColor || '（未填）'}
-                    </div>
+                    <details className="why shot-scene">
+                      <summary>当前场景：{scene.name}</summary>
+                      <div className="why-body">
+                        固定元素：
+                        {scene.fixedElements.length > 0
+                          ? scene.fixedElements.map((el) => (
+                              <code key={el} style={{ marginRight: 6 }}>
+                                {el}
+                              </code>
+                            ))
+                          : '（还没登记）'}
+                        <br />
+                        主光方向：{scene.lightDirection || '（未填）'} · 主色调：
+                        {scene.mainColor || '（未填）'}
+                      </div>
+                    </details>
                   ) : null}
 
                   <ImagePanel
@@ -774,25 +729,21 @@ export function StoryboardPage() {
                         label: '① 首帧',
                         useReference: false,
                         frameKind: 'first-frame',
-                        hint: '纯文生图，不用任何参考图。只在参考图出了问题、想对比一下时才用。',
                       },
                       {
-                        label: '① 首帧（锁角色 + 接上一镜）',
+                        label: '① 首帧（锁角色）',
                         useReference: true,
                         frameKind: 'first-frame',
-                        hint: '带参考图锚定，一致性最好。**建议直接用这个。** 如果上一镜的衔接说明里写了「接着／保持」，它还会自动拿上一镜的尾帧当锚点——那样两镜就真的接得住了。',
                       },
                       {
                         label: '② 动作关键帧',
                         useReference: true,
                         frameKind: 'action-peak',
-                        hint: '画动作最有张力的那一瞬，决定动作的力度与节奏。',
                       },
                       {
                         label: '③ 尾帧',
                         useReference: true,
                         frameKind: 'end-frame',
-                        hint: '画终点那一格。**下一镜的首帧要接住它**，做首尾帧视频时必须生成。',
                       },
                     ]}
                     footer={
@@ -810,7 +761,7 @@ export function StoryboardPage() {
                         />
                         <AssetGallery
                           assets={galleryFor(shot.id)}
-                          emptyHint="还没有生成过这一镜的帧。建议先出「首帧（锁角色）」。"
+                          emptyHint="还没有生成过这一镜的帧。"
                         />
                       </>
                     }

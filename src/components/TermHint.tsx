@@ -99,18 +99,24 @@ export function TermHint({ term }: { term: string }) {
 /** 景别下拉框旁的提示：直接给出「什么时候用它」，而不是字典定义 */
 export function ShotSizeHint({ value }: { value: ShotSize }) {
   return (
-    <div className="hint" style={{ marginTop: 4 }}>
-      <RichText>{SHOT_SIZE_GUIDE[value]}</RichText>
-    </div>
+    <details className="why shot-guide">
+      <summary>景别说明</summary>
+      <div className="why-body">
+        <RichText>{SHOT_SIZE_GUIDE[value]}</RichText>
+      </div>
+    </details>
   );
 }
 
 /** 运镜下拉框旁的提示 */
 export function CameraMoveHint({ value }: { value: CameraMove }) {
   return (
-    <div className="hint" style={{ marginTop: 4 }}>
-      <RichText>{CAMERA_MOVE_GUIDE[value]}</RichText>
-    </div>
+    <details className="why shot-guide">
+      <summary>运镜说明</summary>
+      <div className="why-body">
+        <RichText>{CAMERA_MOVE_GUIDE[value]}</RichText>
+      </div>
+    </details>
   );
 }
 
