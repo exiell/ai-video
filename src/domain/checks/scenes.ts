@@ -131,6 +131,18 @@ export function checkScenes(project: Project): CheckIssue[] {
         }),
       );
     }
+    if (!scene.identity.spatialStructure.trim()) {
+      issues.push(
+        makeIssue({
+          ruleId: 'scene-missing-space',
+          severity: 'warning',
+          title: `${label}没有写空间结构`,
+          why: '空间结构说的是「这地方长什么样」——门开在哪、什么在左、什么在右。它是房间自己的方位，不随镜头变，所以同一处地方换机位之后依然成立。不写下来，模型每个镜头都会重新猜一遍布局，观众看到的就是「角色在动、场景在换」。',
+          suggestion: `用房间的方位写，不要用画面方位。例如：单间小屋，正面一扇对开的旧木门，门内左侧供桌，右侧墙角堆着草料。别写「左边有门」——那说的是画面左边，反打之后就不对了。`,
+          location: { kind: 'scene', id: scene.id, field: 'identity.spatialStructure' },
+        }),
+      );
+    }
     if (!scene.lightDirection.trim()) {
       issues.push(
         makeIssue({

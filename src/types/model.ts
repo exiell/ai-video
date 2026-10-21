@@ -386,6 +386,7 @@ export type CheckRuleId =
   | 'variant-not-owned'
   | 'scene-not-registered'
   | 'scene-missing-elements'
+  | 'scene-missing-space'
   | 'scene-light-conflict'
   | 'scene-color-drift'
   | 'duration-mismatch'

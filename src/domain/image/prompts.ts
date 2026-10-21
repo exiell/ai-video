@@ -12,7 +12,7 @@ import {
 } from './characterSheet';
 
 /**
- * 人物在这一档景别里应该占画面高度的多少（v0.46 新增）。
+ * 人物在这一档景别里应该占画面高度的多少（v0.44 新增）。
  *
  * ===========================================================================
  * 这是什么，以及它**不是**什么
@@ -50,15 +50,24 @@ const GROUND_VISIBLE: ReadonlySet<ShotSize> = new Set<ShotSize>([
 ]);
 
 /**
- * 接触与遮挡（v0.46 新增）。
+ * 接触与遮挡（v0.44 新增，v0.45 改掉影子那半句）。
  *
- * 缺了「接触」，画出来的人就像**贴**在背景上的剪影：脚不落地、影子没有平面。
+ * 缺了「接触」，画出来的人就像**贴**在背景上的剪影：脚不落地、没有平面。
  * 这是「人物像 P 上去的」最直接的技术原因，而不是模型不够好。
  *
  * 缺了「遮挡」，人就永远画在场景**前面**而不是**里面**——
  * 该被桌角挡住的小腿会完整地穿过桌子。
+ *
+ * 【v0.45 修】原来写的是 `with the shadow falling on that plane`（影子落在这个平面上）。
+ * 这句会和用户填的主光方向打架：示例数据里就有一条「月光被云层遮住，
+ * 是雪地反上来的清冷散光，**无明显投影**」——一边说没有投影，
+ * 一边要求影子落在平面上，模型只能二选一。
+ *
+ * 现在只讲接触本身（落地这件事和有没有投影无关）。影子交给 `lightSourceLine`，
+ * 那里才是光的唯一来源。
  */
-const GROUND_CONTACT = 'the character stands on the same ground plane as the fixed objects with the shadow falling on that plane';
+const GROUND_CONTACT =
+  'the character stands on the same ground plane as the fixed objects, with both feet touching it';
 
 const OCCLUSION = 'objects in front of the character overlap and hide part of the body';
 
@@ -106,8 +115,115 @@ export interface ImagePromptInput {
   cameraPositionEn?: string;
 }
 
+/**
+ * 场景板的固定指令。
+ *
+ * 【v0.45 删掉了 `even lighting`】
+ * 这一句原来在**主动拆自己的台**：用户在场景卡里填了
+ * 「唯一光源是门外雪地反光与桌上一盏残灯，冷调，光从门口方向斜射」，
+ * 我们紧接着又要求「均匀照明」。等于先给光定了向，再让模型把它抹平。
+ *
+ * 均匀照明只适合「产品图鉴」那类场合。影视场景几乎总有明确的主光——
+ * 没有方向的场景，观众判断不出这是白天还是夜里，也判断不出机位转了多少度。
+ */
 const SCENE_PLATE_INSTRUCTION =
-  'empty environment reference plate, no people, wide establishing view showing the full layout of the space, even lighting, no text, no watermark';
+  'empty environment reference plate, no people, wide establishing view showing the full layout of the space, no text, no watermark';
+
+/**
+ * 提示词正文的拆分与去重（v0.45 从 `buildFramePrompt` 里提出来，三种出图目标共用）。
+ *
+ * ===========================================================================
+ * 为什么必须按逗号切到最细粒度
+ * ===========================================================================
+ * 提示词是一个逗号分隔的短语列表，**逗号就是语义分隔符**。
+ * 所以任何以整串形式传进来的内容（角色摘要、锁短语）都要先切开再比较，
+ * 否则等于绕过了去重。
+ *
+ * 踩过的两个坑：
+ *  1. 按整串做包含判断 → 角色摘要里含有「square face」子串，
+ *     被误判成「已被锁覆盖」而整条删掉
+ *  2. 只对整串做相等判断 → 锁短语「square face, thick lowering brows…」
+ *     与摘要里的「square face」不相等，于是**同一个特征说了两遍**
+ *
+ * 重复不是强调，是**给模型两个略有不同的版本**——它会在两者之间摇，
+ * 同一张脸在相邻镜头里就会有细微漂移。
+ */
+function splitPhrases(text: string | undefined): string[] {
+  return (text ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function dedupePhrases(parts: (string | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of parts.flatMap(splitPhrases)) {
+    const phrase = raw.replace(/\s+/g, ' ').trim();
+    if (phrase.length === 0) continue;
+    const key = phrase.toLowerCase().replace(/[.,;]+$/, '');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(phrase);
+  }
+  return out;
+}
+
+/**
+ * 主光方向那句话（v0.45 新增）。
+ *
+ * ===========================================================================
+ * 为什么必须是「房间坐标」而不是「画面坐标」
+ * ===========================================================================
+ * 两份业界的写法是冲突的：
+ *   - Hailuo 的导演指南说写「key light from screen left」并逐字复用到每一镜；
+ *   - 另一份工作流文档说必须写房间坐标，因为反打之后同一扇窗会跑到画面另一边。
+ *
+ * 两者都对，但适用范围不同。**只要不越轴线，画面坐标够用；一旦有反打，画面坐标
+ * 必然自相矛盾——因为「相机左侧」这件事本身翻面了。**
+ *
+ * 本项目要支持「同一场景多个机位」，所以只能选房间坐标：光从哪扇窗、哪个门进来。
+ * 那是唯一不会随机位翻面的真值。
+ *
+ * ===========================================================================
+ * 为什么由本函数统一生成，而不是各处各写一句
+ * ===========================================================================
+ * 同一个场景的所有镜头必须用**逐字相同**的一句话描述光。这在实现上是靠
+ * 「只从 `scene.lightDirection` 推导、不掺任何镜头级信息」保证的——
+ * 只要有任何一个调用点掺进「这一镜看起来更暗」之类的判断，就不成立了。
+ */
+export function lightSourceLine(lightDirection: string): string {
+  const text = lightDirection.trim();
+  if (!text) return '';
+  return `key light: ${text}`;
+}
+
+/**
+ * 空间结构那句话（v0.45 新增）。
+ *
+ * ===========================================================================
+ * 这个字段一直存在，但从来没进过提示词
+ * ===========================================================================
+ * `SceneIdentity.spatialStructure` 在表单里能填、聊天能改、导出的 markdown 里有，
+ * 而在 `src/domain/image/` 目录下**零引用**。
+ *
+ * 用户填的内容是这种：「单间小屋，正面一扇对开的旧木门，门内左侧供桌，
+ * 右侧墙角堆着草料」。这就是一份合格的房间坐标描述——它穿过反打以后依然成立，
+ * 「门内左侧供桌」不因为机位翻面而改变。而场景板提示词里只有一句
+ * `summaryEn`（英文概述）和几个固定元素短语，空间关系全靠模型自己编。
+ *
+ * ===========================================================================
+ * 刻意不写「和别的镜头保持一致」
+ * ===========================================================================
+ * 那句话看着合理，实际上**没有指代对象**：模型这次只生成一张图，看不到别的镜头。
+ * 同一个错误在尺度锚点上已经犯过一次（见下面 `SUBJECT_HEIGHT_SHARE` 的说明）。
+ * 这里只陈述空间事实，不承诺跨镜头。
+ */
+export function spatialLayoutLine(spatialStructure: string): string {
+  const text = spatialStructure.trim();
+  if (!text) return '';
+  return `room layout: ${text}`;
+}
 
 /** 关键帧共用的画质尾缀。只放能被验证的词，不堆无意义的质量词。 */
 const QUALITY_TAIL = 'clean line art, consistent proportions, no text, no watermark';
@@ -137,7 +253,12 @@ export interface BuildImagePromptOptions {
     scenes: {
       id: string;
       name: string;
-      identity: { summaryEn: string; summary: string };
+      identity: {
+        summaryEn: string;
+        summary: string;
+        /** 房间坐标的空间描述（v0.45 起会进提示词正文）。老项目可能没有。 */
+        spatialStructure?: string;
+      };
       fixedElements: string[];
       lightDirection: string;
       mainColor: string;
@@ -223,8 +344,21 @@ export function buildScenePlatePrompt(
     fragment: SCENE_PLATE_INSTRUCTION,
     label: '空场景板',
     reason:
-      '刻意要求画面里没有人。场景板的作用是固定空间结构与光线，站了人反而会干扰后续把角色放进去。',
+      '刻意要求画面里没有人。场景板的作用是固定空间结构与光线，站了人反而会干扰后续把角色放进去。' +
+      '（v0.45 之前这里还有一句 `even lighting`（均匀照明），和你填的主光方向直接打架，已删掉。）',
   });
+
+  const spatial = spatialLayoutLine(scene.identity.spatialStructure ?? '');
+  if (spatial) {
+    notes.push({
+      fragment: spatial,
+      label: '空间结构',
+      reason:
+        '这地方长什么样——门在哪、什么在左、什么在右。' +
+        '它写的是**房间自己的方位**，不是某一台摄影机的视角，所以换机位之后依然成立。' +
+        'v0.45 之前这个字段只在表单和导出里出现，一次都没进过提示词。',
+    });
+  }
 
   if (scene.fixedElements.length > 0) {
     notes.push({
@@ -235,11 +369,16 @@ export function buildScenePlatePrompt(
     });
   }
 
-  if (scene.lightDirection) {
+  const light = lightSourceLine(scene.lightDirection);
+  if (light) {
     notes.push({
-      fragment: scene.lightDirection,
+      fragment: light,
       label: '主光方向',
-      reason: '光从哪来，决定了同一处地方在不同镜头里像不像同一个时刻。',
+      reason:
+        '光的真值是「从哪扇窗、哪个门进来」，不是「在画面左边」。' +
+        '反打之后同一扇窗会跑到画面另一边，而房间坐标不会翻面——' +
+        '所以同一个场景的所有镜头用的都是这一句原文，不随镜头改写。' +
+        'v0.45 之前这句只出现在界面说明里，提示词正文里一个字都没有。',
     });
   }
 
@@ -249,17 +388,39 @@ export function buildScenePlatePrompt(
     reason: '色调是观众判断「换了地方」最直接的线索。',
   });
 
-  const positive = [
-    scene.identity.summaryEn || scene.name,
-    ...scene.fixedElements,
+  /**
+   * 场景板的正向词去重（v0.45 补）。
+   *
+   * 这里原来**完全没有去重**，只是 `filter(Boolean).join(', ')`。
+   * 加进 `spatialStructure` 之后，同一处空间会被说三遍：
+   *   1. `summaryEn`（英文概述，往往已经写了「门在正面、供桌在左」）
+   *   2. `room layout: …`（中文的空间结构）
+   *   3. `fixedElements` 原样再列一遍
+   *
+   * 去重做两件事：
+   *  - 已经被 `summaryEn` 的**字面**覆盖的固定元素不再重复列
+   *    （与 `buildFramePrompt` 里 `extraElements` 的做法一致）
+   *  - 完全相同的短语只留第一次出现的那一处（提示词结尾的 `no text, no watermark`
+   *    原来会跟固定指令里的那份重复一遍）
+   */
+  const plateSummary = scene.identity.summaryEn || scene.name;
+  const plateExtraElements = scene.fixedElements.filter(
+    (el) => !plateSummary.toLowerCase().includes(el.toLowerCase()),
+  );
+
+  const positive = dedupePhrases([
+    plateSummary,
+    // 空间结构与主光：v0.45 起进正文。
+    // 顺序放在最前，因为提示词前段权重更高，而这两项正是「这是不是同一个地方」的依据。
+    spatial,
+    ...plateExtraElements,
     ...locks,
     scene.mainColor ? `${scene.mainColor} color palette` : '',
+    light,
     SCENE_PLATE_INSTRUCTION,
     ...project.brief.styleTags,
     QUALITY_TAIL,
-  ]
-    .filter(Boolean)
-    .join(', ');
+  ]).join(', ');
 
   return {
     subjectLabel: `场景「${scene.name}」参考板`,
@@ -333,13 +494,46 @@ export function buildFramePrompt(
   }
 
   /**
-   * 尺度锚定（v0.23 起，v0.46 重写）。
+   * 空间结构与主光（v0.45 新增）。
+   *
+   * 这两句和场景板上**逐字相同**——因为都只从 `scene` 推导，不掺镜头级信息。
+   * 「同一场景的每个镜头用同一句话描述空间和光」这条约束，是靠这个写法保证的，
+   * 不是靠某处额外做了一次比对。
+   */
+  const spatial = spatialLayoutLine(scene?.identity.spatialStructure ?? '');
+  const light = lightSourceLine(scene?.lightDirection ?? '');
+
+  if (spatial) {
+    notes.push({
+      fragment: spatial,
+      label: '空间结构',
+      reason:
+        `来自场景卡「${scene?.name ?? ''}」。` +
+        '这是房间本身的方位（门在哪、什么在左什么在右），不是这一镜的视角——' +
+        '所以换机位之后它依然成立。缺了它，模型每画一镜就重新布置一次这个空间，' +
+        '观众看到的就是「角色在动，场景在换」。',
+    });
+  }
+
+  if (light) {
+    notes.push({
+      fragment: light,
+      label: '主光方向（整场同一句）',
+      reason:
+        '同一个场景的所有镜头共用这一句原文，所以镜与镜之间的光不会打架。' +
+        '写的是房间坐标（光从哪扇窗、哪个门进来），不是「在画面左边」——' +
+        '后者一旦反打就会自相矛盾。',
+    });
+  }
+
+  /**
+   * 尺度锚定（v0.23 起，v0.44 重写）。
    *
    * 【v0.23 的原始问题】镜头之间角色的「大小比例」会变——同一个房间里的
    * 同一张桌子，在 A 镜里到腰高、在 B 镜里到胸口高。
    * 根因是提示词里注入了固定元素，却从没说过这些东西与角色之间的尺寸关系。
    *
-   * 【v0.46 修的是这句本身】原来写的是
+   * 【v0.44 修的是这句本身】原来写的是
    * 「fixed objects keep the same size relative to the character as in other shots of this scene」。
    * 「as in other shots」在这一次单图生成里**没有指代对象**——模型看不到别的镜头。
    * 这句话实际上等于没说，所以那个老问题一直没被真正解决。
@@ -449,26 +643,6 @@ export function buildFramePrompt(
    *     重复不是强调，是给模型两个略有不同的版本，它会在两者之间摇，
    *     同一张脸在相邻镜头里就会有细微漂移。
    */
-  const splitPhrases = (text: string | undefined): string[] =>
-    (text ?? '')
-      .split(',')
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-  const dedupePhrases = (parts: (string | undefined)[]): string[] => {
-    const seen = new Set<string>();
-    const out: string[] = [];
-    for (const raw of parts.flatMap(splitPhrases)) {
-      const phrase = raw.replace(/\s+/g, ' ').trim();
-      if (phrase.length === 0) continue;
-      const key = phrase.toLowerCase().replace(/[.,;]+$/, '');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(phrase);
-    }
-    return out;
-  };
-
   const sceneSummary = scene ? scene.identity.summaryEn || scene.name : '';
   const extraElements = scene
     ? scene.fixedElements.filter((el) => !sceneSummary.toLowerCase().includes(el.toLowerCase()))
@@ -507,13 +681,18 @@ export function buildFramePrompt(
     ...identityFirst,
     sceneSummary,
     ...extraElements,
+    // 空间结构与主光（v0.45）。与场景板上的那两句逐字相同。
+    // 放在固定元素之后、尺度锚点之前：先说「这地方长什么样、光从哪来」，
+    // 再说「东西多大」。
+    spatial,
+    light,
     // 尺度锚点：固定物体的真实尺寸与角色的关系不随镜头改变。
     // 它含有固定元素名，但**不能被去重删掉**——它是一句独立的指令，
     // 不是元素的重复列举。（删掉它就会退回「桌椅随手放大缩小」的老问题。）
     scene && scene.fixedElements.length > 0
       ? 'fixed objects keep their true size relative to the character'
       : '',
-    // 人物占比 + 接触 + 遮挡（v0.46）。
+    // 人物占比 + 接触 + 遮挡（v0.44）。
     // 画面里没有角色时全部跳过——空镜里要求「人物占四分之一画高」
     // 只会让模型硬塞一个人进去。
     //

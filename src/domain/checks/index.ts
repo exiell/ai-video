@@ -29,6 +29,7 @@ export const RULE_LABEL: Record<string, string> = {
   'variant-not-owned': '变体归属',
   'scene-not-registered': '场景未登记',
   'scene-missing-elements': '场景固定元素缺失',
+  'scene-missing-space': '场景空间结构缺失',
   'scene-light-conflict': '场景光线冲突',
   'scene-color-drift': '场景色调漂移',
   'duration-mismatch': '单镜时长异常',
