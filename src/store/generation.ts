@@ -6,6 +6,7 @@ import {
   generateAssets,
   generateShots,
   generateStory,
+  generateStyleTags,
 } from '../services/llm/generate';
 import { assetsFromGenerated, shotsFromGenerated, storyFromGenerated } from '../services/llm/mapping';
 
@@ -16,7 +17,7 @@ import { assetsFromGenerated, shotsFromGenerated, storyFromGenerated } from '../
  * 这些状态不属于项目数据本身，混进 app store 会让「项目是否被改动」的判断变复杂。
  */
 
-export type GenerationTask = 'story' | 'assets' | 'shots';
+export type GenerationTask = 'story' | 'assets' | 'shots' | 'style';
 
 export interface TaskFeedback {
   kind: 'ok' | 'error' | 'info';
@@ -38,6 +39,14 @@ interface GenerationState {
   runStory: () => Promise<void>;
   runAssets: () => Promise<void>;
   runShots: () => Promise<void>;
+  /**
+   * 把中文「风格倾向」翻成英文风格关键词，并**直接写回项目**。
+   *
+   * 为什么要写回而不是只返回给页面：风格词是项目数据的一部分（会进每一张图的提示词），
+   * 让页面自己 patch 会让「谁负责落盘」变得模糊。这里和其它三个任务保持一致：
+   * 生成结果由 store 负责写进项目。
+   */
+  runStyleTags: () => Promise<void>;
 }
 
 export const useGeneration = create<GenerationState>((set) => ({
@@ -222,6 +231,81 @@ export const useGeneration = create<GenerationState>((set) => ({
             warnings.length > 0 ? `有 ${warnings.length} 处引用对不上，已标出。` : '去穿帮检查看看有没有问题。'
           }`,
           warnings: [...outcome.warnings, ...warnings],
+          attempts: outcome.attempts,
+        },
+      },
+    }));
+  },
+
+  runStyleTags: async () => {
+    const { project } = useAppStore.getState();
+    if (!project || useGeneration.getState().pending) return;
+
+    if (!project.brief.styleTone.trim()) {
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          style: {
+            kind: 'info',
+            message: '先在上面写一句中文的风格倾向，比如「水墨写意 + 冷色调，厚重衣物质感」，再来生成关键词。',
+            warnings: [],
+          },
+        },
+      }));
+      return;
+    }
+
+    const built = buildGenerateContext();
+    if ('error' in built) {
+      set((s) => ({
+        feedback: { ...s.feedback, style: { kind: 'error', message: built.error, warnings: [] } },
+      }));
+      return;
+    }
+
+    set((s) => ({ pending: 'style', feedback: { ...s.feedback, style: undefined } }));
+    const outcome = await generateStyleTags(project, built.ctx);
+    set({ pending: null });
+
+    if (!outcome.ok || !outcome.data) {
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          style: {
+            kind: 'error',
+            message: describeFailure(outcome),
+            warnings: outcome.warnings,
+            ...(outcome.detail ? { detail: outcome.detail } : {}),
+            ...(outcome.raw ? { raw: outcome.raw } : {}),
+          },
+        },
+      }));
+      return;
+    }
+
+    const tags = outcome.data.tags;
+    if (tags.length === 0) {
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          style: {
+            kind: 'error',
+            message: '模型给回来的词都没法用在提示词里（太长或重复）。换个模型，或者把风格倾向写具体一点再试。',
+            warnings: outcome.warnings,
+          },
+        },
+      }));
+      return;
+    }
+
+    useAppStore.getState().patchBrief({ styleTags: tags });
+    set((s) => ({
+      feedback: {
+        ...s.feedback,
+        style: {
+          kind: 'ok',
+          message: `已生成 ${tags.length} 条英文风格关键词，并应用到项目——之后出的图都会带上它们。`,
+          warnings: outcome.warnings,
           attempts: outcome.attempts,
         },
       },

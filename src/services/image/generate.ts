@@ -357,6 +357,8 @@ export interface AssetDraft {
   model?: string;
   lockPhrases?: string[];
   referenceCount?: number;
+  /** 生成时项目的风格关键词，存进素材便于日后判断「这张图还合不合现在的风格」 */
+  styleTags?: string[];
   /**
    * 出的是哪一帧，以及参考图里是否含本镜首帧。
    * 它会**存进素材记录**，便于事后核对「这张图当时是拿什么当锚点的」。
@@ -421,6 +423,7 @@ export function toAssets(
       promptSnapshot: draft.promptSnapshot,
       ...(draft.model !== undefined ? { model: draft.model } : {}),
       ...(draft.lockPhrases !== undefined ? { lockPhrases: draft.lockPhrases } : {}),
+      ...(draft.styleTags !== undefined ? { styleTags: draft.styleTags } : {}),
       ...(draft.referenceCount !== undefined ? { referenceCount: draft.referenceCount } : {}),
       byteSize: Math.floor((base64Part.length * 3) / 4),
     });

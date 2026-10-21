@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { Field, WhyDetails } from '../components/bits';
@@ -475,11 +475,22 @@ export function GuidePage() {
             />
           </Field>
 
-          <div className="field-label" style={{ marginBottom: 6 }}>
-            选一个风格（决定全片质感的就是它）
+          {/*
+            【为什么要这个按钮】「风格倾向」是中文，而真正进提示词的是下面的英文关键词。
+            新手写得出中文、写不出英文，于是这里写了一堆、实际生成时风格词还是空的——
+            风格根本没生效。这个按钮把两者接上。
+          */}
+          <div style={{ marginTop: -4 }}>
+            <GenerateBar
+              task="style"
+              label="用这段中文生成英文关键词"
+              hint="会写进下面的「风格关键词」，之后出的图都带上"
+            />
           </div>
+
+          <div className="field-label" style={{ marginBottom: 6 }}>选一个风格（决定全片质感的就是它）</div>
           <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
-            点一下整套风格词都配好，全片共用同一套。
+            点一下整套风格词都配好，全片共用同一套。再点一下取消。
           </p>
           <div className="row" style={{ marginBottom: 12 }}>
             {STYLE_PRESETS.map((preset) => {
@@ -489,8 +500,16 @@ export function GuidePage() {
                   key={preset.id}
                   type="button"
                   className={`btn${active ? ' btn-primary' : ''}`}
-                  onClick={() => patchBrief({ styleTags: [...preset.tags] })}
-                  title={preset.description}
+                  /*
+                    【v0.41】选中之后必须能取消。
+                    原来点已选中的预设只是把同一套词再写一遍，等于没法退回「不用预设」。
+                    用户想改回空白、或想完全手写关键词时就没有出路了。
+                  */
+                  onClick={() =>
+                    patchBrief({ styleTags: active ? [] : [...preset.tags] })
+                  }
+                  title={active ? '再点一下取消这个预设' : preset.description}
+                  aria-pressed={active}
                 >
                   {preset.label}
                   {active ? ' · 已选' : ''}

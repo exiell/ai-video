@@ -63,6 +63,13 @@ export interface ReferencePlan {
   /** 因为槽位不够而没能放进去的参考图，如实报告 */
   dropped: ReferenceRole[];
   /**
+   * 因为**风格和当前不一致**而主动跳过的参考图。
+   *
+   * 这不是失败，是取舍：用一张旧风格的图当锚点，会让新图的风格介于两者之间，
+   * 看起来就是「崩了」。界面上要把这件事说出来，否则用户只会觉得工具坏了。
+   */
+  staleSkipped: ReferenceRole[];
+  /**
    * 输出画幅由哪张参考图决定（**永远是最靠后的那一张**）。
    *
    * 千问多图编辑的硬约束：输出宽高比随最后一张图。
@@ -136,33 +143,62 @@ export function isContinuousWithPrevious(previous: Shot | undefined): {
   };
 }
 
+/** 一张能做参考的素材。`styleTags` 是它**生成时**用的风格词。 */
+export interface RefAsset {
+  dataUrl?: string;
+  kind: string;
+  createdAt: string;
+  /** 生成这张图时项目的风格关键词。老素材没有这个字段，按「兼容」处理 */
+  styleTags?: string[];
+}
+
 export interface ReferenceSource {
   /** 本镜已有的素材（用来找本镜首帧） */
-  ownFrames: { dataUrl?: string; kind: string; createdAt: string }[];
+  ownFrames: RefAsset[];
   /** 上一镜已有的素材（用来找它的尾帧） */
-  previousFrames?: { dataUrl?: string; kind: string; createdAt: string }[] | undefined;
+  previousFrames?: RefAsset[] | undefined;
   /** 出场角色的形象图，按出场顺序 */
-  characterSheets: { dataUrl?: string; kind: string; createdAt: string }[][];
+  characterSheets: RefAsset[][];
   /** 场景板的素材 */
-  scenePlates?: { dataUrl?: string; kind: string; createdAt: string }[] | undefined;
+  scenePlates?: RefAsset[] | undefined;
+}
+
+/**
+ * 两组风格词是不是同一套。
+ *
+ * 顺序无关（用户可能只调换了两行），大小写无关。
+ * 老素材没有记录 styleTags 时**一律算兼容**——否则升级之后
+ * 所有历史图都会突然不能当参考图，那是更糟的破坏。
+ */
+export function sameStyle(a: string[] | undefined, b: string[] | undefined): boolean {
+  if (!a || !b) return true;
+  const norm = (xs: string[]): string =>
+    xs
+      // 折叠内部连续空格：「Anime  Style」和「anime style」是同一套风格
+      .map((x) => x.trim().toLowerCase().replace(/\s+/g, ' '))
+      .filter(Boolean)
+      .sort()
+      .join('|');
+  return norm(a) === norm(b);
 }
 
 /** 从素材里挑最新一张指定类型 */
 function newestOf(
-  assets: { dataUrl?: string; kind: string; createdAt: string }[] | undefined,
+  assets: RefAsset[] | undefined,
   kind: string,
+  style?: string[],
 ): string | undefined {
   if (!assets || assets.length === 0) return undefined;
   return assets
-    .filter((a) => a.kind === kind && a.dataUrl)
+    .filter((a) => a.kind === kind && a.dataUrl && sameStyle(a.styleTags, style))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.dataUrl;
 }
 
 /** 角色_head特写优先于全身图——脸只能靠图，体型服装文字能说清 */
-function pickCharacterSheet(assets: { dataUrl?: string; kind: string; createdAt: string }[]):
-  | string
-  | undefined {
-  return newestOf(assets, 'character-sheet-face') ?? newestOf(assets, 'character-sheet');
+function pickCharacterSheet(assets: RefAsset[], style?: string[]): string | undefined {
+  return (
+    newestOf(assets, 'character-sheet-face', style) ?? newestOf(assets, 'character-sheet', style)
+  );
 }
 
 /**
@@ -184,9 +220,36 @@ export function planReferenceImages(args: {
   capabilities: ModelCapabilities;
   previous: Shot | undefined;
   sources: ReferenceSource;
+  /**
+   * 当前项目的风格关键词（v0.41）。
+   *
+   * 【为什么要有这个参数】踩过一个很贵的坑：改完风格之后重出首尾帧，
+   * 图会「崩」——不是模型坏了，而是它收到了**互相矛盾的两个指令**：
+   *
+   *   文字说：「水墨写意、冷蓝色调」（新的 styleTags）
+   *   参考图是：一张暖色赛璐璐的旧图（旧的 styleTags 生成的）
+   *
+   * 参考图对画面的拉力比文字更强，所以出来的图介于两者之间，
+   * 看起来就是「风格崩坏」。而且它只在**改过风格又重出**的时候出现，
+   * 第一次生成永远是对的——所以很难归因。
+   *
+   * 传了它，就会**跳过风格不一致的旧素材**：宁可少一张参考图，
+   * 也不要给模型两个打架的指令。
+   */
+  styleTags?: string[];
 }): ReferencePlan {
-  const { kind, capabilities, previous, sources } = args;
+  const { kind, capabilities, previous, sources, styleTags } = args;
   const limit = capabilities.maxReferenceImages || 0;
+
+  /** 这一批素材里有没有因为风格不符被跳过的，用于如实告知 */
+  const staleSkipped: ReferenceRole[] = [];
+  const pick = (assets: RefAsset[] | undefined, assetKind: string): string | undefined => {
+    const url = newestOf(assets, assetKind, styleTags);
+    if (!url && assets?.some((a) => a.kind === assetKind && a.dataUrl && !sameStyle(a.styleTags, styleTags))) {
+      staleSkipped.push(assetKind === 'scene-plate' ? 'scene-plate' : 'own-first-frame');
+    }
+    return url;
+  };
 
   const continuity = isContinuousWithPrevious(previous);
   const candidates: { role: ReferenceRole; dataUrl: string | undefined }[] = [];
@@ -194,23 +257,30 @@ export function planReferenceImages(args: {
   if (kind === 'first-frame') {
     // 出首帧时，上一镜尾帧是唯一的构图锚点
     if (continuity.continuous) {
-      candidates.push({
-        role: 'previous-end-frame',
-        dataUrl: newestOf(sources.previousFrames, 'end-frame'),
-      });
+      const url = newestOf(sources.previousFrames, 'end-frame', styleTags);
+      if (
+        !url &&
+        sources.previousFrames?.some(
+          (a) => a.kind === 'end-frame' && a.dataUrl && !sameStyle(a.styleTags, styleTags),
+        )
+      ) {
+        staleSkipped.push('previous-end-frame');
+      }
+      candidates.push({ role: 'previous-end-frame', dataUrl: url });
     }
   } else {
     // 出后两帧时，本镜首帧是构图锚点
-    candidates.push({
-      role: 'own-first-frame',
-      dataUrl: newestOf(sources.ownFrames, 'first-frame'),
-    });
+    candidates.push({ role: 'own-first-frame', dataUrl: pick(sources.ownFrames, 'first-frame') });
   }
 
   for (const sheet of sources.characterSheets) {
-    candidates.push({ role: 'character-sheet', dataUrl: pickCharacterSheet(sheet) });
+    const url = pickCharacterSheet(sheet, styleTags);
+    if (!url && sheet.some((a) => a.dataUrl && !sameStyle(a.styleTags, styleTags))) {
+      staleSkipped.push('character-sheet');
+    }
+    candidates.push({ role: 'character-sheet', dataUrl: url });
   }
-  candidates.push({ role: 'scene-plate', dataUrl: newestOf(sources.scenePlates, 'scene-plate') });
+  candidates.push({ role: 'scene-plate', dataUrl: pick(sources.scenePlates, 'scene-plate') });
 
   const slots: ReferenceSlot[] = [];
   const dropped: ReferenceRole[] = [];
@@ -234,6 +304,7 @@ export function planReferenceImages(args: {
     isContinuous: continuity.continuous,
     reason: continuity.reason,
     dropped,
+    staleSkipped: [...new Set(staleSkipped)],
     aspectRatioOwner: lastRoleOf(slots),
   };
 }

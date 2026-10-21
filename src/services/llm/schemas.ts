@@ -219,6 +219,64 @@ export function parseAssets(raw: string): ParseOutcome<GeneratedAssets> {
   return parseWith(assetsSchema, raw, '角色与场景', 'assets');
 }
 
+// ---------------------------------------------------------------------------
+// 风格关键词（v0.41）
+// ---------------------------------------------------------------------------
+
+/**
+ * 从中文「风格倾向」推出来的英文关键词。
+ *
+ * 为什么单独一个生成任务：`styleTone` 是作者用中文写的备忘（「水墨写意 + 冷色调」），
+ * 它**不进提示词**——出图模型对英文更稳。真正进提示词的是 `styleTags`。
+ * 但新手写不出英文风格词，于是「风格倾向」写了一堆、实际生成时风格词还是空的。
+ * 这个任务就是把前者翻译并展开成后者。
+ *
+ * 数量和长度都要卡住：
+ *  - 少于 3 条通常不够描述一种风格
+ *  - 多于 10 条会挤占提示词里真正描述画面的空间（模型对提示词前段权重更高）
+ *  - 单条过长会变成一句话，而提示词里要的是短语
+ */
+export const styleTagsSchema = z.object({
+  tags: z.array(z.string().min(1).max(120)).min(1).max(16),
+});
+
+export type GeneratedStyleTags = z.infer<typeof styleTagsSchema>;
+
+/** 把模型的原始输出解析成风格关键词 */
+export function parseStyleTags(raw: string): ParseOutcome<GeneratedStyleTags> {
+  const outcome = parseWith(styleTagsSchema, raw, '风格关键词');
+  if (!outcome.ok || !outcome.data) return outcome;
+  return { ...outcome, data: { tags: sanitizeStyleTags(outcome.data.tags) } };
+}
+
+/**
+ * 清洗风格关键词。
+ *
+ * 模型常见的几种毛病，都在这里收掉而不是让它进提示词：
+ *  - 带引号或句号（`"anime style"`、`cel shading.`）→ 去掉，提示词里是短语列表
+ *  - 一整句（`the style is a blend of ink wash and cel shading`）→ 太长的不收
+ *  - 重复 → 去掉。重复不是强调，是给模型两个略有不同的版本
+ */
+export function sanitizeStyleTags(tags: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const cleaned = raw
+      .replace(/^[\s"'“”‘’「」]+|[\s"'“”‘’「」，,。.;；]+$/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (cleaned.length === 0) continue;
+    // 超过 8 个词基本就是一句话了，不是风格短语
+    if (cleaned.split(' ').length > 8) continue;
+    const key = cleaned.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(cleaned);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
 /** 把模型的原始输出解析成分镜 */
 export function parseShots(raw: string): ParseOutcome<GeneratedShots> {
   return parseWith(shotsSchema, raw, '分镜', 'shots');

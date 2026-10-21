@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cloneAsNewProject, useAppStore } from '../store/app';
 import { useImage } from '../store/image';
@@ -107,6 +107,38 @@ export function HomePage() {
   function openBlank() {
     createEmptyProject('我的动漫短片');
     navigate('/guide');
+  }
+
+  /**
+   * 新建项目（**已经打开一个项目时**也走这里）。
+   *
+   * 【为什么必须先落盘】切项目会把 store 里的当前项目整个换掉。
+   * 自动保存是延迟触发的，如果用户刚改完就点新建，最后一次改动还没写进
+   * IndexedDB 就没了——而界面上刚显示过「已保存到本机」，他会以为存住了。
+   *
+   * 所以：先 await persist()，再切。persist 失败（配额用尽等）就**不切**，
+   * 让用户先把备份做掉，而不是带着一个没存住的项目继续往下走。
+   */
+  async function startNewProject() {
+    const { dirty, saveError, persist } = useAppStore.getState();
+    if (project && (dirty || saveError)) {
+      if (saveError) {
+        const go = window.confirm(
+          `当前项目没能存到本机：\n${saveError}\n\n` +
+            '现在新建项目，这次的改动可能会丢。要先导出备份吗？\n' +
+            '（点「取消」回到项目里，去「导出」页做备份）',
+        );
+        if (!go) return;
+      } else {
+        await persist();
+        const after = useAppStore.getState();
+        if (after.saveError) {
+          window.alert(`当前项目保存失败：${after.saveError}\n\n先别新建，去「导出」页做个备份。`);
+          return;
+        }
+      }
+    }
+    openBlank();
   }
 
   async function open(id: string) {
@@ -292,6 +324,14 @@ export function HomePage() {
               <Link className="btn" to="/export">
                 导出制作包
               </Link>
+              {/*
+                【为什么要这个按钮】原来「新建项目」只在没打开项目时出现，
+                一旦打开了一个项目就再也建不了新的——只能去关掉当前项目（而界面上没有这个操作），
+                或者清浏览器数据。这是一个死路。
+              */}
+              <button type="button" className="btn" onClick={() => void startNewProject()}>
+                新建项目
+              </button>
             </div>
           </header>
 

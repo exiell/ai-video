@@ -25,6 +25,7 @@ export function GenerateBar({
   const runStory = useGeneration((s) => s.runStory);
   const runAssets = useGeneration((s) => s.runAssets);
   const runShots = useGeneration((s) => s.runShots);
+  const runStyleTags = useGeneration((s) => s.runStyleTags);
 
   const busy = pending === task;
   const blockedByOther = pending !== null && pending !== task;
@@ -32,6 +33,7 @@ export function GenerateBar({
   function run() {
     if (task === 'story') void runStory();
     else if (task === 'assets') void runAssets();
+    else if (task === 'style') void runStyleTags();
     else void runShots();
   }
 

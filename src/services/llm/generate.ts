@@ -12,9 +12,11 @@ import {
   parseAssets,
   parseShots,
   parseStory,
+  parseStyleTags,
   type GeneratedAssets,
   type GeneratedShots,
   type GeneratedStory,
+  type GeneratedStyleTags,
   type ParseOutcome,
 } from './schemas';
 
@@ -209,6 +211,60 @@ export function buildAssetsMessages(project: Project): ChatMessage[] {
         '',
         '场景背景：',
         project.story.setting || '（未填）',
+      ].join('\n'),
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// ②.5 从中文风格倾向生成英文风格关键词（v0.41）
+// ---------------------------------------------------------------------------
+
+export const STYLE_SCHEMA_TEXT = `{
+  "tags": [
+    "英文风格短语，如 anime style / cel shading / cold blue palette / heavy fabric texture"
+  ]
+}`;
+
+export function buildStyleMessages(project: Project): ChatMessage[] {
+  const tone = project.brief.styleTone.trim();
+  const existing = project.brief.styleTags;
+
+  return [
+    {
+      role: 'system',
+      content: [
+        '你把作者用中文写的「风格倾向」，翻译成一组**能直接贴进出图提示词的英文短语**。',
+        '',
+        '输出要求：',
+        '- 5-8 条，每条是一个**名词短语**，不是句子。',
+        '- 全部小写，不要引号、不要句号、不要编号。',
+        '- 覆盖这几类（缺哪类就少给哪类，不要硬凑）：',
+        '  画面风格（anime style / ink wash painting）、渲染方式（cel shading / 3d render）、',
+        '  色调与光线（cold blue palette / warm rim light）、材质与质感（heavy fabric texture / wet stone）、',
+        '  镜头与构图倾向（wide cinematic composition / shallow depth of field）。',
+        '- 这些词会被**原样**写进每一张图的提示词，所以必须彼此不冲突：',
+        '  不要同时给「写实照片」和「动画」，不要同时给「高饱和」和「低饱和」。',
+        '- 不要写具体内容（不要出现人物名、场景名、剧情）。风格词只管「怎么画」，不管「画什么」。',
+        '',
+        JSON_RULES,
+        '',
+        'JSON 结构：',
+        STYLE_SCHEMA_TEXT,
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        `作者写的风格倾向（中文原话）：${tone}`,
+        '',
+        existing.length > 0
+          ? `当前已有的风格关键词（可参考，也可以整套重写）：${existing.join(', ')}`
+          : '当前还没有风格关键词。',
+        '',
+        `画幅：${project.brief.aspectRatio}，目标平台：${
+          project.brief.platforms.map((p) => PLATFORM_LABEL[p]).join('、') || '未选'
+        }`,
       ].join('\n'),
     },
   ];
@@ -503,6 +559,11 @@ export function generateAssets(project: Project, ctx: GenerateContext) {
 
 export function generateShots(project: Project, ctx: GenerateContext) {
   return generateWithRetry<GeneratedShots>(buildShotsMessages(project), parseShots, ctx);
+}
+
+/** 从中文风格倾向生成英文风格关键词。不需要项目其它内容，只读 brief。 */
+export function generateStyleTags(project: Project, ctx: GenerateContext) {
+  return generateWithRetry<GeneratedStyleTags>(buildStyleMessages(project), parseStyleTags, ctx);
 }
 
 /** 给界面用：统一的失败文案，必须给出「接下来做什么」 */

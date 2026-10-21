@@ -3,6 +3,7 @@ import type { StoreApi } from 'zustand';
 import type { Asset, ModelProfile } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
 import {
+  REFERENCE_ROLE_LABEL,
   planReferenceImages,
   previousShotOf,
   referenceRolesOf,
@@ -216,6 +217,7 @@ export const useImage = create<ImageState>((set, get) => ({
         refId: characterId,
         promptSnapshot: prompt.positive,
         lockPhrases: prompt.lockPhrases,
+        styleTags: [...project.brief.styleTags],
       },
       prompt,
       preferReference: useReference || referenceImages.length > 0,
@@ -242,6 +244,7 @@ export const useImage = create<ImageState>((set, get) => ({
         refId: sceneId,
         promptSnapshot: prompt.positive,
         lockPhrases: prompt.lockPhrases,
+        styleTags: [...project.brief.styleTags],
       },
       prompt,
       preferReference: false,
@@ -338,6 +341,8 @@ export const useImage = create<ImageState>((set, get) => ({
     const referenceImages: string[] = [];
     const referenceLabels: string[] = [];
     let referenceRoles: ReferenceRole[] = [];
+    /** 因风格不符被跳过的参考图，生成完要如实告诉用户 */
+    let staleRoles: ReferenceRole[] = [];
     if (useReference) {
       const shot = project.shots.find((s) => s.id === shotId);
       const previous = previousShotOf(project, shotId);
@@ -370,6 +375,7 @@ export const useImage = create<ImageState>((set, get) => ({
         kind,
         capabilities: caps,
         previous,
+        styleTags: project.brief.styleTags,
         sources: {
           ownFrames,
           ...(previousFrames ? { previousFrames } : {}),
@@ -383,6 +389,7 @@ export const useImage = create<ImageState>((set, get) => ({
         referenceLabels.push(slot.label);
       }
       referenceRoles = referenceRolesOf(plan);
+      staleRoles = plan.staleSkipped;
     }
     const frameRole = {
       kind,
@@ -412,12 +419,14 @@ export const useImage = create<ImageState>((set, get) => ({
         refId: shotId,
         promptSnapshot: prompt.positive,
         lockPhrases: prompt.lockPhrases,
+        styleTags: [...project.brief.styleTags],
         referenceCount: referenceImages.length,
         frameRole,
       },
       preferReference: referenceImages.length > 0,
       referenceImages,
       referenceLabels,
+      staleSkipped: staleRoles.map((role) => REFERENCE_ROLE_LABEL[role]),
       set,
       get,
     });
@@ -432,6 +441,13 @@ interface RunArgs {
   referenceImages: string[];
   /** 参考图的中文说明，用于在界面上讲清「用了哪几张、各管什么」 */
   referenceLabels?: string[];
+  /**
+   * 因为风格和当前不一致而被主动跳过的参考图。
+   *
+   * 生成成功时也要把它说出来：用户看到的是一张「没有参考图锚定」的图，
+   * 如果不说，他会以为参考图机制失灵了。
+   */
+  staleSkipped?: string[];
   set: StoreApi<ImageState>['setState'];
   get: StoreApi<ImageState>['getState'];
 }
@@ -462,6 +478,7 @@ function confirmOverwrite(refId: string, kind: Asset['kind']): boolean {
 async function runGeneration(args: RunArgs): Promise<void> {
   const { key, draft, prompt, preferReference, referenceImages, set } = args;
   const referenceLabels = args.referenceLabels ?? [];
+  const staleSkipped = args.staleSkipped ?? [];
   // 非批量时才确认：批量出图是用户主动发起的，每张都弹窗会没法用
   if (!useImage.getState().batch && !confirmOverwrite(draft.refId, draft.kind)) {
     return;
@@ -529,16 +546,34 @@ async function runGeneration(args: RunArgs): Promise<void> {
         ? `（用了 ${referenceImages.length} 张参考图锚定）`
         : '';
 
+  /**
+   * 风格改过之后旧图不能当参考图 —— 这件事必须说出来。
+   * 不说的话，用户看到的是一张「没有锚定」的图，会以为参考图机制坏了。
+   */
+  const staleWarnings =
+    staleSkipped.length > 0
+      ? [
+          `有 ${staleSkipped.length} 类旧素材（${[...new Set(staleSkipped)].join('、')}）因为**风格和现在不一致**没有被用作参考图。` +
+            '这是一次主动跳过：拿旧风格的图当锚点，会让新图介于两种风格之间，看起来像崩了。' +
+            '想彻底换风格，先把角色形象图和场景参考板按新风格重出一遍，再出关键帧。',
+        ]
+      : [];
+
   set((s) => ({
     feedback: {
       ...s.feedback,
       [key]: {
-        kind: built.assets.length > 0 ? (built.warnings.length > 0 ? 'info' : 'ok') : 'error',
+        kind:
+          built.assets.length === 0
+            ? 'error'
+            : built.warnings.length > 0 || staleWarnings.length > 0
+              ? 'info'
+              : 'ok',
         message:
           built.assets.length > 0
             ? `${prompt.subjectLabel}已生成并保存到本机${referenceNote}。`
             : '图生成出来了，但没能下载到本地。请稍后重试。',
-        warnings: built.warnings,
+        warnings: [...built.warnings, ...staleWarnings],
       },
     },
   }));
