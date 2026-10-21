@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { Asset, ModelProfile } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
@@ -185,6 +185,7 @@ export const useImage = create<ImageState>((set, get) => ({
     }
     try {
       const all = await listAssets(project.id);
+      if (typeof window === 'undefined') return;
       set({ assetCount: all.filter((a) => a.dataUrl).length });
     } catch {
       // 统计失败不该影响主流程：保守地保留旧值
@@ -195,6 +196,8 @@ export const useImage = create<ImageState>((set, get) => ({
     const project = useAppStore.getState().project;
     if (!project) return;
     const assets = await listAssetsFor(project.id, refId);
+    // 测试环境或页面在异步查询完成前被销毁时，不要再触发 React 更新。
+    if (typeof window === 'undefined') return;
     set((s) => ({ gallery: { ...s.gallery, [refId]: assets } }));
   },
 
