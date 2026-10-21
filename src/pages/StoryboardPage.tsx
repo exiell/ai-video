@@ -433,45 +433,51 @@ export function StoryboardPage() {
                 </button>
               </div>
 
-              <div className="shot-fields">
-                <div className="wide">
-                  <div className="field-label">动作（这一镜只做一件事）</div>
-                  <input
-                    type="text"
-                    value={shot.action}
-                    onChange={(e) => patch(shot, { action: e.target.value })}
-                    className={isFlagged(shot.id, 'action') ? 'field-flagged' : ''}
-                    placeholder="谁做了什么。只写一件事——塞两件模型会两个都做不好。"
-                  />
-                </div>
+              <div className="shot-primary">
+                <div className="field-label">动作</div>
+                <div className="field-help">这一镜只做一件事</div>
+                <input
+                  type="text"
+                  value={shot.action}
+                  onChange={(e) => patch(shot, { action: e.target.value })}
+                  className={isFlagged(shot.id, 'action') ? 'field-flagged' : ''}
+                  placeholder="例：他抬手拂去肩上的雪"
+                />
               </div>
 
               {open ? (
                 <div className="shot-more" id={`shot-more-${shot.id}`}>
-                  <div className="shot-fields" style={{ marginTop: 10 }}>
+                  <div className="shot-head-guides">
+                    <ShotSizeHint value={shot.shotSize} />
+                    <CameraMoveHint value={shot.cameraMove} />
+                  </div>
+
+                  <div className="shot-fields">
+                    <h4 className="shot-section-title">
+                      画面 <span>起点、终点、人物、机位和来源</span>
+                    </h4>
                     <div>
-                      <div className="field-label">起点（镜头开始那一瞬间能看见什么）</div>
+                      <div className="field-label">起点</div>
+                      <div className="field-help">镜头开始那一瞬间能看见什么</div>
                       <textarea
                         rows={3}
                         value={shot.startState}
                         onChange={(e) => patch(shot, { startState: e.target.value })}
                         className={isFlagged(shot.id, 'startState') ? 'field-flagged' : ''}
-                        placeholder="只写这一瞬间看得见的。终点才出现的动作不要写在这里。"
+                        placeholder="只写这一瞬间看得见的东西"
                       />
                     </div>
                     <div>
-                      <div className="field-label">终点（镜头结束画面停在哪）</div>
+                      <div className="field-label">终点</div>
+                      <div className="field-help">镜头结束画面停在哪</div>
                       <textarea
                         rows={3}
                         value={shot.endState}
                         onChange={(e) => patch(shot, { endState: e.target.value })}
                         className={isFlagged(shot.id, 'endState') ? 'field-flagged' : ''}
-                        placeholder="下一镜要从这里接下去。"
+                        placeholder="下一镜要从这里接下去"
                       />
                     </div>
-                  </div>
-
-                  <div className="shot-fields" style={{ marginTop: 10 }}>
                     <div>
                       <div className="field-label">出镜角色</div>
                       <div className="row" style={{ gap: 6 }}>
@@ -511,12 +517,8 @@ export function StoryboardPage() {
                     </div>
 
                     <div>
-                      <ShotSizeHint value={shot.shotSize} />
-                      <CameraMoveHint value={shot.cameraMove} />
-                    </div>
-
-                    <div>
-                      <div className="field-label">机位（观众站在哪看）</div>
+                      <div className="field-label">机位</div>
+                      <div className="field-help">观众站在哪看</div>
                       <input
                         type="text"
                         value={shot.cameraPosition}
@@ -527,6 +529,21 @@ export function StoryboardPage() {
                         与视线齐平是平等，仰拍是压迫，俯拍是弱小。
                       </div>
                     </div>
+
+                    <div>
+                      <div className="field-label">来源场次</div>
+                      <SelectMenu
+                        className="source-scene-select"
+                        value={shot.sourceSceneId}
+                        options={storySceneOptions}
+                        ariaLabel={`第 ${shot.number} 镜的来源场次`}
+                        onChange={(value) => patch(shot, { sourceSceneId: value })}
+                      />
+                    </div>
+
+                    <h4 className="shot-section-title">
+                      声音与情绪 <span>看不见但听得见的信息</span>
+                    </h4>
 
                     <div>
                       <div className="field-label">声音</div>
@@ -548,19 +565,8 @@ export function StoryboardPage() {
                     </div>
 
                     <div>
-                      <div className="field-label">转场（剪辑时用）</div>
-                      <input
-                        type="text"
-                        value={shot.transition}
-                        onChange={(e) => patch(shot, { transition: e.target.value })}
-                      />
-                      <div className="hint">
-                        剪辑阶段用，<b>不进生成提示词</b>。多数镜头用硬切就好。
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="field-label">画外人物（只在声音里出现的人）</div>
+                      <div className="field-label">画外人物</div>
+                      <div className="field-help">只在声音里出现的人</div>
                       <input
                         type="text"
                         value={shot.offscreenCharacters.join('、')}
@@ -576,13 +582,24 @@ export function StoryboardPage() {
                       />
                     </div>
 
+                    <h4 className="shot-section-title">
+                      剪辑与衔接 <span>镜头之间怎么接</span>
+                    </h4>
+
                     <div>
-                      <div className="field-label">
-                        与上一镜的转场
-                        <span className="hint" style={{ marginLeft: 6, fontWeight: 400 }}>
-                          总开关
-                        </span>
-                      </div>
+                      <div className="field-label">转场</div>
+                      <div className="field-help">剪辑阶段用，不进生成提示词</div>
+                      <input
+                        type="text"
+                        value={shot.transition}
+                        onChange={(e) => patch(shot, { transition: e.target.value })}
+                      />
+                      <div className="hint">多数镜头用硬切就好。</div>
+                    </div>
+
+                    <div>
+                      <div className="field-label">与上一镜的转场</div>
+                      <div className="field-help">总开关</div>
                       <SelectMenu
                         className="transition-select"
                         value={
@@ -601,36 +618,26 @@ export function StoryboardPage() {
                     </div>
 
                     <div className="wide">
-                      <div className="field-label">
-                        与下一镜的衔接（这一镜怎么接到下一镜）
-                      </div>
+                      <div className="field-label">下一镜的衔接</div>
+                      <div className="field-help">这一镜怎么接到下一镜</div>
                       <input
                         type="text"
                         value={shot.continuityNote ?? ''}
                         onChange={(e) => patch(shot, { continuityNote: e.target.value })}
-                        placeholder="例：他保持这个姿势不动，下一镜从同一机位推进；或：直接切到第二天早上"
-                      />
-                    </div>
-
-                    <div>
-                      <div className="field-label">来源场次</div>
-                      <SelectMenu
-                        className="source-scene-select"
-                        value={shot.sourceSceneId}
-                        options={storySceneOptions}
-                        ariaLabel={`第 ${shot.number} 镜的来源场次`}
-                        onChange={(value) => patch(shot, { sourceSceneId: value })}
+                        placeholder="例：他保持这个姿势不动，下一镜从同一机位推进"
                       />
                     </div>
                   </div>
 
-                  <div style={{ marginTop: 12 }}>
-                    <div className="field-label">
-                      连续性锁
-                      {isFlagged(shot.id, 'activeLockIds') ? (
+                  <div style={{ marginTop: 18 }}>
+                    <h4 className="shot-section-title">
+                      连续性锁 <span>勾选这一镜不能变的部分</span>
+                    </h4>
+                    {isFlagged(shot.id, 'activeLockIds') ? (
+                      <div style={{ marginTop: 6 }}>
                         <span className="tag tag-error">有角色没勾锁</span>
-                      ) : null}
-                    </div>
+                      </div>
+                    ) : null}
                     <div className="row" style={{ gap: 6 }}>
                       {project.characters.every((c) => c.continuityLocks.length === 0) &&
                       project.scenes.every((s) => s.continuityLocks.length === 0) ? (
