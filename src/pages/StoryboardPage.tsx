@@ -324,7 +324,9 @@ export function StoryboardPage() {
               }
             />
           </div>
-          <BatchGenerateCard tasks={['characters', 'scenes', 'first-frame', 'action-peak', 'end-frame']} />
+          <BatchGenerateCard
+            tasks={['characters', 'scenes', 'all-frames', 'first-frame', 'action-peak', 'end-frame']}
+          />
         </div>
       </details>
 

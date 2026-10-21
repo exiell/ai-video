@@ -76,6 +76,14 @@ interface ImageState {
    * 删除 / 进项目时刷新，是**项目级的准确值**。
    */
   assetCount: number;
+  /**
+   * 按素材类型统计的数量（v0.44）。
+   *
+   * 用途：判断「上一镜的尾帧到底出了没有」。批量出首帧时，如果尾帧一张都没有，
+   * 首帧就接不住上一镜——而这不会报错，只是默默降级。
+   * 有了这个数才能在按钮上提前说清楚。
+   */
+  assetCounts: Partial<Record<Asset['kind'], number>>;
   /** 批量生成进度。非空表示正在批量跑。 */
   batch: BatchProgress | null;
   /** 批量完成后的总结 */
@@ -84,6 +92,17 @@ interface ImageState {
   loadGallery: (refId: string) => Promise<void>;
   /** 重新统计本项目图片总数（进项目、生成完、删除后调用） */
   refreshAssetCount: () => Promise<void>;
+  /**
+   * 按**镜头顺序**一次出完三帧：第 1 镜首帧 → 关键帧 → 尾帧，再第 2 镜……
+   *
+   * 为什么不按「帧类型」分批（v0.44 修）：
+   * 参考图的依赖是
+   *   本镜首帧 ← 上一镜尾帧（承接时）
+   *   本镜关键帧/尾帧 ← 本镜首帧
+   * 先跑「全部首帧」时所有尾帧都还不存在，于是每一镜的首帧都**悄悄丢了**
+   * 跨镜衔接这个最强的锚点；而首帧又是另外两帧的锚点，误差会一路传下去。
+   */
+  generateAllFramesInOrder: () => Promise<void>;
   clearFeedback: (key: string) => void;
   removeAsset: (refId: string, assetId: string) => Promise<void>;
 
@@ -174,19 +193,25 @@ export const useImage = create<ImageState>((set, get) => ({
   feedback: {},
   gallery: {},
   assetCount: 0,
+  assetCounts: {},
   batch: null,
   batchSummary: null,
 
   refreshAssetCount: async () => {
     const project = useAppStore.getState().project;
     if (!project) {
-      set({ assetCount: 0 });
+      set({ assetCount: 0, assetCounts: {} });
       return;
     }
     try {
       const all = await listAssets(project.id);
       if (typeof window === 'undefined') return;
-      set({ assetCount: all.filter((a) => a.dataUrl).length });
+      const withImage = all.filter((a) => a.dataUrl);
+      const counts: Partial<Record<Asset['kind'], number>> = {};
+      for (const asset of withImage) {
+        counts[asset.kind] = (counts[asset.kind] ?? 0) + 1;
+      }
+      set({ assetCount: withImage.length, assetCounts: counts });
     } catch {
       // 统计失败不该影响主流程：保守地保留旧值
     }
@@ -356,6 +381,41 @@ export const useImage = create<ImageState>((set, get) => ({
       }
       return failed;
     });
+  },
+
+  /**
+   * 按镜头顺序出三帧。
+   *
+   * 顺序不可换：第 N 镜的尾帧必须先于第 N+1 镜的首帧存在，
+   * 否则第 N+1 镜的首帧拿不到「上一镜尾帧」这个锚点，跨镜就接不住。
+   * 而每一镜内部必须是 首帧 → 关键帧/尾帧，因为后两帧以首帧为构图锚点。
+   */
+  generateAllFramesInOrder: async () => {
+    const project = useAppStore.getState().project;
+    if (!project || get().batch) return;
+    const shots = project.shots;
+    if (shots.length === 0) {
+      set({ batchSummary: '还没有镜头，先生成分镜表。' });
+      return;
+    }
+
+    const order: FrameKind[] = ['first-frame', 'action-peak', 'end-frame'];
+    await runBatch(
+      `全部三帧（${shots.length} 个镜头，按镜头顺序）`,
+      shots.length * order.length,
+      set,
+      async (onStep) => {
+        let failed = 0;
+        for (const shot of shots) {
+          for (const kind of order) {
+            onStep(`第 ${shot.number} 镜 · ${FRAME_BATCH_LABEL[kind]}`);
+            await get().generateForFrame(shot.id, kind, true);
+            if (!succeeded(kind, shot.id)) failed += 1;
+          }
+        }
+        return failed;
+      },
+    );
   },
 
   generateForFrame: async (shotId, kind, useReference = true) => {
