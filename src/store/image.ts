@@ -4,10 +4,12 @@ import type { Asset, ModelProfile, SceneAngle } from '../types/model';
 import { ASSET_KIND_LABEL, SCENE_ANGLE_LABEL } from '../types/model';
 import {
   REFERENCE_ROLE_LABEL,
+  describeDroppedReference,
   planReferenceImages,
   previousShotOf,
   referenceRolesOf,
   sameStyle,
+  type DroppedReference,
   type ReferenceRole,
   type ReferenceSlot,
 } from '../domain/image/referencePlan';
@@ -544,6 +546,8 @@ export const useImage = create<ImageState>((set, get) => ({
     let referenceRoles: ReferenceRole[] = [];
     /** 因风格不符被跳过的参考图，生成完要如实告诉用户 */
     let staleRoles: ReferenceRole[] = [];
+    /** 因参考图槽位不够而没放进去的参考图（v0.48），生成完要如实说 */
+    let droppedRefs: DroppedReference[] = [];
     /** 这一镜要反打板但没有，退回了主视角板（v0.46）。生成完要如实说 */
     let scenePlateFellBack = false;
     if (useReference) {
@@ -604,6 +608,7 @@ export const useImage = create<ImageState>((set, get) => ({
       }
       referenceRoles = referenceRolesOf(plan);
       staleRoles = plan.staleSkipped;
+      droppedRefs = plan.dropped;
       scenePlateFellBack = plan.scenePlateFellBack === true;
     }
     const frameRole = {
@@ -651,6 +656,7 @@ export const useImage = create<ImageState>((set, get) => ({
       referenceImages,
       referenceLabels,
       staleSkipped: staleRoles.map((role) => REFERENCE_ROLE_LABEL[role]),
+      ...(droppedRefs.length > 0 ? { dropped: droppedRefs } : {}),
       ...(scenePlateFellBack ? { scenePlateFellBack: true } : {}),
       set,
       get,
@@ -677,6 +683,13 @@ interface RunArgs {
    * 这一镜要反打板但没有，退回了主视角板（v0.46）。见 `ReferencePlan.scenePlateFellBack`。
    */
   scenePlateFellBack?: boolean;
+  /**
+   * 因参考图槽位不够而没能放进去的参考图（v0.48）。见 `ReferencePlan.dropped`。
+   *
+   * 失败与取舍都会走到这里，所以生成成功时也必须把它说出来——
+   * 少一张参考图，出来的图会「看着像但哪里不对」，不说就永远归不了因。
+   */
+  dropped?: DroppedReference[];
   set: StoreApi<ImageState>['setState'];
   get: StoreApi<ImageState>['getState'];
 }
@@ -847,6 +860,30 @@ async function runGeneration(args: RunArgs): Promise<void> {
       ]
     : [];
 
+  /**
+   * 参考图没放全 —— 必须说（v0.48）。
+   *
+   * 槽位是硬上限（千问 2.0/3.0 系列最多 3 张），内容一多就一定会溢出。
+   * 原来溢出是**静默**的：候选按顺序来，来一张丢一张，用户根本不知道
+   * 这一镜少了哪张锚点。结果就是「出来的图看着像，但哪里不对」，
+   * 他去改提示词、换风格、重出，全都改不到点上。
+   */
+  const droppedList = args.dropped ?? [];
+  const droppedLabels = droppedList.map(describeDroppedReference);
+  const droppedWarnings =
+    droppedLabels.length > 0
+      ? [
+          `这一镜要 ${referenceImages.length + droppedLabels.length} 张参考图` +
+            `（${[...referenceLabels, ...droppedLabels].join('、')}），` +
+            `但当前模型最多只收 ${profile.capabilities.maxReferenceImages || 0} 张，` +
+            `所以「${droppedLabels.join('」「')}」这一次没用上。` +
+            (droppedList.some((item) => item.role === 'scene-plate')
+              ? '这一镜的空间与光线这次只有文字描述——把景别改成全景或更远，工具会优先保住场景参考板。'
+              : '想让每个角色都用图锁住，可以在「设置」里换成支持 10 张参考图的「多图参考版」；' +
+                '不过官方建议一次 1–3 张，张数多了各项一致性会往下掉，换之前先小样本对比。'),
+        ]
+      : [];
+
   set((s) => ({
     feedback: {
       ...s.feedback,
@@ -854,14 +891,17 @@ async function runGeneration(args: RunArgs): Promise<void> {
         kind:
           built.assets.length === 0
             ? 'error'
-            : built.warnings.length > 0 || staleWarnings.length > 0 || fallbackWarnings.length > 0
+            : built.warnings.length > 0 ||
+                staleWarnings.length > 0 ||
+                fallbackWarnings.length > 0 ||
+                droppedWarnings.length > 0
               ? 'info'
               : 'ok',
         message:
           built.assets.length > 0
             ? `${prompt.subjectLabel}已生成并保存到本机${referenceNote}。`
             : '图生成出来了，但没能下载到本地。请稍后重试。',
-        warnings: [...built.warnings, ...staleWarnings, ...fallbackWarnings],
+        warnings: [...built.warnings, ...staleWarnings, ...fallbackWarnings, ...droppedWarnings],
       },
     },
   }));

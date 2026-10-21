@@ -69,6 +69,33 @@ export interface ReferenceSlot {
   detail?: 'full-body' | 'face';
 }
 
+/**
+ * 因为槽位不够而没能放进去的参考图（v0.48）。
+ *
+ * 带上 `owner` 是为了能说清「是哪一位角色的形象图没放进去」——
+ * 只报「少了一张角色形象图」等于什么都没说。
+ */
+export interface DroppedReference {
+  role: ReferenceRole;
+  /** 角色形象图才有：这是哪一位角色的 */
+  owner?: string;
+}
+
+/** 「丢了谁」的中文说法，直接用于界面提示 */
+const DROPPED_ROLE_LABEL: Record<ReferenceRole, string> = {
+  'own-first-frame': '本镜首帧',
+  'previous-end-frame': '上一镜尾帧',
+  'character-sheet': '角色形象图',
+  'scene-plate': '场景参考板',
+};
+
+export function describeDroppedReference(dropped: DroppedReference): string {
+  if (dropped.role === 'character-sheet') {
+    return dropped.owner ? `${dropped.owner}的形象图` : '一张角色形象图';
+  }
+  return DROPPED_ROLE_LABEL[dropped.role];
+}
+
 export interface ReferencePlan {
   slots: ReferenceSlot[];
   /**
@@ -79,7 +106,7 @@ export interface ReferencePlan {
   /** 判定的依据，用于在界面上解释「为什么这么处理」 */
   reason: string;
   /** 因为槽位不够而没能放进去的参考图，如实报告 */
-  dropped: ReferenceRole[];
+  dropped: DroppedReference[];
   /**
    * 因为**风格和当前不一致**而主动跳过的参考图。
    *
@@ -283,6 +310,20 @@ const FULL_BODY_SHOT_SIZES: ReadonlySet<ShotSize> = new Set<ShotSize>([
 const DEFAULT_SHOT_SIZE: ShotSize = 'medium';
 
 /**
+ * 哪些景别里**场景参考板比角色形象图更该保住**（v0.48）。
+ *
+ * 成员与 `FULL_BODY_SHOT_SIZES` 相同，但**刻意分成两个常量**：
+ * 一个是「用全身图还是头像」的判据，一个是「槽位不够时先丢谁」的判据。
+ * 它们现在恰好同集合，理由却是两条——合用一个常量的话，
+ * 以后有人只改了一边，另一边会跟着悄悄变。
+ */
+const SCENE_PLATE_PRIORITY_SHOT_SIZES: ReadonlySet<ShotSize> = new Set<ShotSize>([
+  'full',
+  'wide',
+  'extreme-wide',
+]);
+
+/**
  * 挑这一镜该用哪张场景板（v0.46）。
  *
  * 【为什么要按朝向挑】原来场景板只有一张，而且是无条件取「最新一张」。
@@ -324,16 +365,16 @@ function pickScenePlate(
 /**
  * 编排这一帧的参考图。
  *
- * 优先级（槽位不够时从后往前丢）：
+ * 候选的优先级：
  *  1. **上一镜尾帧** —— 只在连续时放。跨镜接续最强的锚点
  *  2. **本镜首帧** —— 只在出后两帧时放。锁本镜构图
- *  3. **角色形象图** —— 锁外观，永远需要
- *  4. **场景参考板** —— 锁空间与光线，槽位有富余时才放
+ *  3. **角色形象图** —— 锁外观
+ *  4. **场景参考板** —— 锁空间与光线
  *
  * 为什么「上一镜尾帧」排在「本镜首帧」前面：
  * 出首帧时本镜首帧还不存在（它就是正在生成的这张），两者不会同时出现。
- * 真正需要取舍的是「角色形象图 vs 场景参考板」——
- * 而角色永远优先，因为脸只能用图锁，空间可以用固定元素与主光方向的文字描述近似。
+ * 真正需要取舍的是「角色形象图 vs 场景参考板」，而这一条**按景别分档**（v0.48）：
+ * 远景里空间是主体，先丢形象图；中景以里脸是主体，先丢场景板。见下面的实现。
  */
 export function planReferenceImages(args: {
   kind: 'first-frame' | 'action-peak' | 'end-frame';
@@ -457,13 +498,55 @@ export function planReferenceImages(args: {
     ...(plate.angle ? { angle: plate.angle } : {}),
   });
 
+  /**
+   * 槽位不够时**先在候选里做减法**，而不是等到循环里「来一张丢一张」（v0.48）。
+   *
+   * 【为什么要改】槽位是固定的（千问 2.0/3.0 系列最多 3 张），而候选会随内容变多：
+   * 两个角色同框 + 承接镜 = 上一镜尾帧 + 两张形象图 + 场景参考板 = 4 张。
+   * 原来按候选顺序**从后往前**丢，而场景参考板永远排在最后，于是它**必然**先被丢——
+   * 偏偏人一多，空间在画面里的比重反而更大，正是最需要它的镜头。
+   *
+   * 现在的规则按景别分：
+   *  - **全景及更远**：空间才是这一镜的主体，先丢角色形象图，保住场景参考板。
+   *    远景里脸只占几十个像素，形象图能提供的信息本来就少；
+   *    而空间错了观众一眼就看出来（「这不是同一个地方」）。
+   *  - **中景及更近**：脸是主体，形象图一个都不能少，场景参考板照旧让位。
+   *    这一档背景只占画面一小块，空间靠固定元素与主光方向的文字描述够用。
+   *
+   * 两种情形都把「丢了谁」原样记进 `dropped`，生成完会在界面上说出来。
+   */
+  const skip = new Set<number>();
+  const present = candidates
+    .map((candidate, index) => (candidate.dataUrl ? index : -1))
+    .filter((index) => index >= 0);
+  const overflow = present.length - limit;
+  if (overflow > 0) {
+    const sacrificed: number[] = [];
+    if (plate.url !== undefined && SCENE_PLATE_PRIORITY_SHOT_SIZES.has(shotSize)) {
+      for (let i = present.length - 1; i >= 0 && sacrificed.length < overflow; i -= 1) {
+        const index = present[i]!;
+        if (candidates[index]!.role === 'character-sheet') sacrificed.push(index);
+      }
+    }
+    // 还差的（或者不在上面那一档）按原规则从末尾丢：
+    // 候选顺序就是优先级，场景板排最后，所以它最先被丢。
+    for (let i = present.length - 1; i >= 0 && sacrificed.length < overflow; i -= 1) {
+      const index = present[i]!;
+      if (!sacrificed.includes(index)) sacrificed.push(index);
+    }
+    for (const index of sacrificed) skip.add(index);
+  }
+
   const slots: ReferenceSlot[] = [];
-  const dropped: ReferenceRole[] = [];
-  for (const candidate of candidates) {
-    if (!candidate.dataUrl) continue;
-    if (slots.length >= limit) {
-      dropped.push(candidate.role);
-      continue;
+  const dropped: DroppedReference[] = [];
+  candidates.forEach((candidate, index) => {
+    if (!candidate.dataUrl) return;
+    if (skip.has(index)) {
+      dropped.push({
+        role: candidate.role,
+        ...(candidate.owner ? { owner: candidate.owner } : {}),
+      });
+      return;
     }
     slots.push({
       role: candidate.role,
@@ -479,7 +562,7 @@ export function planReferenceImages(args: {
       ...(candidate.owner ? { owner: candidate.owner } : {}),
       ...(candidate.detail ? { detail: candidate.detail } : {}),
     });
-  }
+  });
 
   orderSlots(slots, continuity.continuous);
 
