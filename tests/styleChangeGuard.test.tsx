@@ -9,6 +9,7 @@ import { GuidePage } from '../src/pages/GuidePage';
 import { useChat } from '../src/store/chat';
 import { useAppStore } from '../src/store/app';
 import { useImage } from '../src/store/image';
+import { useSettings } from '../src/store/settings';
 import { sampleProject } from '../src/data/samples/sampleProject';
 import { assessStyleChange, styleChangeSummary } from '../src/domain/help/styleChange';
 
@@ -142,6 +143,48 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
     cleanup(el);
   });
 
+  it('**「用这段中文生成英文关键词」也要先确认**（它绕过了手动改的那条路）', () => {
+    /*
+      漏掉这条路径的后果：点「生成关键词」→ store 里 runStyleTags 直接 patchBrief，
+      页面的守卫根本拦不到 —— 用户以为会看到提示，结果什么都没发生就换了风格。
+    */
+    // 让 LLM 就绪，按钮才可用
+    useSettings.setState({ keys: { deepseek: 'sk-test' } });
+    const el = render(<GuidePage />);
+    goToStyleStep(el);
+
+    const genBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('用这段中文生成英文关键词'),
+    ) as HTMLButtonElement | undefined;
+    expect(genBtn, '找不到生成按钮').toBeTruthy();
+    expect(genBtn!.disabled, '按钮应当是可用状态（已配 Key）').toBe(false);
+
+    act(() => genBtn!.click());
+
+    // 闸门拦住 → 弹确认，而不是直接调模型
+    expect(el.innerHTML).toContain('role="dialog"');
+    expect(el.textContent).toContain('改风格会影响已经做好的内容');
+    expect(el.textContent).toContain('按这个顺序做');
+    cleanup(el);
+  });
+
+  it('空项目时点生成按钮**不弹窗**，直接走（没有投入可损失）', () => {
+    useSettings.setState({ keys: { deepseek: 'sk-test' } });
+    const empty = structuredClone(sampleProject);
+    empty.characters = [];
+    empty.scenes = [];
+    empty.shots = [];
+    useAppStore.setState({ project: empty });
+    const el = render(<GuidePage />);
+    goToStyleStep(el);
+    const genBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('用这段中文生成英文关键词'),
+    ) as HTMLButtonElement;
+    act(() => genBtn.click());
+    expect(el.innerHTML).not.toContain('role="dialog"');
+    cleanup(el);
+  });
+
   it('**出过图时提示里会点出图的数量**', () => {
     useImage.setState({ assetCount: 9 });
     const el = render(<GuidePage />);
@@ -190,10 +233,45 @@ describe('问 AI · 改风格的提议也要带风险提示', () => {
     });
   });
 
-  it('**改 styleTags 的提议会显示「改风格会影响已经做好的内容」**', () => {
+  it('**改 styleTags 的提议在卡片上有一行标记**（先让用户知道这条不一样）', () => {
     const el = render(<ChatSidebar />);
-    expect(el.textContent).toContain('改风格会影响已经做好的内容');
-    expect(el.textContent).toContain('按这个顺序做');
+    expect(el.textContent).toContain('这条会换掉全片风格');
+    cleanup(el);
+  });
+
+  it('**点「应用勾选的改动」时弹窗**，弹窗里给出完整风险与顺序', () => {
+    /*
+      v0.42 调整：卡片上只留一行标记，完整文案放在弹窗里。
+      卡片是逐条看的，把四五段话塞进去会把它撑开、反而没人读；
+      而弹窗出现在「即将生效」这一刻，正是该停下来想一想的时刻。
+    */
+    const el = render(<ChatSidebar />);
+    const applyBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('应用勾选的改动'),
+    );
+    expect(applyBtn, '找不到应用按钮').toBeTruthy();
+    act(() => (applyBtn as HTMLButtonElement).click());
+
+    // 弹窗出现，且带完整风险清单
+    const html = el.innerHTML;
+    expect(html).toContain('role="dialog"');
+    expect(el.textContent).toContain('这一批改动会换掉全片风格');
+    expect(el.textContent).toContain('按这个顺序');
+    cleanup(el);
+  });
+
+  it('弹窗里点「先不应用」不会改动项目', () => {
+    const before = structuredClone(useAppStore.getState().project!.brief.styleTags);
+    const el = render(<ChatSidebar />);
+    const applyBtn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('应用勾选的改动'),
+    ) as HTMLButtonElement;
+    act(() => applyBtn.click());
+    const cancel = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('先不应用'),
+    ) as HTMLButtonElement;
+    act(() => cancel.click());
+    expect(useAppStore.getState().project!.brief.styleTags).toEqual(before);
     cleanup(el);
   });
 
@@ -221,7 +299,7 @@ describe('问 AI · 改风格的提议也要带风险提示', () => {
       selected: new Set(['e1']),
     });
     const el = render(<ChatSidebar />);
-    expect(el.textContent).toContain('改风格会影响已经做好的内容');
+    expect(el.textContent).toContain('这条会换掉全片风格');
     cleanup(el);
   });
 
@@ -249,7 +327,7 @@ describe('问 AI · 改风格的提议也要带风险提示', () => {
       selected: new Set(['e1']),
     });
     const el = render(<ChatSidebar />);
-    expect(el.textContent).not.toContain('改风格会影响已经做好的内容');
+    expect(el.textContent).not.toContain('这条会换掉全片风格');
     cleanup(el);
   });
 
@@ -260,7 +338,7 @@ describe('问 AI · 改风格的提议也要带风险提示', () => {
     empty.shots = [];
     useAppStore.setState({ project: empty });
     const el = render(<ChatSidebar />);
-    expect(el.textContent).not.toContain('改风格会影响已经做好的内容');
+    expect(el.textContent).not.toContain('这条会换掉全片风格');
     cleanup(el);
   });
 });

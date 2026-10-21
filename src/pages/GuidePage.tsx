@@ -10,6 +10,7 @@ import { SelectMenu } from '../components/SelectMenu';
 import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
 import { assessStyleChange } from '../domain/help/styleChange';
 import { useImage } from '../store/image';
+import { useGeneration } from '../store/generation';
 import type { StoryScene, TargetPlatform } from '../types/model';
 import { PLATFORM_LABEL } from '../types/model';
 import { newId } from '../services/storage';
@@ -128,8 +129,20 @@ export function GuidePage() {
   const patchBrief = useAppStore((s) => s.patchBrief);
   const assetCount = useImage((s) => s.assetCount);
   const refreshAssetCount = useImage((s) => s.refreshAssetCount);
-  /** 待确认的风格切换（null 表示没有挂起的对话） */
-  const [pendingTags, setPendingTags] = useState<string[] | null>(null);
+  /**
+   * 待确认的风格改动。null 表示没有挂起的对话。
+   *
+   * 两种来源都要走同一个对话框：
+   *  - `preset`：点了预设，一步替换整套风格词
+   *  - `generate`：点了「用这段中文生成英文关键词」
+   *
+   * 后者尤其容易漏——它的写入发生在 store 里（runStyleTags 会 patchBrief），
+   * 页面的守卫根本拦不到。所以这里先用闸门挡住生成，确认之后才真正跑。
+   */
+  const [pendingStyle, setPendingStyle] = useState<
+    { kind: 'preset'; tags: string[] } | { kind: 'generate' } | null
+  >(null);
+  const runStyleTags = useGeneration((s) => s.runStyleTags);
 
   // 进页面时统计一次图片总数：改风格提示要用它说「有多少张图会是旧风格」
   useEffect(() => {
@@ -557,6 +570,21 @@ export function GuidePage() {
               task="style"
               label="用这段中文生成英文关键词"
               hint="会写进下面的「风格关键词」，之后出的图都带上"
+              /*
+                已经做过内容时，先弹确认再调模型。
+
+                为什么把闸门放在**生成之前**而不是拿到结果之后：
+                确认要回答的是「我要不要换风格」，那件事在点按钮时就已经在发生了。
+                放到之后会让用户先花钱生成、再被告知「你可以不要」——
+                而且取消就等于白花一次调用。
+              */
+              gate={() => {
+                if (styleImpact.needed) {
+                  setPendingStyle({ kind: 'generate' });
+                  return false;
+                }
+                return true;
+              }}
             />
           </div>
 
@@ -585,7 +613,7 @@ export function GuidePage() {
                   */
                   onClick={() => {
                     const next = active ? [] : [...preset.tags];
-                    if (styleImpact.needed) setPendingTags(next);
+                    if (styleImpact.needed) setPendingStyle({ kind: 'preset', tags: next });
                     else patchBrief({ styleTags: next });
                   }}
                   title={active ? '再点一下取消这个预设' : preset.description}
@@ -811,14 +839,17 @@ export function GuidePage() {
         手动改关键词不弹（那会变成每敲一个字弹一次），改为用上面那块常驻提示。
       */}
       <ConfirmDialog
-        open={pendingTags !== null}
+        open={pendingStyle !== null}
         title="改风格会影响已经做好的内容"
-        confirmLabel="我明白，改吧"
+        confirmLabel={pendingStyle?.kind === 'generate' ? '我明白，生成并应用' : '我明白，改吧'}
         cancelLabel="先不改"
-        onCancel={() => setPendingTags(null)}
+        onCancel={() => setPendingStyle(null)}
         onConfirm={() => {
-          if (pendingTags !== null) patchBrief({ styleTags: pendingTags });
-          setPendingTags(null);
+          const pending = pendingStyle;
+          setPendingStyle(null);
+          if (!pending) return;
+          if (pending.kind === 'preset') patchBrief({ styleTags: pending.tags });
+          else void runStyleTags();
         }}
       >
         <div>

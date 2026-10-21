@@ -14,10 +14,20 @@ export function GenerateBar({
   task,
   label,
   hint,
+  gate,
 }: {
   task: GenerationTask;
   label: string;
   hint?: string;
+  /**
+   * 生成之前的闸门。返回 false 表示「先别跑」——调用方借此弹确认。
+   *
+   * 【为什么闸门在这里而不是在 store 里】要拦截的往往和界面状态有关
+   * （比如「项目里已经有内容了，改风格会有代价」），store 看不到这些。
+   * 而闸门一旦返回 false，真正跑生成的责任就交回调用方
+   * （确认之后由它直接调 store 的 action）——这里不替它做决定。
+   */
+  gate?: () => boolean;
 }) {
   const readiness = checkLlmReadiness();
   const pending = useGeneration((s) => s.pending);
@@ -31,6 +41,7 @@ export function GenerateBar({
   const blockedByOther = pending !== null && pending !== task;
 
   function run() {
+    if (gate && !gate()) return;
     if (task === 'story') void runStory();
     else if (task === 'assets') void runAssets();
     else if (task === 'style') void runStyleTags();

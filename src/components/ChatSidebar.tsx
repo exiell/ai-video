@@ -1,11 +1,11 @@
-﻿import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useChat, type ChatBubble } from '../store/chat';
 import { useAppStore } from '../store/app';
 import { useImage } from '../store/image';
 import { assessStyleChange } from '../domain/help/styleChange';
 import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
 import { currentLlmName } from '../services/llm/readiness';
-import { RichText } from './bits';
+import { ConfirmDialog, RichText } from './bits';
 import type { Project } from '../types/model';
 
 /**
@@ -223,6 +223,19 @@ function EditBatch({ bubble, isActive }: { bubble: ChatBubble; isActive: boolean
   const creates = edits.filter((e) => e.op === 'create').length;
   const checkedCount = edits.filter((e) => selected.has(e.id)).length;
 
+  /**
+   * 这一批里**勾选了的**改动中有没有改风格。
+   *
+   * 只算勾选的：用户把那条取消勾选之后，就不该再为它弹窗。
+   */
+  const styleEdit = edits.find(
+    (e) =>
+      selected.has(e.id) &&
+      e.op === 'set' &&
+      e.target.kind === 'brief' &&
+      (e.target.field === 'styleTags' || e.target.field === 'styleTone'),
+  );
+
   return (
     <div className="chat-edits">
       <div className="chat-edits-head">
@@ -268,7 +281,7 @@ function EditBatch({ bubble, isActive }: { bubble: ChatBubble; isActive: boolean
 
       {isActive ? (
         <div className="row" style={{ marginTop: 8 }}>
-          <ApplyButton />
+          <ApplyButton guardStyle={Boolean(styleEdit)} />
           <DiscardButton />
         </div>
       ) : null}
@@ -276,12 +289,85 @@ function EditBatch({ bubble, isActive }: { bubble: ChatBubble; isActive: boolean
   );
 }
 
-function ApplyButton() {
+/**
+ * 「应用勾选的改动」。
+ *
+ * 这一批里如果含改风格，先弹确认：
+ * 风格词会进每一张图的提示词，在已经做出内容之后换掉它，
+ * 已生成的图会变成旧风格、角色描述的措辞也可能对不上新风格。
+ *
+ * 卡片上只留一行「这条会改风格」的标记；完整的风险与操作顺序放在弹窗里。
+ * 原因：卡片是逐条看的，长文案会把它撑开、反而没人看；而弹窗出现在
+ * 「即将生效」这一刻，正是需要停下来想一想的时刻。
+ */
+function ApplyButton({ guardStyle }: { guardStyle: boolean }) {
   const applySelected = useChat((s) => s.applySelected);
+  const project = useAppStore((s) => s.project);
+  const assetCount = useImage((s) => s.assetCount);
+  const [confirming, setConfirming] = useState(false);
+
+  const impact = guardStyle
+    ? assessStyleChange({
+        characters: project?.characters.length ?? 0,
+        scenes: project?.scenes.length ?? 0,
+        shots: project?.shots.length ?? 0,
+        imageCount: assetCount,
+      })
+    : null;
+
   return (
-    <button type="button" className="btn btn-primary btn-sm" onClick={applySelected}>
-      应用勾选的改动
-    </button>
+    <>
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        onClick={() => {
+          if (impact?.needed) setConfirming(true);
+          else applySelected();
+        }}
+      >
+        应用勾选的改动
+      </button>
+
+      <ConfirmDialog
+        open={confirming}
+        title="这一批改动会换掉全片风格"
+        confirmLabel="我明白，应用"
+        cancelLabel="先不应用"
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          setConfirming(false);
+          applySelected();
+        }}
+      >
+        <div>
+          你的项目里已经有
+          {[
+            project?.characters.length ? `${project.characters.length} 个角色` : '',
+            project?.scenes.length ? `${project.scenes.length} 个场景` : '',
+            project?.shots.length ? `${project.shots.length} 个镜头` : '',
+            assetCount > 0 ? `${assetCount} 张图` : '',
+          ]
+            .filter(Boolean)
+            .join('、')}
+          。换成新风格之后：
+        </div>
+        <ul>
+          {(impact?.risks ?? []).map((risk, i) => (
+            <li key={i}>
+              <RichText>{risk}</RichText>
+            </li>
+          ))}
+        </ul>
+        <div style={{ marginTop: 12, color: 'var(--text)' }}>要改的话，按这个顺序：</div>
+        <ol>
+          {(impact?.steps ?? []).map((step, i) => (
+            <li key={i}>
+              <RichText>{step}</RichText>
+            </li>
+          ))}
+        </ol>
+      </ConfirmDialog>
+    </>
   );
 }
 
@@ -418,28 +504,16 @@ function EditCard({ edit, isActive }: { edit: ChatEditProposal; isActive: boolea
             {edit.reason}
           </div>
         ) : null}
+        {/*
+          只留一行标记（v0.42）。
+
+          完整的风险与操作顺序放在「应用勾选的改动」那一刻的弹窗里：
+          卡片是逐条看的，把四五段话塞进来会把它撑开，反而没人读。
+          但也不能什么都不显示 —— 用户得先知道这条和别的条不一样。
+        */}
         {styleImpact?.needed ? (
-          <div className="issue warning" style={{ margin: '8px 0 0', padding: '8px 10px' }}>
-            <div className="issue-title">改风格会影响已经做好的内容</div>
-            <ul className="issue-line" style={{ paddingLeft: 18, margin: '4px 0 0' }}>
-              {styleImpact.risks.map((risk, i) => (
-                <li key={i} style={{ marginBottom: 3 }}>
-                  <RichText>{risk}</RichText>
-                </li>
-              ))}
-            </ul>
-            <details className="why">
-              <summary>如果还是要改，按这个顺序做</summary>
-              <div className="why-body">
-                <ol style={{ paddingLeft: 18, margin: 0 }}>
-                  {styleImpact.steps.map((step, i) => (
-                    <li key={i} style={{ marginBottom: 3 }}>
-                      <RichText>{step}</RichText>
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            </details>
+          <div className="hint" style={{ marginTop: 6, color: 'var(--warning)' }}>
+            这条会换掉全片风格 —— 应用时会再确认一次，并告诉你该按什么顺序重做。
           </div>
         ) : null}
 
