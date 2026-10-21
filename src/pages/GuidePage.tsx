@@ -200,11 +200,12 @@ export function GuidePage() {
   const completed = [
     story.source === 'original' || story.source === 'generated',
     story.body.trim().length > 0,
-    project.name.trim().length > 0 &&
-      project.brief.targetDuration > 0 &&
-      project.brief.platforms.length > 0 &&
-      project.brief.aspectRatio.trim().length > 0 &&
-      project.brief.styleTags.length > 0,
+    // 默认的 30 秒 / 9:16 / 即梦 / anime style 是能直接用的起点，
+    // 但“填过这一步”至少要有用户自己写的一句话简介、风格倾向，
+    // 或者点过一套风格预设；否则空项目一进来就会显示“已完成”，还是在骗人。
+    project.logline.trim().length > 0 ||
+      project.brief.styleTone.trim().length > 0 ||
+      matchStylePreset(project.brief.styleTags) !== undefined,
     false,
   ];
 

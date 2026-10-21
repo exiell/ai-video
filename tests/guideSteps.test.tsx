@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
@@ -93,6 +93,13 @@ describe('故事向导的完成状态', () => {
     expect(stateOf('故事来源')).toBe('已完成');
     expect(stateOf('填写故事')).toBe('当前');
     expect(stateOf('填写故事')).not.toContain('已完成');
+  });
+
+  it('空项目手动切到「风格与规格」，不会因为默认值自动算完成', () => {
+    render();
+    viewStep(2);
+    expect(stateOf('风格与规格')).toBe('当前');
+    expect(stateOf('风格与规格')).not.toContain('已完成');
   });
 
   it('填写正文后才算完成，切到别的步骤再切回来仍然是已完成', () => {
