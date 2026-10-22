@@ -21,6 +21,9 @@ import {
 } from '../types/model';
 import { newId } from '../services/storage';
 import { PLATFORM_MAX_DURATION } from '../domain/checks/storyboard';
+import { SEVERITY_TAG, worstSeverity } from '../domain/checks';
+import { FieldIssues, UnplacedIssues } from '../components/ShotIssues';
+import type { CheckIssue } from '../types/model';
 
 /**
  * M2 分镜表编辑器（方案.md v0.6 §3.2）
@@ -28,8 +31,31 @@ import { PLATFORM_MAX_DURATION } from '../domain/checks/storyboard';
  * 这是整个工具用得最久的界面，因此三条设计取舍：
  * 1. 全部字段直接内联编辑，不做「点开弹窗才能改」——新手最怕找不到东西在哪
  * 2. 总时长实时统计并常驻顶部——时长对不上是新手最常见的问题
- * 3. 出问题的字段描边高亮，点一下跳到穿帮检查看原因
+ * 3. 出问题的字段描边高亮，**就在字段下面点开看原因**（v0.48）
+ *
+ * 第 3 条原来是「点一下跳到穿帮检查看原因」。跳过去要离开这一页，
+ * 看完再跳回来，改一镜来回两趟；而检查结果本来就在 store 里，
+ * 是纯本地算出来的，没有理由不在出错的地方直接摊开。
  */
+
+/**
+ * 这些字段在本页有可编辑控件，问题标记贴在字段下面。
+ * 不在这张表里的（比如 `variantIds` 要去角色页改）走 `UnplacedIssues`，
+ * 汇总在镜头标题下面——不因为「找不到地方贴」就丢掉。
+ */
+const PLACED_FIELDS: ReadonlySet<string> = new Set([
+  'duration',
+  'shotSize',
+  'sceneId',
+  'action',
+  'startState',
+  'endState',
+  'mood',
+  'offscreenCharacters',
+  'transitionType',
+  'continuityNote',
+  'activeLockIds',
+]);
 
 const SHOT_SIZE_OPTIONS: ShotSize[] = [
   'extreme-wide',
@@ -170,6 +196,23 @@ export function StoryboardPage() {
       const set = map.get(issue.location.id) ?? new Set<string>();
       set.add(issue.location.field);
       map.set(issue.location.id, set);
+    }
+    return map;
+  }, [report]);
+
+  /**
+   * 每一镜的全部问题，按镜头 id 分组。
+   *
+   * `report` 在每次改项目时由 store 重算（不是只在检查页刷新），
+   * 所以这里的标记是跟着输入实时变的，不会出现「改完了还标着」。
+   */
+  const issuesByShot = useMemo(() => {
+    const map = new Map<string, CheckIssue[]>();
+    for (const issue of report?.issues ?? []) {
+      if (issue.location.kind !== 'shot') continue;
+      const list = map.get(issue.location.id) ?? [];
+      list.push(issue);
+      map.set(issue.location.id, list);
     }
     return map;
   }, [report]);
@@ -347,6 +390,26 @@ export function StoryboardPage() {
             c.continuityLocks.filter((l) => shot.activeLockIds.includes(l.id)),
           );
           const open = expanded === shot.id;
+
+          const shotIssues = issuesByShot.get(shot.id) ?? [];
+          const byField = new Map<string, CheckIssue[]>();
+          for (const issue of shotIssues) {
+            const key = issue.location.field ?? '';
+            const list = byField.get(key) ?? [];
+            list.push(issue);
+            byField.set(key, list);
+          }
+          const unplaced = shotIssues.filter(
+            (issue) => !PLACED_FIELDS.has(issue.location.field ?? ''),
+          );
+          const worst = worstSeverity(shotIssues);
+          /**
+           * 取某个字段的问题。
+           *
+           * 刻意**不叫 `on`**：下面「出镜角色」按钮里已经有一个 `const on = shot.characterIds.includes(c.id)`，
+           * 同名会在那个块里把外层的函数遮住，将来若在里面调一次就是 `boolean is not a function`。
+           */
+          const issuesOf = (field: string) => byField.get(field) ?? [];
           return (
             <div
               className={`shot-card${located === shot.id ? ' shot-located' : ''}`}
@@ -367,7 +430,9 @@ export function StoryboardPage() {
                 <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>秒</span>
 
                 <SelectMenu
-                  className="shot-select shot-size-select"
+                  className={`shot-select shot-size-select${
+                    isFlagged(shot.id, 'shotSize') ? ' field-flagged' : ''
+                  }`}
                   value={shot.shotSize}
                   options={shotSizeOptions}
                   ariaLabel={`第 ${shot.number} 镜的景别`}
@@ -393,6 +458,21 @@ export function StoryboardPage() {
                 />
 
                 <span style={{ flex: 1 }} />
+
+                {/*
+                  这一镜有几处要改。以前这个数字只在检查页有，
+                  而且不展开镜头就完全看不到——新手在列表里划过去，不知道哪一镜有问题。
+                */}
+                {worst ? (
+                  <button
+                    type="button"
+                    className={`${SEVERITY_TAG[worst]} issue-badge`}
+                    onClick={() => setExpanded(shot.id)}
+                    title="点一下展开这一镜，逐条看哪里不对"
+                  >
+                    {shotIssues.length} 处要改
+                  </button>
+                ) : null}
 
                 <button
                   type="button"
@@ -433,6 +513,23 @@ export function StoryboardPage() {
                 </button>
               </div>
 
+              {/*
+                表头这三个控件（时长 / 景别 / 场景）挤在同一个 flex 行里，
+                展开面板塞不进那一行，所以放在行下面——但仍然是各自一条、
+                点哪一条只展开那一条，不会一次糊一大片。
+              */}
+              {shotIssues.length > 0 ? (
+                <div className="shot-head-issues">
+                  <FieldIssues issues={issuesOf('duration')} label="时长" />
+                  <FieldIssues issues={issuesOf('shotSize')} label="景别" />
+                  <FieldIssues issues={issuesOf('sceneId')} label="场景" />
+                  <UnplacedIssues
+                    issues={unplaced}
+                    placed={shotIssues.length - unplaced.length}
+                  />
+                </div>
+              ) : null}
+
               <div className="shot-primary">
                 <div className="field-label">动作</div>
                 <input
@@ -443,6 +540,7 @@ export function StoryboardPage() {
                   placeholder="例：他抬手拂去肩上的雪"
                 />
                 <div className="field-help">这一镜只做一件事</div>
+                <FieldIssues issues={issuesOf('action')} label="动作" />
               </div>
 
               {open ? (
@@ -472,6 +570,7 @@ export function StoryboardPage() {
                             placeholder="只写这一瞬间看得见的东西"
                           />
                           <div className="field-help">镜头开始那一瞬间能看见什么</div>
+                          <FieldIssues issues={issuesOf('startState')} label="起点" />
                         </div>
                         <div>
                           <div className="field-label">终点</div>
@@ -483,6 +582,7 @@ export function StoryboardPage() {
                             placeholder="下一镜要从这里接下去"
                           />
                           <div className="field-help">镜头结束画面停在哪</div>
+                          <FieldIssues issues={issuesOf('endState')} label="终点" />
                         </div>
                         <div>
                           <div className="field-label">出镜角色</div>
@@ -584,6 +684,7 @@ export function StoryboardPage() {
                             value={shot.mood}
                             onChange={(e) => patch(shot, { mood: e.target.value })}
                           />
+                          <FieldIssues issues={issuesOf('mood')} label="情绪" />
                         </div>
 
                         <div>
@@ -602,6 +703,7 @@ export function StoryboardPage() {
                             placeholder="用、分隔"
                           />
                           <div className="field-help">只在声音里出现的人</div>
+                          <FieldIssues issues={issuesOf('offscreenCharacters')} label="画外人物" />
                         </div>
 
                       </div>
@@ -644,6 +746,7 @@ export function StoryboardPage() {
                             }
                           />
                           <div className="field-help">总开关</div>
+                          <FieldIssues issues={issuesOf('transitionType')} label="转场类型" />
                         </div>
 
                         <div>
@@ -655,6 +758,7 @@ export function StoryboardPage() {
                             placeholder="例：他保持这个姿势不动，下一镜从同一机位推进"
                           />
                           <div className="field-help">这一镜怎么接到下一镜</div>
+                          <FieldIssues issues={issuesOf('continuityNote')} label="衔接" />
                         </div>
                       </div>
                     </section>
@@ -668,11 +772,12 @@ export function StoryboardPage() {
                         <p className="shot-section-desc">勾选这一镜不能变的部分</p>
                       </div>
                       <div className="shot-section-body">
-                        {isFlagged(shot.id, 'activeLockIds') ? (
-                          <div style={{ marginTop: 6 }}>
-                            <span className="tag tag-error">有角色没勾锁</span>
-                          </div>
-                        ) : null}
+                        {/*
+                          v0.48：原来这里是一句写死的「有角色没勾锁」，
+                          只说有这么回事、不说谁没勾、为什么、怎么改。
+                          现在直接把检查给的三段摊开。
+                        */}
+                        <FieldIssues issues={issuesOf('activeLockIds')} label="连续性锁" />
                         <div className="row" style={{ gap: 6 }}>
                           {project.characters.every((c) => c.continuityLocks.length === 0) &&
                           project.scenes.every((s) => s.continuityLocks.length === 0) ? (

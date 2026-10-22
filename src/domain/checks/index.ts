@@ -21,6 +21,42 @@ const SEVERITY_ORDER: Record<CheckSeverity, number> = {
   info: 2,
 };
 
+/**
+ * 严重度的显示名与配色（v0.48 从 ChecksPage 提到这里）。
+ *
+ * 提到领域层的原因：分镜页现在也要就地标出每一处问题，
+ * 两个页面各写一份「必须修/建议修/看一眼」，措辞迟早会分叉——
+ * 同一个规则在检查页叫「必须修」、在分镜页叫「必须改」，用户会以为是两件事。
+ */
+export const SEVERITY_LABEL: Record<CheckSeverity, string> = {
+  error: '必须修',
+  warning: '建议修',
+  info: '看一眼',
+};
+
+/** 严重度对应的 tag 样式类 */
+export const SEVERITY_TAG: Record<CheckSeverity, string> = {
+  error: 'tag tag-error',
+  warning: 'tag tag-warning',
+  info: 'tag tag-info',
+};
+
+/**
+ * 一组问题里最严重的那一档。
+ *
+ * 为空的传入返回 null 而不是兜底成 info——调用方借此区分
+ * 「没有问题」与「只有可以看一眼的」，前者不该显示出任何标记。
+ */
+export function worstSeverity(issues: CheckIssue[]): CheckSeverity | null {
+  let worst: CheckSeverity | null = null;
+  for (const issue of issues) {
+    if (worst === null || SEVERITY_ORDER[issue.severity] < SEVERITY_ORDER[worst]) {
+      worst = issue.severity;
+    }
+  }
+  return worst;
+}
+
 /** 各规则的显示名，用于分组与统计 */
 export const RULE_LABEL: Record<string, string> = {
   'character-not-registered': '角色未登记',

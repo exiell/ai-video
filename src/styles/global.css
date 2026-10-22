@@ -5313,6 +5313,86 @@ select {
   color: var(--warning);
 }
 
+/* ---------- 镜头内的穿帮标记（v0.48） ---------- */
+
+/*
+  表头那三个控件（时长 / 景别 / 场景）的问题展开条。
+  它们处在同一个 flex 行里，塞不进那一行，所以统一落在行下面一行排开。
+  一条一行，不并排——并排的话字数一多就换行换得很难看。
+*/
+.shot-head-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 8px 0 10px;
+}
+
+.shot-head-issues > .field-issues,
+.shot-head-issues > .shot-issues {
+  margin-top: 0;
+}
+
+/*
+  字段下面那一行「必须修 · 这里有 1 个问题，点开看为什么」。
+
+  `details.why > summary` 已经有 ▸/▾ 和强调色，这里只补两件事：
+  summary 里的 tag 与文字之间要有间距，以及点击区域要够大。
+*/
+.field-issues > summary,
+.shot-issues > summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 0;
+  line-height: 1.6;
+}
+
+.field-issues-text {
+  font-size: 12px;
+}
+
+/* summary 里的 tag 不继承 summary 的强调色，用回自己的配色 */
+.field-issues > summary .tag,
+.shot-issues > summary .tag {
+  flex: none;
+}
+
+/*
+  表头那个「N 处要改」。
+  它是个按钮——点一下把这一镜展开，问题标记就都在下面了。
+  `.tag` 原本只给 span 用，套到 button 上要补字号与光标。
+*/
+.issue-badge {
+  cursor: pointer;
+  font-family: inherit;
+  border-width: 1px;
+}
+
+.issue-badge:hover {
+  filter: brightness(0.96);
+}
+
+/* 一条问题的紧凑版：标题、为什么、怎么改 */
+.issue-mini {
+  margin-top: 10px;
+  padding-left: 11px;
+  border-left: 2px solid var(--border-strong);
+}
+
+.issue-mini:first-child {
+  margin-top: 2px;
+}
+
+.issue-mini .issue-title {
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+.issue-mini .issue-line {
+  margin: 3px 0;
+  font-size: 12.5px;
+}
+
 @media (max-width: 1080px) {
   .shot-section {
     grid-template-columns: 1fr;

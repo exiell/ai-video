@@ -1,6 +1,6 @@
-﻿import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { RULE_LABEL, summarizeReport } from '../domain/checks';
+import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_TAG, summarizeReport } from '../domain/checks';
 import { SummaryBar, Info } from '../components/bits';
 import type { CheckIssue, CheckSeverity } from '../types/model';
 import { AutoFixPanel } from '../components/AutoFixPanel';
@@ -14,18 +14,6 @@ import { AutoFixPanel } from '../components/AutoFixPanel';
  * 新手需要的是「哪里错了、为什么错、怎么改」，不是错误码。
  * 因此每条问题都必须有三段：标题（哪里）、为什么、怎么改。
  */
-
-const SEVERITY_LABEL: Record<CheckSeverity, string> = {
-  error: '必须修',
-  warning: '建议修',
-  info: '看一眼',
-};
-
-const SEVERITY_TAG: Record<CheckSeverity, string> = {
-  error: 'tag tag-error',
-  warning: 'tag tag-warning',
-  info: 'tag tag-info',
-};
 
 export function ChecksPage() {
   const navigate = useNavigate();
