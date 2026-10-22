@@ -128,9 +128,9 @@ a:hover {
 }
 
 .nav-item.active {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
   color: var(--text);
-  border-left-color: var(--accent);
+  border-left-color: transparent;
 }
 
 .main {
@@ -1086,7 +1086,7 @@ table.simple th {
 
 .subnav-item.active {
   color: var(--text);
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--text);
 }
 
 /* ==========================================================================
@@ -1226,7 +1226,7 @@ a:hover {
 }
 
 .nav-item.active .nav-icon {
-  color: var(--accent);
+  color: var(--text);
 }
 
 .brand-text {
@@ -1322,8 +1322,8 @@ a:hover {
 }
 
 .nav-item.active {
-  background: #eaf0ff;
-  color: var(--accent-dim);
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  color: var(--text);
   border-left: 0;
   font-weight: 600;
 }
@@ -1337,7 +1337,7 @@ a:hover {
 }
 
 .nav-item.active .nav-count {
-  color: var(--accent-dim);
+  color: var(--text-dim);
 }
 
 .nav-count-danger {
@@ -1750,14 +1750,15 @@ pre {
 
 .summary-bar {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--bg-card);
+  margin: 14px 0 0;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
   color: var(--text-dim);
   font-size: 13px;
 }
@@ -1765,6 +1766,70 @@ pre {
 .summary-bar b {
   color: var(--text);
   font-weight: 600;
+}
+
+.help-defenses {
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+details.why.help-defense {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+details.help-defense > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 11px 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+details.help-defense > summary span {
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.help-defense-body {
+  padding: 0 0 12px;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.help-defense-body p {
+  margin: 0 0 7px;
+  line-height: 1.7;
+}
+
+.help-defense-body p:last-child {
+  margin-bottom: 0;
+}
+
+.help-defense-note {
+  color: var(--text-faint);
+}
+
+.term-list {
+  padding: 0 18px;
+}
+
+.term-item {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.term-item:first-child {
+  border-top: 0;
 }
 
 /* ---------- 分镜表 ---------- */
@@ -2033,7 +2098,7 @@ table.simple tbody tr:last-child td {
 }
 
 .subnav-item.active {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--text);
   color: var(--text);
 }
 
@@ -2248,7 +2313,7 @@ table.simple tbody tr:last-child td {
 }
 
 .stage-cell.now {
-  background: #f4f7ff;
+  background: var(--bg-soft);
 }
 
 .stage-cell.todo {
@@ -2287,7 +2352,7 @@ table.simple tbody tr:last-child td {
 
 .stage-cell.done .stage-state,
 .stage-cell.now .stage-state {
-  color: var(--accent-dim);
+  color: var(--text-dim);
 }
 
 .stage-detail {
@@ -2306,12 +2371,16 @@ table.simple tbody tr:last-child td {
   margin-top: 10px;
   overflow: hidden;
   border-radius: 2px;
-  background: #edf1f6;
+  background: #e8edf3;
 }
 
 .stage-bar i {
   display: block;
   height: 100%;
+  background: var(--text-faint);
+}
+
+.stage-cell.now .stage-bar i {
   background: var(--accent);
 }
 
@@ -2328,9 +2397,9 @@ table.simple tbody tr:last-child td {
   justify-content: space-between;
   min-height: 196px;
   padding: 21px 22px 19px;
-  border: 1px solid #d9e4ff;
+  border: 1px solid var(--border);
   border-radius: 14px;
-  background: #eaf0ff;
+  background: var(--bg-card);
 }
 
 .next-top {
@@ -2341,18 +2410,18 @@ table.simple tbody tr:last-child td {
 }
 
 .next-label {
-  color: var(--accent-dim);
+  color: var(--text-dim);
   font-size: 12px;
 }
 
 .next-time {
-  color: #3b568f;
+  color: var(--text-faint);
   font-size: 12px;
 }
 
 .next-card h2 {
   margin: 7px 0 4px;
-  color: #122a63;
+  color: var(--text);
   font-size: 20px;
   font-weight: 600;
   line-height: 1.4;
@@ -2362,7 +2431,7 @@ table.simple tbody tr:last-child td {
 .next-card p {
   margin: 0;
   max-width: 58ch;
-  color: #40598f;
+  color: var(--text-dim);
   font-size: 13px;
   line-height: 1.65;
 }
@@ -2444,7 +2513,7 @@ table.simple tbody tr:last-child td {
 }
 
 .task-dot.accent {
-  background: var(--accent);
+  background: var(--text-faint);
 }
 
 .task-dot.done {
@@ -2469,8 +2538,11 @@ table.simple tbody tr:last-child td {
 
 .task-row > a {
   padding-top: 2px;
-  color: var(--accent);
+  color: var(--text-dim);
   font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
   white-space: nowrap;
 }
 
@@ -2621,7 +2693,7 @@ table.simple tbody tr:last-child td {
 }
 
 .runtime-bars i.on {
-  background: var(--accent);
+  background: var(--text-faint);
 }
 
 .runtime-foot {
@@ -2645,19 +2717,32 @@ table.simple tbody tr:last-child td {
 }
 
 .shots-foot a {
-  color: var(--accent);
+  color: var(--text-dim);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
   white-space: nowrap;
 }
 
 .home-rail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
   min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-card);
 }
 
 .home-rail .panel {
   padding: 16px 17px 15px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.home-rail .panel + .panel {
+  border-top: 1px solid var(--border);
 }
 
 .check-total {
@@ -2702,8 +2787,11 @@ table.simple tbody tr:last-child td {
 .panel-link {
   display: inline-block;
   margin-top: 8px;
-  color: var(--accent);
+  color: var(--text-dim);
   font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
 }
 
 .assets {
@@ -2740,8 +2828,11 @@ table.simple tbody tr:last-child td {
 }
 
 .asset-links a {
-  color: var(--accent);
+  color: var(--text-dim);
   font-size: 12px;
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 2px;
 }
 
 .save-row {
@@ -3051,8 +3142,8 @@ table.simple tbody tr:last-child td {
 }
 
 .wizard-step.active {
-  background: #eaf0ff;
-  color: var(--accent-dim);
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -3066,14 +3157,14 @@ table.simple tbody tr:last-child td {
 }
 
 .wizard-step.done .wizard-dot {
-  border-color: var(--accent);
-  background: var(--accent);
+  border-color: var(--text-faint);
+  background: var(--text-faint);
 }
 
 .wizard-step.active .wizard-dot {
   border-color: var(--accent);
   background: #fff;
-  box-shadow: inset 0 0 0 2px #eaf0ff;
+  box-shadow: inset 0 0 0 2px var(--bg-card);
 }
 
 .wizard-state {
@@ -3084,7 +3175,7 @@ table.simple tbody tr:last-child td {
 }
 
 .wizard-step.active .wizard-state {
-  color: var(--accent);
+  color: var(--text-dim);
 }
 
 .wizard-step.pending .wizard-state {
@@ -3545,7 +3636,7 @@ table.simple tbody tr:last-child td {
 
 .tools-icon {
   margin-right: 6px;
-  color: var(--accent);
+  color: var(--text-faint);
   vertical-align: -2px;
 }
 
@@ -3600,13 +3691,13 @@ table.simple tbody tr:last-child td {
   }
 
   .home-rail {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
   }
 
   .home-rail .save-panel {
-    grid-column: 1 / -1;
+    grid-column: auto;
   }
 
   .guide-layout {
@@ -3729,8 +3820,8 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='night'] .nav-item.active {
-  background: #221b12;
-  color: var(--accent-dim);
+  background: color-mix(in srgb, var(--text) 8%, var(--bg));
+  color: var(--text);
 }
 
 [data-theme='night'] .nav-icon {
@@ -3738,7 +3829,7 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='night'] .nav-item.active .nav-icon {
-  color: var(--accent);
+  color: var(--text);
 }
 
 [data-theme='night'] .btn {
@@ -3864,29 +3955,29 @@ table.simple tbody tr:last-child td {
 [data-theme='night'] .stage-state,
 [data-theme='night'] .stage-cell.done .stage-state,
 [data-theme='night'] .stage-cell.now .stage-state {
-  color: var(--accent-dim);
+  color: var(--text-dim);
 }
 
 [data-theme='night'] .next-card {
-  background: #1a1510;
-  border-color: #3a2d1a;
+  background: var(--bg-card);
+  border-color: var(--border);
 }
 
 [data-theme='night'] .next-label,
 [data-theme='night'] .next-hint {
-  color: var(--accent);
+  color: var(--text-dim);
 }
 
 [data-theme='night'] .next-time {
-  color: #c9a15e;
+  color: var(--text-faint);
 }
 
 [data-theme='night'] .next-card h2 {
-  color: #f7e8ce;
+  color: var(--text);
 }
 
 [data-theme='night'] .next-card p {
-  color: #d8c5a7;
+  color: var(--text-dim);
 }
 
 [data-theme='night'] .next-step {
@@ -3928,7 +4019,7 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='night'] .runtime-bars i.on {
-  background: var(--accent);
+  background: var(--text-faint);
 }
 
 [data-theme='night'] .start-card-sample {
@@ -3980,8 +4071,8 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='night'] .wizard-step.active {
-  background: #221b12;
-  color: var(--accent-dim);
+  background: color-mix(in srgb, var(--text) 8%, var(--bg));
+  color: var(--text);
 }
 
 [data-theme='night'] .wizard-dot {
@@ -3991,8 +4082,8 @@ table.simple tbody tr:last-child td {
 
 [data-theme='night'] .wizard-step.active .wizard-dot {
   border-color: var(--accent);
-  background: #221b12;
-  box-shadow: inset 0 0 0 2px #221b12;
+  background: var(--bg);
+  box-shadow: inset 0 0 0 2px var(--bg);
 }
 
 [data-theme='night'] .guide-sample {
@@ -4187,7 +4278,7 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='blueprint'] .stage-cell.now {
-  background: #f0f7fa;
+  background: var(--bg-soft);
 }
 
 [data-theme='blueprint'] .stage-cell.todo {
@@ -4199,22 +4290,22 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='blueprint'] .next-card {
-  background: #e7f0f5;
-  border-color: #c9dde7;
+  background: var(--bg-card);
+  border-color: var(--border);
 }
 
 [data-theme='blueprint'] .next-card h2 {
-  color: #0b3a52;
+  color: var(--text);
 }
 
 [data-theme='blueprint'] .next-card p,
 [data-theme='blueprint'] .next-hint,
 [data-theme='blueprint'] .next-time {
-  color: #3f6579;
+  color: var(--text-dim);
 }
 
 [data-theme='blueprint'] .next-label {
-  color: var(--accent-dim);
+  color: var(--text-dim);
 }
 
 [data-theme='blueprint'] .next-step {
@@ -4290,14 +4381,14 @@ table.simple tbody tr:last-child td {
 }
 
 [data-theme='blueprint'] .wizard-step.active {
-  background: #e7f1f5;
-  color: var(--accent-dim);
+  background: color-mix(in srgb, var(--text) 7%, var(--bg));
+  color: var(--text);
 }
 
 [data-theme='blueprint'] .wizard-step.active .wizard-dot {
   border-color: var(--accent);
-  background: #fbfcfd;
-  box-shadow: inset 0 0 0 2px #e7f1f5;
+  background: var(--bg-card);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--text) 7%, var(--bg));
 }
 
 [data-theme='blueprint'] .shot-tile-frame {
@@ -4584,7 +4675,7 @@ table.simple tbody tr:last-child td {
 }
 
 .expand-toggle[aria-expanded='true'] .expand-chevron {
-  color: var(--accent);
+  color: var(--text-dim);
   transform: rotate(-90deg);
 }
 

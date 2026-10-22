@@ -356,14 +356,24 @@ app-screens 的结论是：颜色应该落在数据、状态和主行动上；�
 - vibecoded-design-tells: https://github.com/JCarterJohnson/vibecoded-design-tells
 - 本地 taste-skill：`references/tells.md`、`references/copy.md`、`references/app-screens.md`
 
-## 7. P0 执行记录（2026-10-22）
+## 7. P0 / P1 执行记录（2026-10-22）
 
-已按 P0 落地，未进入 P1：
+P0 已按计划落地。P1 在 P0 基础上继续做结构与层级：
 
 - 分镜分区图标去掉淡色方块和边框，改成 20px 裸图标；分区标题保持 16px，字段名 13px，说明 12px，正文/输入 14px。
 - 全局字号从 18 档收到 6 档：12 / 13 / 14 / 16 / 20 / 26；字重只保留 400 / 600。
 - 改写首页开场、首页“现在做”和任务栏、故事首步、帮助页开头，清掉这些位置的长破折号和解释性从句。
 - 首页右栏“三件事”改为显示全部待办，不再截前三条。
-- 验证：`npm run build` 通过；47 个测试文件、1039 个测试通过；1280 / 1024 无横向溢出。
-- 截图：`aniguide/.taste-skill/p0/home.jpg`、`guide.jpg`、`help.jpg`、`studio-card.jpg`。
-- 未做：P1 的卡片减层、强调色预算、帮助页重排。
+
+P1：
+
+- 卡片减层：首页右栏三张 panel 合并为一张带分隔线的卡；帮助页 43 张术语卡合并成一张列表；`summary-bar` 从独立卡片改为卡片内的一行分隔内容。
+- 强调色预算：侧栏选中态和向导选中步骤改为中性灰，不再用蓝底；装饰性链接改为正文色 + 下划线；进度条只有当前段保留强调色；主按钮、焦点环、真实状态仍用强调色。
+- 帮助页：`第一次使用` 从 8 条压到 5 条；五道防线改成 5 个默认收起的 `details`；顺序压成一行。
+- 设置页、导出页原本就用 `details` 或短提示，没有为改而改，也没有新增卡片。
+
+验证：`npx tsc --noEmit` 通过；`npm run build` 通过；47 个测试文件、1039 个测试通过；1440 / 1280 / 1024 无横向溢出。
+
+截图：`aniguide/.taste-skill/p1/home-1440.jpg`、`help-first-use.jpg`、`help-consistency-open.jpg`、`settings-models.jpg`、`export.jpg`、`storyboard-sections.jpg`。
+
+未做：P2 的签名式分镜条、真实状态/空状态、更多手写文案。P1 不做手机端。
