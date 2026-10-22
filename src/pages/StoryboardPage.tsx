@@ -22,7 +22,7 @@ import {
 import { newId } from '../services/storage';
 import { PLATFORM_MAX_DURATION } from '../domain/checks/storyboard';
 import { SEVERITY_TAG, worstSeverity } from '../domain/checks';
-import { FieldIssues, UnplacedIssues } from '../components/ShotIssues';
+import { FieldIssues, UnplacedIssues } from '../components/IssueViews';
 import type { CheckIssue } from '../types/model';
 
 /**

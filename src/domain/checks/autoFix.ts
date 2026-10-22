@@ -192,7 +192,7 @@ export function buildFixPlan(project: Project, report: { issues: CheckIssue[] },
           issueId: issue.id,
           title: `用草稿填上第 ${shot.number} 镜的「${field === 'startState' ? '起点' : field === 'endState' ? '终点' : '动作'}」`,
           reason:
-            '这一格是空的。下面这条是从这一镜的其它字段和场景设定里拼出来的**草稿**——' +
+            '这一格是空的。下面这条是从这一镜的其它字段和场景设定里拼出来的草稿——' +
             '它能占住位置、让检查通过，但多半不如你手写的好。',
           target: { shotId: shot.id },
           before: '（空）',
@@ -216,7 +216,7 @@ export function buildFixPlan(project: Project, report: { issues: CheckIssue[] },
           issueId: issue.id,
           title: missingStyle ? '给项目补上风格关键词' : '给项目补上画幅',
           reason:
-            '这两项会注入到**每一张图**的提示词里。缺画幅模型可能给你出成横屏，缺风格词可能出成写实风。',
+            '这两项会注入到每一张图的提示词里。缺画幅模型可能给你出成横屏，缺风格词可能出成写实风。',
           target: { projectField: missingStyle ? 'styleTags' : 'aspectRatio' },
           before: missingStyle ? '（空）' : '（空）',
           after: missingStyle ? 'anime style, cel shading, clean line art' : '16:9',

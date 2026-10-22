@@ -43,20 +43,20 @@ const REQUIRED_FIELDS: RequiredField[] = [
   {
     key: 'startState',
     label: '起点',
-    why: '起点是这一镜的第一格画面。不写清楚，模型会自己决定开场画面，很可能和上一镜接不上。',
-    suggestion: '写「镜头开始时能看见什么」：人物在哪、朝向、手里有什么、周围有什么。只写这一瞬间看得见的东西。',
+    why: '起点是这一镜的第一格。不写清楚，模型自己决定开场画面，很可能接不上上一镜。',
+    suggestion: '写「镜头开始时能看见什么」：人在哪、朝向、手里有什么。只写这一瞬间看得见的。',
   },
   {
     key: 'action',
     label: '唯一动作',
-    why: '这一镜从头到尾只应该发生一件事。没有动作，画面就是静止的；动作不明确，生成出来会乱动。',
+    why: '一镜只该发生一件事。没动作画面是静的；动作不明确，生成出来会乱动。',
     suggestion: '用一句话写清楚「谁做了什么」，只写一件事。',
   },
   {
     key: 'endState',
     label: '终点',
-    why: '终点是这一镜的最后一格画面，也是下一镜的接续点。不写，剪辑时会接不上。',
-    suggestion: '写「镜头结束时画面停在哪」：人物停在哪、手在哪、画面中心是谁。',
+    why: '终点是这一镜的最后一格，也是下一镜的接续点。不写，剪辑时会接不上。',
+    suggestion: '写「镜头结束时画面停在哪」：人停在哪、手在哪、画面中心是谁。',
   },
 ];
 
@@ -116,8 +116,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
           ruleId: 'multi-action',
           severity: 'warning',
           title: `${label}里疑似塞了 ${fragments.length} 个动作`,
-          why: `检测到：${fragments.map((f) => `「${f.text}」`).join('、')}。一镜多动作是新手最常踩的坑——模型在几秒内无法完成两个动作，结果通常是两个都做不好，或者画面直接崩。`,
-          suggestion: `把这一镜拆成 ${fragments.length} 个镜头，每个镜头只做一件事。拆完之后每一镜各自写清起点、动作、终点。`,
+          why:  `检测到：${fragments.map((f) => `「${f.text}」`).join('、')}。几秒内做不完两个动作，结果通常是两个都含糊，或者画面直接崩。`,
+          suggestion:  `拆成 ${fragments.length} 个镜头，每镜只做一件事，各自写清起点与终点。`,
           location: { kind: 'shot', id: shot.id, field: 'action' },
         }),
       );
@@ -130,8 +130,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
           ruleId: 'duration-mismatch',
           severity: 'error',
           title: `${label}的时长不是有效数字`,
-          why: '时长必须是一个大于 0 的数字（秒）。',
-          suggestion: `给第 ${shot.number} 镜填一个时长，建议 2–5 秒。`,
+          why:  '时长必须是大于 0 的数字，不然算不出总长，也没法交给平台。',
+          suggestion:  `给第 ${shot.number} 镜填一个时长，建议 2–5 秒。`,
           location: { kind: 'shot', id: shot.id, field: 'duration' },
         }),
       );
@@ -143,8 +143,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
             ruleId: 'duration-mismatch',
             severity: 'info',
             title: `${label}的 ${shot.duration} 秒超过了${PLATFORM_LABEL[max.platform]}的单镜上限`,
-            why: `${PLATFORM_LABEL[max.platform]}单次生成最长约 ${max.limit} 秒。超过的部分生成不出来，或者会被平台自动截断。`,
-            suggestion: `把第 ${shot.number} 镜缩短到 ${max.limit} 秒以内、拆成两镜；或者保留，到时候在平台里分段生成再拼。`,
+            why:  `${PLATFORM_LABEL[max.platform]}单次最长约 ${max.limit} 秒，超出的部分生成不出来，或被自动截断。`,
+            suggestion:  `压到 ${max.limit} 秒以内，或拆成两镜、到平台里分段生成再拼。`,
             location: { kind: 'shot', id: shot.id, field: 'duration' },
           }),
         );
@@ -160,8 +160,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
             ruleId: 'offscreen-not-declared',
             severity: 'info',
             title: `${label}声明了画外人物「${name}」，但画面描述里没提到他`,
-            why: '如果这个人确实只在声音里出现（比如画外音），那没问题；如果他其实该出现在画面里，那就是漏写了。',
-            suggestion: `确认一下：只在声音里 → 保持现状；该出现在画面里 → 把他写进起点或画面描述，并勾选他的连续性锁。`,
+            why:  '只在声音里出现没问题；该出现在画面里，就是漏写了。',
+            suggestion:  '写进画面描述并勾上他的锁，或确认他只在画外。',
             location: { kind: 'shot', id: shot.id, field: 'offscreenCharacters' },
           }),
         );
@@ -184,14 +184,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
           title: over
             ? `总时长超了 ${Math.round(diff)} 秒`
             : `总时长还差 ${Math.round(-diff)} 秒`,
-          why: `你设定的目标是 ${target} 秒，现在 ${shots.length} 个镜头加起来是 ${total} 秒。${
-            over
-              ? '超出的部分如果不删，成片就比你计划的更长了。'
-              : '不够的部分如果不补，成片会比计划的短，可能撑不起你想讲的内容。'
-          }`,
-          suggestion: over
-            ? `找一个 ${Math.round(diff)} 秒左右的镜头删掉或缩短；也可以把几个慢镜头各减 1 秒。分镜表里时长是实时统计的，改完就能看到。`
-            : `再加 ${Math.round(-diff)} 秒的内容：给关键情绪补一个反应镜头，或者把某个镜头延长 1–2 秒。`,
+          why:  `目标是 ${target} 秒，现在 ${shots.length} 个镜头加起来 ${total} 秒。${ over ? '超出部分不删，成片就比你计划的更长。' : '不够的部分不补，成片会比计划的短。' }`,
+          suggestion:  over ? `删掉或缩短一个 ${Math.round(diff)} 秒左右的镜头；也可以几个慢镜头各减 1 秒。` : `补 ${Math.round(-diff)} 秒：给关键情绪加一个反应镜头，或把某镜延长 1–2 秒。`,
           location: { kind: 'project', id: project.id, field: 'brief.targetDuration' },
         }),
       );
@@ -207,8 +201,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         ruleId: 'story-scene-uncovered',
         severity: 'warning',
         title: `剧本里的「${storyScene.label}」没有任何镜头承载`,
-        why: '这场戏在你写的故事里存在，但分镜里没有任何一个镜头在拍它。要么是漏了，要么是你决定不拍。',
-        suggestion: `如果是漏了 → 补几个镜头。如果决定不拍 → 在分镜表里为这一场写一行「未拍场次：${storyScene.label}（理由：……）」，把决定记下来，将来回看才不会以为是漏了。`,
+        why:  '这场戏在故事里，却没有一个镜头在拍它。',
+        suggestion:  `漏了就补镜头；决定不拍，就在分镜表里写一行「未拍场次：${storyScene.label}（理由：……）」。`,
         location: { kind: 'story', id: storyScene.id },
       }),
     );
@@ -228,9 +222,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         severity: 'warning',
         title: `项目设置里缺少：${projectMissing.join('、')}`,
         why:
-          '这两项是整部片子共用的，会注入到每一镜的提示词里。' +
-          '缺画幅可能给你出成横屏，缺风格词可能出成写实风而不是动漫风。',
-        suggestion: '去「引导向导」或项目设置里补上。',
+           '画幅和风格会注入每一镜；缺了可能出成横屏，或出成写实风。',
+        suggestion:  '去「引导向导」或项目设置里补上。',
         location: { kind: 'project', id: project.id, field: projectMissing[0] === '风格词' ? 'brief.styleTags' : 'brief.aspectRatio' },
       }),
     );
@@ -246,8 +239,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         ruleId: 'prompt-incomplete',
         severity: 'warning',
         title: `${shotLabel(shot.number)}的提示词缺少：${missing.join('、')}`,
-        why: '这会让模型自己决定这部分，出图结果不可控。',
-        suggestion: `给第 ${shot.number} 镜补上${missing.join('、')}。`,
+        why:  '缺的部分模型会自己决定，出图不可控。',
+        suggestion:  `给第 ${shot.number} 镜补上${missing.join('、')}。`,
         location: { kind: 'shot', id: shot.id },
       }),
     );
@@ -278,13 +271,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         severity: 'info',
         title: `${shotLabel(prev.number)}和${shotLabel(current.number)}都是「${SHOT_SIZE_LABEL[current.shotSize]}」`,
         why:
-          '连续两个镜头用同一个景别，观众会觉得「没剪」——画面在动，但视角没变。' +
-          '专业分镜的基本要求是景别交替：远景交代空间，中景推进动作，近景给情绪。',
-        suggestion: `把其中一镜换个景别。${
-          current.shotSize === 'medium'
-            ? '尤其「中景接中景」最闷——把后一镜推成近景，情绪会立刻变重。'
-            : '哪怕只差一档也会好很多。'
-        }`,
+           '连续两镜同一个景别，观众会觉得「没剪」——画面在动，视角没动。',
+        suggestion:  `把其中一镜换个景别。${ current.shotSize === 'medium' ? '中景接中景最闷，把后一镜推成近景。' : '哪怕只差一档也会好很多。' }`,
         location: { kind: 'shot', id: current.id, field: 'shotSize' },
       }),
     );
@@ -308,15 +296,8 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         severity: shot.characterIds.length >= 2 ? 'warning' : 'info',
         title: `${shotLabel(shot.number)}的画面描述里用了「${hit[1]}」`,
         why:
-          '提示词是给模型看的文字，它**不知道「' +
-          hit[1] +
-          '」指的是谁**。' +
-          (shot.characterIds.length >= 2
-            ? `这一镜有 ${shot.characterIds.length} 个角色（${names}），用代词会让模型无法判断是谁在做这个动作。`
-            : '直接写名字或身份，模型的对应关系会更稳。'),
-        suggestion: `把「${hit[1]}」换成具体的人名（${names || '本镜的角色'}）。${
-          shot.characterIds.length >= 2 ? '尤其是两人同框的镜头，代词是动作错位最常见的原因。' : ''
-        }`,
+           '提示词是给模型看的文字，它不知道「' + hit[1] + '」指的是谁。' + (shot.characterIds.length >= 2 ? `这一镜有 ${shot.characterIds.length} 个角色（${names}），用代词会让动作错位。` : '直接写名字，对应关系更稳。'),
+        suggestion:  `把「${hit[1]}」换成具体人名（${names || '本镜的角色'}）。${ shot.characterIds.length >= 2 ? '两人同框时尤其如此。' : '' }`,
         location: { kind: 'shot', id: shot.id, field: 'action' },
       }),
     );
@@ -343,13 +324,9 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         severity: 'info',
         title: `${shotLabel(shot.number)}的情绪写成了「${hit}」`,
         why:
-          '情绪栏不直接进提示词，但它会影响你怎么写画面。' +
-          '「' + hit + '」是一个结论，不是一个画面——模型在读到这里时，' +
-          '只能从它见过的无数种「' + hit + '」里随便挑一种。',
+           '「' + hit + '」是一个结论，不是一个画面；模型只能随便挑一种它见过的画法。',
         suggestion:
-          '把情绪落成能拍的东西：瞳孔缩了还是散了、呼吸是急还是停、' +
-          '手指在抓什么、视线落在哪、肩膀塌了还是绷着。' +
-          '写成这样之后，画面描述和情绪栏才对得上。',
+           '落成能拍的东西：瞳孔、呼吸、手指在抓什么、视线落在哪。',
         location: { kind: 'shot', id: shot.id, field: 'mood' },
       }),
     );

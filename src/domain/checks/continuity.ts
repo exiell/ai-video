@@ -71,10 +71,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
             severity: 'info',
             title: `${label}是全片最后一镜，但没有写收尾说明`,
             why:
-              '最后一镜是观众离开这个故事的地方。写一句「画面怎么收住」对剪辑很有帮助——' +
-              '是要停在一个定格的脸上，还是拉远到空镜，观感完全不同。',
+               '最后一镜是观众离开这个故事的地方，收在哪决定观感。',
             suggestion:
-              '在「与下一镜的衔接」里写一句收尾说明，例如「画面停在摊开的笔记本上，缓缓淡出」。',
+               '写一句收法，例如「画面停在摊开的笔记本上，缓缓淡出」。',
             location: { kind: 'shot', id: shot.id, field: 'continuityNote' },
           }),
         );
@@ -112,13 +111,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
           severity: 'warning',
           title: `${label}在「${scene.name}」，${shotLabel(next.number)}跳到「${nextScene.name}」，但没写怎么过去的`,
           why:
-            '观众会以为漏看了一段。地点切换本身没问题，问题是没有交代——' +
-            '是人物走过去了（那中间需要一个过程镜头），还是直接切过去（那是一次有意的跳切）？' +
-            `转场写的是「${shot.transition || '未填'}」，这个选择需要一个理由。`,
+             `观众会以为漏看了一段。转场写的是「${shot.transition || '未填'}」，这个选择得有交代。`,
           suggestion:
-            '在「与下一镜的衔接」里写清楚。两种写法都可以：' +
-            '① 连续动作 → 「他推门走出去，镜头跟到门外」；' +
-            '② 有意跳切 → 「直接切到目的地，观众不需要看路上的过程」。',
+             '写一句：是走过去（需要一个过程镜头），还是有意跳切。',
           location: { kind: 'shot', id: shot.id, field: 'continuityNote' },
         }),
       );
@@ -144,11 +139,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
               severity: 'warning',
               title: `${label}的终点与${shotLabel(next.number)}的起点可能接不上`,
               why:
-                `这一镜结束在「${endText.slice(0, 40)}」，下一镜却从「${startText.slice(0, 40)}」开始。` +
-                `检测到矛盾点：${conflict}。观众会觉得中间跳了一段。`,
+                 `这一镜结束在「${endText.slice(0, 40)}」，下一镜却从「${startText.slice(0, 40)}」开始。矛盾点：${conflict}。`,
               suggestion:
-                '两个选择：把下一镜的起点改成接得住上一镜终点的样子；' +
-                '或者在这一镜的衔接说明里写清中间发生了什么。',
+                 '改下一镜的起点，或在衔接说明里写清中间发生了什么。',
               location: { kind: 'shot', id: shot.id, field: 'endState' },
             }),
           );
@@ -171,15 +164,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
           severity: 'warning',
           title: `${label}没有标注与${prev ? shotLabel(prev.number) : '上一镜'}的转场类型（当前按「${guess === 'cut' ? '跳切' : '说明'}」处理）`,
           why:
-            '转场类型决定出图时要不要拿**上一镜的尾帧**当参考图。' +
-            '标成「承接」时，这一镜首帧会继承上一镜的空间、光线与画幅，两镜才接得住；' +
-            '标成「跳切」时不会用。' +
-            '没标注就只能猜，而猜成「跳切」会让本该连上的两镜各画各的——' +
-            '**镜头之间的一致性就是这样丢掉的。**',
+             '标「承接」才会拿上一镜尾帧当参考图；没标只能猜，猜成跳切两镜就各画各的。',
           suggestion:
-            '在分镜表里给这一镜选一下「承接上一镜」或「跳切」。' +
-            '同一处地方、时间向前、动作接着演 → 承接；换了地方、跳了时间、反打换机位 → 跳切。' +
-            '重新生成分镜时模型也会自动填这一栏。',
+             '选「承接」或「跳切」：同一处、时间向前、动作接着演 → 承接。',
           location: { kind: 'shot', id: shot.id, field: 'transitionType' },
         }),
       );
@@ -212,12 +199,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
           // 他需要一眼看出是哪一镜、哪句话有问题
           title: `${label}的动作「${truncate(shot.action, 18)}」位移偏大（${bigMove}）`,
           why:
-            '几秒钟的镜头里主体跨越大段距离，中间那段运动最难补得自然——' +
-            '模型要么把它演得像滑行，要么在半路丢掉人物结构。' +
-            '这不是硬错误，但成片里这一段最容易看出问题。',
+             '几秒内跨越大段距离，模型要么演成滑行，要么半路丢掉人物结构。',
           suggestion:
-            '更稳的做法是把这一镜拆成两镜（例如「起势」与「到位」各一镜），' +
-            '或者在动作前后各留一点静止。拆镜比硬接好——这是行业里一致的做法。',
+             '拆成「起势」和「到位」两镜，或在动作前后各留一点静止。',
           location: { kind: 'shot', id: shot.id, field: 'action' },
         }),
       );
@@ -238,12 +222,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
             severity: 'warning',
             title: `${label}在「${scene.name}」，${shotLabel(next.number)}在「${nextScene.name}」，两处的主光方向相反`,
             why:
-              `上一处是「${scene.lightDirection}」，下一处是「${nextScene.lightDirection}」。` +
-              '光源方向不一致是观众最容易察觉的破绽之一——' +
-              '看起来不像换了个地方，更像同一个镜头里光突然跳了一下。',
+               `上一处是「${scene.lightDirection}」，下一处是「${nextScene.lightDirection}」。方向相反时，看起来不像换了地方，像光突然跳了一下。`,
             suggestion:
-              '三种改法：① 让两处的主光方向一致；② 在中间加一个过渡镜头（例如从窗外看进去）' +
-              '把方向变化交代过去；③ 如果是有意为之（比如从白天到夜晚），把这件事写进衔接说明。',
+               '统一两处的方向，或加一个过渡镜头，或写进衔接说明。',
             location: { kind: 'shot', id: shot.id, field: 'sceneId' },
           }),
         );
@@ -260,11 +241,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
           severity: 'info',
           title: `${label}没有写与下一镜的衔接`,
           why:
-            '衔接说明是给三件事用的：尾帧图该画成什么样、视频提示词里的转场怎么写、剪辑时的落点在哪。' +
-            '不写也能做，但做尾帧和剪辑时会反复回来想这件事。',
+             '尾帧画成什么样、转场怎么写、剪辑落在哪，都靠这一句。',
           suggestion:
-            '一句话就够，例如「他保持这个姿势不动，下一镜从同一个机位推进」' +
-            '或「直接切到第二天早上」。也可以用「自动修复」里的建议。',
+             '一句话，例如「他保持这个动作，下一镜从同一机位推进」。',
           location: { kind: 'shot', id: shot.id, field: 'continuityNote' },
         }),
       );
@@ -296,12 +275,9 @@ export function checkContinuity(project: Project): CheckIssue[] {
           severity: 'info',
           title: `从第 ${shot.number - chainLength + 1} 镜到第 ${shot.number} 镜已经连续承接了 ${chainLength} 镜`,
           why:
-            '一路承接下去，画面会一点点偏离最初的样子——每一镜都比上一镜略微偏一点，' +
-            '累积到后面会明显看得出（色调、质感、人物都在慢慢漂）。' +
-            '这不是错误，是这类生成的固有特性。',
+             '每一镜比上一镜偏一点，累积到后面就明显漂了——色调、质感、人物都在漂。',
           suggestion:
-            '在下一个自然的场景切换点（也就是一次 cut）重新起锚：让那一镜用场景板与角色形象图' +
-            '当参考图，而不是继续接上一镜。场景切点本来就要换地方，重置不花额外代价。',
+             '在下一个场景切点重新起锚：改用场景板与角色形象图当参考。',
           location: { kind: 'shot', id: shot.id, field: 'transitionType' },
         }),
       );

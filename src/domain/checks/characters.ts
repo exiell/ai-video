@@ -61,8 +61,8 @@ export function checkCharacters(project: Project): CheckIssue[] {
             severity: 'warning',
             title: `角色「${character.name}」还没有任何连续性锁，${label}无法锁定他的形象`,
             why:
-              '连续性锁是保证同一个角色在不同镜头里长得一样的手段。没有锁，模型每镜都会重新“想象”这个人的样子，脸和服装很容易变。',
-            suggestion: `去角色设定里，把「${character.name}」身上**不会随剧情改变、且观众看得出不一致**的特征写成一条锁。锁面要写成能直接贴进提示词的短语，例如：pine-green lapel service jacket。`,
+               '没有锁，模型每一镜都会重新想象他的样子，脸和衣服最容易变。',
+            suggestion:  `把「${character.name}」身上不会变、又一眼看得出不同的特征写成一条锁，例如 pine-green lapel service jacket。`,
             location: { kind: 'character', id: character.id },
           }),
         );
@@ -75,12 +75,8 @@ export function checkCharacters(project: Project): CheckIssue[] {
             ruleId: 'character-missing-lock',
             severity: isExplicitlyReferenced ? 'error' : 'warning',
             title: `${label}出现了「${character.name}」，但没有声明他的连续性锁`,
-            why: `这一镜的提示词不会带上「${character.name}」的锁面，等于每次生成都让模型自由发挥。跨镜穿帮多数就是这么来的。`,
-            suggestion: `在第 ${shot.number} 镜勾选「${character.name}」的连续性锁${
-              character.continuityLocks.length === 1
-                ? `（${character.continuityLocks[0]?.label}）`
-                : `（共 ${character.continuityLocks.length} 条，至少勾一条）`
-            }。`,
+            why:  `这一镜不提「${character.name}」的锁，脸就交给模型自己猜。`,
+            suggestion:  `在第 ${shot.number} 镜勾上「${character.name}」的连续性锁${ character.continuityLocks.length === 1 ? `（${character.continuityLocks[0]?.label}）` : `（共 ${character.continuityLocks.length} 条，至少一条）` }。`,
             location: { kind: 'shot', id: shot.id, field: 'activeLockIds' },
           }),
         );
@@ -99,8 +95,8 @@ export function checkCharacters(project: Project): CheckIssue[] {
           ruleId: 'variant-not-owned',
           severity: 'warning',
           title: `${label}引用了一个不存在的变体`,
-          why: '变体必须登记在某个角色或场景名下，否则提示词不知道它改变的是什么特征。',
-          suggestion: `检查第 ${shot.number} 镜的变体选择，或去角色/场景设定里把「${variantId}」补登记为对应的变体。`,
+          why:  '变体挂在角色或场景名下，提示词才知道它改的是什么。',
+          suggestion:  `重选第 ${shot.number} 镜的变体，或把「${variantId}」补登记上去。`,
           location: { kind: 'shot', id: shot.id, field: 'variantIds' },
         }),
       );
@@ -125,8 +121,8 @@ export function checkCharacters(project: Project): CheckIssue[] {
           ruleId: 'variant-not-owned',
           severity: 'info',
           title: `变体「${variant.label}」已创建，但还没有分配给任何镜头`,
-          why: '没有分配镜头的变体不会出现在任何提示词里，等于白建。',
-          suggestion: `如果它确实用得上，去分镜表里勾选对应镜头；用不上可以删掉，保持设定干净。`,
+          why:  '没分配到镜头的变体进不了任何提示词，等于白建。',
+          suggestion:  '用得上就在分镜里勾上，用不上就删掉。',
           location: { kind: 'character', id: character.id },
         }),
       );
@@ -144,8 +140,8 @@ export function checkCharacters(project: Project): CheckIssue[] {
           ruleId: 'character-not-registered',
           severity: 'info',
           title: `角色「${character.name}」在分镜里一次都没出现`,
-          why: '他可能是被忘了，也可能是已经不需要这个角色了。',
-          suggestion: `确认一下：如果这个角色该出场，就补镜；如果不需要了，可以删掉他，避免设定越堆越乱。`,
+          why:  '他可能被忘了，也可能这个角色已经不需要了。',
+          suggestion:  '该出场就补镜头，不需要就删掉他。',
           location: { kind: 'character', id: character.id },
         }),
       );
@@ -201,17 +197,9 @@ export function checkCharacters(project: Project): CheckIssue[] {
         severity: 'warning',
         title: `角色「${character.name}」的身份描述里有${labels}，但没有一条连续性锁管它`,
         why:
-          '锁是唯一会**原样写进相关每一帧提示词**的东西。没进锁的高显著度特征，' +
-          '就只能靠画面描述偶尔提到——提到的镜头画了，没提到的镜头就没了。' +
-          '这类东西（帽子、面纱、眼镜、披风）丢了观众一眼就看得出来。',
+           '锁是唯一会原样写进每一帧的东西；没进锁的特征只能靠画面描述偶尔提到。',
         suggestion:
-          '加一条锁，锁面写成能直接贴进提示词的英文短语，例如 ' +
-          (uncovered[0]!.label.includes('帽')
-            ? '`a worn dark felt hat with a low pressed brim`'
-            : uncovered[0]!.label.includes('眼镜')
-              ? '`round brass-rimmed spectacles`'
-              : '`a floor-length dark cloak with a frayed hem`') +
-          '。加完之后它会自动进入每一帧的提示词，不用再靠画面描述兜。',
+           '给这几个特征各加一条锁，例如 ' + (uncovered[0]!.label.includes('帽') ? '`a worn dark felt hat with a low pressed brim`' : uncovered[0]!.label.includes('眼镜') ? '`round brass-rimmed spectacles`' : '`a floor-length dark cloak with a frayed hem`') + '。',
         location: { kind: 'character', id: character.id, field: 'continuityLocks' },
       }),
     );

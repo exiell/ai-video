@@ -5393,6 +5393,75 @@ select {
   font-size: 12.5px;
 }
 
+/*
+  一条问题的「为什么 / 怎么改」（v0.50）。
+
+  原来这两段只是正文行首的粗体字「为什么：」「怎么改：」——一条问题连着读下来
+  是一片灰，扫不出结构，也分不清哪句是解释、哪句是要动手的。
+
+  现在左边是带图标与底色的标签，右边是那句话，两段各占一行并对齐。
+  主次是刻意的：「怎么改」用强调色（用户要执行的就是这句），
+  「为什么」用次级文字色（读了更好，不读也能改）。
+*/
+.issue-explain {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.issue-gloss {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: start;
+}
+
+.issue-mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.issue-mark-why {
+  color: var(--text-dim);
+  background: var(--bg-soft);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.issue-mark-fix {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.issue-text {
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--text-dim);
+}
+
+/* 「怎么改」是正文级的信息，压过「为什么」一档 */
+.issue-text-fix {
+  color: var(--text);
+}
+
+/* 嵌在分镜页字段里的那几处要更紧一点 */
+.issue-mini .issue-explain {
+  margin-top: 6px;
+  gap: 6px;
+}
+
+.issue-mini .issue-text {
+  font-size: 12px;
+}
+
 @media (max-width: 1080px) {
   .shot-section {
     grid-template-columns: 1fr;

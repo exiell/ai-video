@@ -552,13 +552,16 @@ describe('未标注转场类型 · 必须让用户看见', () => {
     expect(issues[0]!.severity).toBe('warning');
   });
 
-  it('说明里点明「镜头之间的一致性就是这样丢掉的」', () => {
+  it('说明里点明「没标注会让两镜各画各的」', () => {
     const project = structuredClone(sampleProject);
     for (const s of project.shots) delete s.transitionType;
     const issues = checkContinuity(project).filter(
       (i) => i.ruleId === 'continuity-untyped-transition',
     );
-    expect(issues[0]!.why).toContain('一致性');
+    // v0.50 把这条从「一致性就是这样丢掉的」（结论）改成「两镜就各画各的」（会发生什么）。
+    // 断言跟着改，但要守住的仍是同一件事：必须说出不标注的后果。
+    expect(issues[0]!.why).toContain('各画各的');
+    expect(issues[0]!.why).toContain('尾帧');
     expect(issues[0]!.suggestion).toContain('承接');
   });
 

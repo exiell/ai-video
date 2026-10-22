@@ -4,6 +4,7 @@ import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_TAG, summarizeReport } from '../do
 import { SummaryBar, Info } from '../components/bits';
 import type { CheckIssue, CheckSeverity } from '../types/model';
 import { AutoFixPanel } from '../components/AutoFixPanel';
+import { IssueBody } from '../components/IssueViews';
 
 /**
  * M2.5 穿帮检查（方案.md v0.6 §3.2）
@@ -115,14 +116,7 @@ export function ChecksPage() {
                   </span>
                   {issue.title}
                 </div>
-                <div className="issue-line">
-                  <b>为什么：</b>
-                  {issue.why}
-                </div>
-                <div className="issue-line">
-                  <b>怎么改：</b>
-                  {issue.suggestion}
-                </div>
+                <IssueBody issue={issue} />
                 <div className="row" style={{ marginTop: 8 }}>
                   <button type="button" className="btn btn-sm" onClick={() => goTo(issue)}>
                     {issue.location.kind === 'shot' ? '跳到这一镜' : '去处理'}
