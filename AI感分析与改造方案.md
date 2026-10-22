@@ -376,4 +376,13 @@ P1：
 
 截图：`aniguide/.taste-skill/p1/home-1440.jpg`、`help-first-use.jpg`、`help-consistency-open.jpg`、`settings-models.jpg`、`export.jpg`、`storyboard-sections.jpg`。
 
-未做：P2 的签名式分镜条、真实状态/空状态、更多手写文案。P1 不做手机端。
+### P2 执行记录
+
+- **签名元素**：分镜页新增一条时间轴。按每镜时长分段，显示镜号、秒数、必须修红点；悬停显示起止时间、首帧/尾帧有没有、锁了几条；点击直接展开并滚到那一镜。只放在分镜页这一处。
+- **真实状态**：时间轴的数据全部来自 `project.shots`、图库、连续性锁和检查报告；没有生成图时显示空状态，不画假缩略图。
+- **文案**：About、Guide、Scenes、Export、Help、AiFlowGuide、批量生成、图片提示词里的“——”“不是…而是”“把「…」变成”“一键”已清掉；About 首页介绍改成直陈。
+- **主题**：三套主题保留。P1 已经把侧栏选中、装饰链接、进度段从蓝色里拿掉，这一轮不再改主题色，也不做奶油色/衬线/鼠尾草绿。
+- **防回归脚本**：新增 `npm run check:copy`，扫页面与组件的可见文案、`hint` 属性、字号 token；硬规则包括 `——`、`不是…而是`、`把「…」变成`、`一键/闭环/赋能`。当前硬规则 0 失败；警告只提示长文案和引号，不阻塞。
+- **截图**：`aniguide/.taste-skill/p1/storyboard-top.jpg`、`storyboard-1280.jpg`、`storyboard-1024.jpg`、`guide-1280.jpg`、`guide-1024.jpg`。
+
+未做：手机端；没有为时间轴再加第二套图标或插画。

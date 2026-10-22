@@ -183,7 +183,7 @@ export function ImagePromptView({
 
             <div className="confirm-body">
               <div className="hint" style={{ marginTop: 0 }}>
-                出图时用的就是下面这些英文。<b>复制到任何模型里都能用</b>——
+                出图时用的就是下面这些英文。<b>复制到任何模型里都能用。</b>
                 本工具没接的模型也一样。
                 {anyKey
                   ? ''

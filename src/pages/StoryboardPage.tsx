@@ -25,6 +25,11 @@ import { SEVERITY_TAG, worstSeverity } from '../domain/checks';
 import { FieldIssues, UnplacedIssues } from '../components/IssueViews';
 import type { CheckIssue } from '../types/model';
 
+function formatTimecode(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
+}
+
 /**
  * M2 分镜表编辑器（方案.md v0.6 §3.2）
  *
@@ -280,6 +285,24 @@ export function StoryboardPage() {
     upsertShot({ ...shot, ...changes });
   }
 
+  function openShot(id: string) {
+    setExpanded(id);
+    setLocated(id);
+    window.setTimeout(() => {
+      document.getElementById(`shot-${id}`)?.scrollIntoView?.({
+        block: 'start',
+        behavior: 'smooth',
+      });
+    }, 60);
+    window.setTimeout(() => setLocated(null), 1800);
+  }
+
+  const shotStarts = project.shots.reduce<number[]>((starts, shot) => {
+    const previous = starts[starts.length - 1] ?? 0;
+    starts.push(previous + (Number.isFinite(shot.duration) ? shot.duration : 0));
+    return starts;
+  }, []);
+
   return (
     <>
       <div className="page-head">
@@ -336,6 +359,65 @@ export function StoryboardPage() {
         </span>
         {generatingAssets ? <span className="tag tag-info">正在拆角色与场景</span> : null}
       </SummaryBar>
+
+      {project.shots.length > 0 ? (
+        <div className="shot-strip" aria-label="分镜时间轴">
+          <div className="shot-strip-ruler">
+            <span>00:00</span>
+            <span>{formatTimecode(total)}</span>
+          </div>
+          <div className="shot-strip-track">
+            {project.shots.map((shot, index) => {
+              const start = shotStarts[index] ?? 0;
+              const duration = Number.isFinite(shot.duration) ? shot.duration : 0;
+              const mustFix =
+                issuesByShot.get(shot.id)?.filter((issue) => issue.severity === 'error').length ?? 0;
+              const lockCount =
+                project.characters.reduce(
+                  (count, character) =>
+                    count +
+                    character.continuityLocks.filter((lock) => shot.activeLockIds.includes(lock.id))
+                      .length,
+                  0,
+                ) +
+                project.scenes.reduce(
+                  (count, scene) =>
+                    count +
+                    scene.continuityLocks.filter((lock) => shot.activeLockIds.includes(lock.id))
+                      .length,
+                  0,
+                );
+              const assets = galleryFor(shot.id);
+              const hasFirst = assets.some((asset) => asset.kind === 'first-frame' && asset.dataUrl);
+              const hasEnd = assets.some((asset) => asset.kind === 'end-frame' && asset.dataUrl);
+              return (
+                <button
+                  type="button"
+                  key={shot.id}
+                  className={`shot-strip-seg${expanded === shot.id ? ' is-open' : ''}${
+                    mustFix > 0 ? ' has-error' : ''
+                  }`}
+                  style={{ flexGrow: Math.max(duration, 1) }}
+                  onClick={() => openShot(shot.id)}
+                  aria-label={`第 ${index + 1} 镜，${duration} 秒${
+                    mustFix > 0 ? `，${mustFix} 个必须修` : ''
+                  }`}
+                  aria-current={expanded === shot.id ? 'true' : undefined}
+                  title={`${formatTimecode(start)}–${formatTimecode(start + duration)} · ${duration} 秒 · 首帧${
+                    hasFirst ? '有' : '无'
+                  } · 尾帧${hasEnd ? '有' : '无'} · ${lockCount} 条锁${
+                    mustFix > 0 ? ` · ${mustFix} 个必须修` : ''
+                  }`}
+                >
+                  <span className="shot-strip-no">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="shot-strip-dur">{duration}s</span>
+                  {mustFix > 0 ? <span className="shot-strip-dot" aria-hidden="true" /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
 
       {/*
         生成工具收进折叠区。

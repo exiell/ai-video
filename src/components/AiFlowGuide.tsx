@@ -119,7 +119,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       // 只有真的已经有东西时才提「会被覆盖」——空项目上说这句是误导
       ...(characters.length + scenes.length > 0
         ? {
-            gate: '这一步会**覆盖**现有的角色与场景。已经手建过也没关系——它会重新生成，你改过的内容会丢，自己权衡。',
+            gate: '这一步会**覆盖**现有的角色与场景。已经手建过也没关系。它会重新生成，你改过的内容会丢，自己权衡。',
           }
         : {
             gate: '这是起点。故事已经写好了，让模型先按场次拆一遍，比对着空白页一条条想要快得多。',
@@ -136,7 +136,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       expect: '每个角色拿到两张图（全身多视图 + 头部特写），每个场景拿到一张参考板。',
       done: characters.length > 0 && charsReady === characters.length && scenesReady === scenes.length,
       progress: `角色 ${pct(charsReady, characters.length)}（全身 ${pct(charsWithSheet, characters.length)}、特写 ${pct(charsWithFace, characters.length)}）· 场景 ${pct(scenesReady, scenes.length)}`,
-      gate: '形象图是后面所有关键帧的**参考图锚点**。这一步不满意就重出——等关键帧跑完再返工，前面花的钱就白花了。',
+      gate: '形象图是后面所有关键帧的**参考图锚点**。这一步不满意就重出。等关键帧跑完再返工，前面花的钱就白花了。',
     },
     {
       key: 'shots',
@@ -149,7 +149,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
         '模型把故事拆成镜头，每镜带起点、唯一动作、终点，并自动挂好场景、角色和连续性锁。',
       done: hasShots,
       ...(hasShots ? { progress: `已有 ${shots.length} 个镜头` } : {}),
-      gate: '分镜是后面出图的依据。先看一遍景别和镜号顺不顺，不满意就重生成——比出完图再改省事得多。',
+      gate: '分镜是后面出图的依据。先看一遍景别和镜号顺不顺，不满意就重生成，比出完图再改省事。',
     },
     {
       key: 'frames',
@@ -162,7 +162,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       expect: '每个镜头三张图：首帧（构图）、动作关键帧（动态顶点）、尾帧（这一镜结束时的状态）。',
       done: shots.length > 0 && firstReady === shots.length && peakReady === shots.length && endReady === shots.length,
       progress: `首帧 ${pct(firstReady, shots.length)} · 动作关键帧 ${pct(peakReady, shots.length)} · 尾帧 ${pct(endReady, shots.length)}`,
-      gate: '这是最花时间和钱的一步。**先把形象图跑满意再来**——首帧会拿角色形象图当参考，形象图不行，三帧全都救不回来。',
+      gate: '这是最花时间和钱的一步。**先把形象图跑满意再来**。首帧会拿角色形象图当参考，形象图不行，三帧全都救不回来。',
     },
   ];
 
@@ -256,7 +256,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
 
       <p style={{ color: 'var(--text-dim)', marginTop: 0, lineHeight: 1.7 }}>
         <RichText>
-          {'准备工作的故事已经写好了。接下来**不必手动一个个建场景和角色**——让模型先按故事拆一遍，你在这个基础上删改，通常比从空白开始快得多。'}
+          {'准备工作的故事已经写好了。接下来**不必手动一个个建场景和角色**。让模型先按故事拆一遍，你在这个基础上删改，通常比从空白开始快得多。'}
         </RichText>
       </p>
 
@@ -321,7 +321,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
 
       <div className="hint" style={{ marginTop: 4 }}>
         <RichText>
-          {'**做完这四步，材料就齐了。**接着去「穿帮检查」过一遍，再去「导出」打包——那两步在下面的手动清单里。'}
+          {'**做完这四步，材料就齐了。**接着去「穿帮检查」过一遍，再去「导出」打包；那两步在下面的手动清单里。'}
         </RichText>
       </div>
     </div>
