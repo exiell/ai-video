@@ -200,7 +200,7 @@ export function HomePage() {
   } else if (errorCount > 0) {
     next = {
       title: `先修这 ${errorCount} 个必须修的问题`,
-      body: '这些问题会让角色或场景在镜头之间对不上。修完就能导出开拍，其余建议可以边做边看。',
+      body: '这些问题会让角色或场景在镜头之间对不上。修完才能导出；其余建议可以稍后处理。',
       cta: `去修这 ${errorCount} 条`,
       to: '/checks',
       time: '约 2 分钟',
@@ -292,7 +292,7 @@ export function HomePage() {
       action: '去导出',
     });
   }
-  const visibleTasks = tasks.slice(0, 3);
+  const visibleTasks = tasks;
   const recentShots = shots.slice(-3);
 
   function stepClass(done: boolean, current: boolean): string {
@@ -308,7 +308,7 @@ export function HomePage() {
           <header className="home-head">
             <div>
               <div className="home-crumb">
-                {isSample ? '示例项目' : '项目'} · {project.brief.aspectRatio} · 数据只在这台电脑
+                {isSample ? '示例项目' : '项目'} · {project.brief.aspectRatio}
               </div>
               <h1>{project.name}</h1>
               <p className="home-logline">{project.logline || '还没有一句话简介。去「故事」里补上，导出时会用到。'}</p>
@@ -418,7 +418,7 @@ export function HomePage() {
           <div className="home-grid">
             <section className="next-card">
               <div className="next-top">
-                <span className="next-label">今天从这里继续</span>
+                <span className="next-label">现在做</span>
                 <span className="next-time">{next.time}</span>
               </div>
               <h2>{next.title}</h2>
@@ -435,8 +435,8 @@ export function HomePage() {
 
             <section className="tasks-card">
               <div className="panel-head">
-                <h3>接下来三件事</h3>
-                <span>按顺序做就行</span>
+                <h3>接下来</h3>
+                <span>按顺序处理</span>
               </div>
               <ul className="task-list">
                 {visibleTasks.map((task) => (
@@ -541,7 +541,7 @@ export function HomePage() {
                 </div>
                 <div className="check-total">
                   <b className={errorCount > 0 ? 'bad' : ''}>{errorCount}</b>
-                  <span>{errorCount > 0 ? '个必须修，修完就能导出' : '个必须修'}</span>
+                  <span>{errorCount > 0 ? '个必须修，修完才能导出' : '个必须修'}</span>
                 </div>
                 <div className="check-row">
                   <span>建议看</span>
@@ -552,7 +552,7 @@ export function HomePage() {
                   <b>{infoCount} 条</b>
                 </div>
                 <Link className="panel-link" to="/checks">
-                  逐条看，或先修必须的 →
+                  逐条看，或先修必须项 →
                 </Link>
               </section>
 
@@ -579,7 +579,7 @@ export function HomePage() {
                   {characters.length === 0
                     ? '先建角色，再谈形象图。'
                     : charWithArt < characters.length
-                      ? '还没出齐。先出角色多视图，后面每个镜头都能少返工一次。'
+                      ? '还没出齐。先出角色多视图，后面返工更少。'
                       : '角色和场景的参考图都齐了。'}
                 </p>
                 <div className="asset-links">
@@ -602,7 +602,7 @@ export function HomePage() {
                 <p className="asset-note">
                   {saveError
                     ? saveError
-                    : '刷新或清缓存可能丢数据。做完一版就去导出，导出的压缩包也是备份。'}
+                    : '刷新或清缓存可能丢数据。做完一版就导出，压缩包也是备份。'}
                 </p>
                 <Link className="panel-link" to="/export">
                   去导出备份 →
@@ -614,11 +614,10 @@ export function HomePage() {
       ) : (
         <>
           <header className="start-head">
-            <div className="home-crumb">AniGuide · 免注册 · 纯网页</div>
-            <h1>把「我想做个动漫视频」，变成一份能开拍的方案。</h1>
+            <div className="home-crumb">AniGuide · 免注册 · 数据在本机</div>
+            <h1>先写故事，再拆镜头。</h1>
             <p>
-              不生成视频，也不做剪辑。它用问答把模糊想法变成分镜表、角色与场景设定、可直接粘贴的提示词，
-              外加一份穿帮检查单。然后你拿着这些去即梦、可灵、Seedance 执行。
+              这里只做前期：故事、角色、场景、分镜和提示词。视频生成去即梦、可灵或 Seedance。
             </p>
           </header>
 

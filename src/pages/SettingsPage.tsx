@@ -259,7 +259,7 @@ export function SettingsPage() {
               }}
             >
               <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                <b style={{ fontSize: 13.5 }}>
+                <b style={{ fontSize: 14 }}>
                   {vendorIcon ? <Icon name={vendorIcon} size={16} className="vendor-icon" /> : null}
                   {vendor.name}
                   <span
@@ -346,7 +346,7 @@ export function SettingsPage() {
                   ))}
                   <div className="hint">
                     <RichText>
-                      {'留空就用上面显示的默认名。厂商会下架旧模型、上架新模型——**报「模型名不被接受」时，把错误信息里列出的名字填到这里即可**，不用等工具更新。'}
+                      {'留空就用上面显示的默认名。厂商会下架旧模型、上架新模型。**报「模型名不被接受」时，把错误信息里列出的名字填到这里即可**，不用等工具更新。'}
                     </RichText>
                     <br />
                     接口地址：<code>{preferred.endpoint}</code>
@@ -398,7 +398,7 @@ export function SettingsPage() {
         })}
 
         <div className="row" style={{ marginTop: 6 }}>
-          <label className="row" style={{ gap: 6, fontSize: 12.5, cursor: 'pointer', width: 'auto' }}>
+          <label className="row" style={{ gap: 6, fontSize: 13, cursor: 'pointer', width: 'auto' }}>
             <input
               type="checkbox"
               style={{ width: 'auto' }}
@@ -423,7 +423,7 @@ export function SettingsPage() {
         </p>
         <Field
           label="代理地址"
-          hint="例：https://your-worker.example.workers.dev —— 留空表示不使用代理"
+          hint="例：https://your-worker.example.workers.dev；留空表示不使用代理"
         >
           <input
             type="text"

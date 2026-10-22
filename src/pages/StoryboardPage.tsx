@@ -670,7 +670,7 @@ export function StoryboardPage() {
                           <Icon name="volume" size={16} />
                         </span>
                         <h4 className="shot-section-title">声音与情绪</h4>
-                        <p className="shot-section-desc">看不见但听得见的信息</p>
+                        <p className="shot-section-desc">声音、情绪和画外音</p>
                       </div>
                       <div className="shot-section-body">
                         <div>

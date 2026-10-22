@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { RichText } from '../components/bits';
 import {
@@ -34,22 +34,21 @@ export function HelpPage() {
         <div>
           <h1>帮助与术语</h1>
           <p>
-            这里不收字典定义，只收<b>判断依据</b>——每个词条回答的是
-            「这个选择会让观众感觉到什么」，因为新手缺的不是定义，是不知道该选哪个。
+            这里解释词的意思和判断依据。每个词条回答：这个选择会让观众看到什么。
           </p>
         </div>
       </div>
 
       <div className="card">
-        <h3 className="card-title">第一次用？按这个顺序走</h3>
+        <h3 className="card-title">第一次使用</h3>
         <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
           <li>
             <b>先看示例项目</b>（在「作品主页」）。不用配 Key 就能看到一份完整产出长什么样，
             看完你就知道这些东西最终是为了什么。
           </li>
           <li>
-            <b>确认能不能直连</b>。打开「设置」页右上角的跨域实测工具点一下——
-            它告诉你你的网络环境能不能直接调模型。
+            <b>确认能不能直连</b>。打开「设置」页右上角的跨域实测工具点一下。
+            它会告诉你，你的网络环境能不能直接调模型。
           </li>
           <li>
             <b>填 API Key 并点「测试连接」</b>。它会区分「跨域被拦 / 密钥无效 / 余额不足 / 限流」
@@ -72,7 +71,7 @@ export function HelpPage() {
           </li>
           <li>
             <b>逐镜出三帧</b>：先出「首帧（锁角色）」，再出「动作关键帧」和「尾帧」。
-            <b>顺序不能反</b>——后两帧会自动拿首帧当构图锚点。最后导出压缩包。
+            <b>顺序不能反</b>。后两帧会自动拿首帧当构图锚点。最后导出压缩包。
           </li>
         </ol>
         <div className="row" style={{ marginTop: 12 }}>
@@ -86,10 +85,10 @@ export function HelpPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">一致性是怎么保证的（这是这类工具最容易出错的地方）</h3>
+        <h3 className="card-title">一致性怎么保证</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           <RichText>
-            {'一致性不是一个开关，是**五道防线叠起来**的结果。任何一道漏了，都会出现「每张图单独看都挺好，放一起就不像同一部片子」这种最难排查的问题。'}
+            {'一致性是**五道防线**叠起来的结果：角色锁、场景固定元素、首帧、尾帧、动作关键帧。缺一道，单张图都行，放一起就不像同一部片子。'}
           </RichText>
         </p>
         <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
@@ -108,7 +107,7 @@ export function HelpPage() {
             <b>第二道：角色形象图（靠图锁外观）</b>
             <br />
             出首帧时会把你为该角色生成的<b>头部特写</b>和<b>全身多视图</b>当参考图传进去。
-            头部特写优先——<b>脸很难用文字描述清楚，只能靠图</b>；全身图里的脸只有几十像素，
+            头部特写优先。<b>脸很难用文字描述清楚，只能靠图</b>；全身图里的脸只有几十像素，
             所以两张要分开出。
             <br />
             <span style={{ color: 'var(--text-faint)' }}>
@@ -123,7 +122,7 @@ export function HelpPage() {
             <br />
             <span style={{ color: 'var(--text-faint)' }}>
               为什么需要这一道：形象图锁的是「这个人长什么样」，锁不住「这一镜的空间长什么样」。
-              没有它，三帧的机位可能各自漂移——三张图都好看，放一起却不像同一个镜头。
+              没有它，三帧的机位可能各自漂移。三张图都好看，放一起却不像同一个镜头。
               <b>所以顺序不能反：先出首帧。</b>
             </span>
           </li>
@@ -136,7 +135,7 @@ export function HelpPage() {
             <br />
             <span style={{ color: 'var(--text-faint)' }}>
               为什么只在连续时才用：跳切时把上一镜尾帧当锚点，
-              等于把两个不该相连的镜头强行焊在一起——本镜的构图会被拉向上一镜，
+              等于把两个不该相连的镜头强行焊在一起。本镜的构图会被拉向上一镜，
               上一镜的空间会被搬进一个全新场景，两边都毁。
               所以判据是保守的：<b>上一镜写明了「接着」才用；写了「切到」或没写就不用。</b>
               <br />
@@ -156,7 +155,7 @@ export function HelpPage() {
         </ol>
         <div className="summary-bar" style={{ marginTop: 14 }}>
           <b>一句话记住顺序</b>
-          <span style={{ fontSize: 12.5, color: 'var(--text-dim)' }}>
+          <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>
             场景板 → 角色形象图（全身 → 头特）→ 逐镜出帧，每镜按「首帧 → 尾帧 → 动作关键帧」。
             每一步都在为下一步提供锚点。想让两个镜头接得住，就在前一镜的衔接说明里写「接着」。
           </span>
@@ -194,7 +193,7 @@ export function HelpPage() {
 
       <div className="page-head" style={{ marginTop: 26 }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: 17 }}>术语速查（{TERMS.length} 条）</h3>
+          <h3 style={{ margin: 0, fontSize: 16 }}>术语速查（{TERMS.length} 条）</h3>
         </div>
       </div>
 
