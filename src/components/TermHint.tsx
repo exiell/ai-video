@@ -43,7 +43,7 @@ export function TermHint({ term }: { term: string }) {
           border: '1px solid var(--border-strong)',
           background: open ? 'var(--accent-dim)' : 'transparent',
           color: open ? '#fff' : 'var(--text-faint)',
-          fontSize: 11,
+          fontSize: 12,
           lineHeight: 1,
           padding: 0,
           cursor: 'pointer',
@@ -68,7 +68,7 @@ export function TermHint({ term }: { term: string }) {
             display: 'block',
           }}
         >
-          <b style={{ fontSize: 12.5 }}>
+          <b style={{ fontSize: 13 }}>
             {entry.zh} · {entry.en}
           </b>
           <div style={{ fontSize: 12, color: 'var(--text-dim)', marginTop: 4 }}>

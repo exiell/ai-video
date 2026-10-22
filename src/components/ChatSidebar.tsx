@@ -456,7 +456,7 @@ function EditCard({ edit, isActive }: { edit: ChatEditProposal; isActive: boolea
         style={{ marginTop: 3, flexShrink: 0 }}
       />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 600, fontSize: 12.5 }}>
+        <div style={{ fontWeight: 600, fontSize: 13 }}>
           {edit.op === 'create' ? '＋ ' : isDelete ? '－ ' : ''}
           {edit.title}
         </div>

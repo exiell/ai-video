@@ -138,7 +138,7 @@ export function AutoFixPanel({ report }: { report: CheckReport }) {
         <div style={{ marginTop: 14 }}>
           <div className="summary-bar" style={{ marginBottom: 12 }}>
             <b>以下修改需要你确认后才会生效。</b>
-            <span style={{ color: 'var(--text-dim)', fontSize: 12.5 }}>
+            <span style={{ color: 'var(--text-dim)', fontSize: 13 }}>
               去掉不认可的勾选即可跳过那一条。共影响 {plan.affectedShots} 个镜头。
             </span>
           </div>
@@ -226,7 +226,7 @@ function ProposalRow({
               display: 'grid',
               gridTemplateColumns: 'auto 1fr',
               gap: '4px 10px',
-              fontSize: 12.5,
+              fontSize: 13,
               marginBottom: 6,
             }}
           >
@@ -238,13 +238,13 @@ function ProposalRow({
             </span>
           </div>
 
-          <div className="issue-line" style={{ fontSize: 12.5 }}>
+          <div className="issue-line" style={{ fontSize: 13 }}>
             <b>为什么：</b>
             {proposal.reason}
           </div>
 
           {proposal.sideEffect ? (
-            <div className="issue-line" style={{ fontSize: 12.5, color: 'var(--warning)' }}>
+            <div className="issue-line" style={{ fontSize: 13, color: 'var(--warning)' }}>
               <b>注意：</b>
               {proposal.sideEffect}
             </div>
