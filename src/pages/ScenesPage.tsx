@@ -3,7 +3,7 @@ import { useAppStore } from '../store/app';
 import { Field, Info } from '../components/bits';
 import { SCHEMA_VERSION, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
-import { AssetGallery, ImagePanel } from '../components/ImagePanel';
+import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
@@ -190,6 +190,9 @@ export function ScenesPage() {
                 </button>
               </div>
             </div>
+
+            {/* 折叠时也能看图：先看一眼是不是同一个地方，再决定要不要展开改 */}
+            <AssetPeek assets={galleryFor(scene.id)} />
 
             <Reveal open={open}>
               <div

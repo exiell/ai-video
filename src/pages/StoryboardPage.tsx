@@ -8,7 +8,7 @@ import { AiFlowGuide } from '../components/AiFlowGuide';
 import { Icon } from '../components/Icon';
 import { SelectMenu } from '../components/SelectMenu';
 import { useGeneration } from '../store/generation';
-import { AssetGallery, ImagePanel } from '../components/ImagePanel';
+import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { useImage } from '../store/image';
 import { CameraMoveHint, ShotSizeHint } from '../components/TermHint';
@@ -512,6 +512,12 @@ export function StoryboardPage() {
                   删除
                 </button>
               </div>
+
+              {/*
+                折叠时也能看图（v0.52）。放在头部正下面，三页位置一致——
+                要比几镜的画面，眼睛不用在每张卡里重新找按钮。
+              */}
+              <AssetPeek assets={galleryFor(shot.id)} />
 
               {/*
                 表头这三个控件（时长 / 景别 / 场景）挤在同一个 flex 行里，

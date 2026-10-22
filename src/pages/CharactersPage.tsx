@@ -10,7 +10,7 @@ import {
   type LockAspect,
 } from '../types/model';
 import { newId } from '../services/storage';
-import { AssetGallery, ImagePanel } from '../components/ImagePanel';
+import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
@@ -175,6 +175,9 @@ export function CharactersPage() {
                 </button>
               </div>
             </div>
+
+            {/* 折叠时也能看图：先看一眼像不像，再决定要不要展开改设定 */}
+            <AssetPeek assets={galleryFor(character.id)} />
 
             <Reveal open={open}>
               <div

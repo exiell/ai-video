@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useSettings } from '../store/settings';
@@ -7,6 +7,7 @@ import { consistencyAdvice } from '../domain/image/prompts';
 import { ASSET_KIND_LABEL } from '../types/model';
 import type { Asset, SceneAngle } from '../types/model';
 import { SCENE_ANGLE_LABEL } from '../types/model';
+import { Icon } from './Icon';
 import { ImageLightbox, type LightboxState } from './ImageLightbox';
 import { ImagePromptView } from './ImagePromptView';
 
@@ -265,6 +266,82 @@ export function AssetGallery({
           </figure>
         ))}
       </div>
+
+      <ImageLightbox
+        state={lightbox}
+        onClose={() => setLightbox(null)}
+        onNavigate={(index) => setLightbox((c) => (c ? { ...c, index } : c))}
+      />
+    </div>
+  );
+}
+
+/**
+ * 条目折叠时也能看图（v0.52）
+ *
+ * 为什么要有：在这之前，想看一个角色的图必须先点「展开」把整张设定表打开，
+ * 翻过身份、锁、变体、负向词、种子之后才在图库那一段看到缩略图。
+ * 想比两个角色的形象，就得开一个关一个再开一个。角色一多就没法扫。
+ *
+ * 取舍：
+ *  - 按钮上的标签把「有几张、都是哪几种」直接写出来，
+ *    不点开也能知道这里面有没有首帧、有没有尾帧。
+ *  - 展开的是**缩略图条**，不是完整图库：这里只负责「看见」，
+ *    删除、生成时间、模型名那些管理信息仍在展开后的图库里。
+ *  - 一张图都没有时整块不渲染。一个永远点开是空话的按钮比没有更差。
+ *  - 点缩略图进的是同一个 ImageLightbox，左右键可以在这个条目的图之间翻。
+ */
+export function AssetPeek({ assets }: { assets: Asset[] }) {
+  const [open, setOpen] = useState(false);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const panelId = useId();
+
+  if (assets.length === 0) return null;
+
+  // 去重后按「出现过的种类」列出来，超过三种就折成「等 N 种」
+  const kinds = [...new Set(assets.map((asset) => asset.kind))];
+  const kindText =
+    kinds.length <= 3
+      ? kinds.map((kind) => ASSET_KIND_LABEL[kind]).join(' / ')
+      : `${kinds.slice(0, 3).map((kind) => ASSET_KIND_LABEL[kind]).join(' / ')} 等 ${kinds.length} 种`;
+
+  return (
+    <div className="peek">
+      <button
+        type="button"
+        className="btn btn-ghost btn-sm peek-toggle"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Icon name="photo" size={13} />
+        看图 {assets.length} 张
+        <span className="peek-kinds">{kindText}</span>
+        <Icon name="chevron-right" size={12} className="expand-chevron" />
+      </button>
+
+      {open ? (
+        <div className="peek-strip" id={panelId}>
+          {assets.map((asset, index) => (
+            <figure className="peek-item" key={asset.id}>
+              <button
+                type="button"
+                className="peek-thumb"
+                onClick={() => setLightbox({ assets, index })}
+                title={`点击放大：${ASSET_KIND_LABEL[asset.kind]}`}
+              >
+                <img src={asset.dataUrl} alt={ASSET_KIND_LABEL[asset.kind]} />
+              </button>
+              <figcaption>
+                <span className="tag">{ASSET_KIND_LABEL[asset.kind]}</span>
+                {asset.kind === 'scene-plate' ? (
+                  <span className="tag">{SCENE_ANGLE_LABEL[asset.angle ?? 'master']}</span>
+                ) : null}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      ) : null}
 
       <ImageLightbox
         state={lightbox}

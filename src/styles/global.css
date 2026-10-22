@@ -4730,6 +4730,66 @@ table.simple tbody tr:last-child td {
   animation: detail-in 0.18s ease-out both;
 }
 
+/*
+  条目折叠时也能看图（v0.52）
+
+  按钮直接写在条目头部下面一行，不塞进右侧那排操作里：
+  那一排已经有「展开 / 删除」，再加上去就分不清哪个是看内容、哪个是改内容。
+*/
+.peek {
+  margin-top: 10px;
+}
+
+.peek-toggle {
+  gap: 6px;
+}
+
+.peek-kinds {
+  color: var(--text-faint);
+  font-size: 11.5px;
+}
+
+/* 缩略图条比图库更密：这里只负责扫一眼，细节留给灯箱 */
+.peek-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.peek-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.peek-thumb {
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg);
+  overflow: hidden;
+  line-height: 0;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease;
+}
+
+.peek-thumb:hover {
+  border-color: var(--border-strong);
+}
+
+.peek-thumb img {
+  width: 100%;
+  display: block;
+}
+
+.peek-item figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
 /* 从检查页跳到某一镜：目标镜先描边，再慢慢褪掉 */
 .shot-located {
   border-color: var(--accent);
