@@ -109,7 +109,7 @@ export function ChecksPage() {
               </span>
             </h3>
             {group.map((issue) => (
-              <div className={`issue ${issue.severity}`} key={issue.id}>
+              <div className={`issue issue-sev-${issue.severity}`} key={issue.id}>
                 <div className="issue-title">
                   <span className="tag" style={{ marginRight: 8 }}>
                     {RULE_LABEL[issue.ruleId] ?? issue.ruleId}

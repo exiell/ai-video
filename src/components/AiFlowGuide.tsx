@@ -1,4 +1,4 @@
-﻿import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RichText } from './bits';
 import { useImage } from '../store/image';
@@ -261,7 +261,7 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       </p>
 
       <div
-        className="issue info"
+        className="issue issue-sev-info"
         style={{ marginTop: 0, marginBottom: 14 }}
       >
         <div className="issue-line">

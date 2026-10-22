@@ -416,7 +416,7 @@ pre {
 .issue.warning {
   border-left-color: var(--warning);
 }
-.issue.info {
+.issue-sev-info {
   border-left-color: var(--info);
 }
 
@@ -1839,8 +1839,27 @@ pre {
   border-left-color: #c08a2a;
 }
 
-.issue.info {
+.issue-sev-info {
   border-left-color: #4a80c8;
+}
+
+/*
+  严重度修饰类（v0.51）。
+
+  原来直接把 severity 当类名拼进 className：`issue ${severity}`。
+  而 `info` 是全站提示点的工具类（`.info { display: inline-flex; ... }`，
+  就是正文里那个 ⓘ 小圆点）——两个类一撞，「看一眼」这一档的整张卡片
+  被压成了一行：标题、为什么、怎么改、按钮全挤在一起。
+
+  改用 issue-sev-* 前缀，不再和任何工具类同名。`.issue.error` /
+  `.issue.warning` 保留着：还有别的组件在用，它们不撞名。
+*/
+.issue-sev-error {
+  border-left-color: var(--error);
+}
+
+.issue-sev-warning {
+  border-left-color: var(--warning);
 }
 
 .issue-title {
