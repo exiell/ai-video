@@ -24,7 +24,7 @@ import type { AssetKind } from '../types/model';
  *  3. 同一个组件在向导页与各操作页复用，避免文案各写一份后逐渐不一致
  */
 
-type StepKey = 'split' | 'images' | 'shots' | 'frames';
+type StepKey = 'split' | 'chars' | 'scenes' | 'shots' | 'frames';
 
 interface FlowStep {
   key: StepKey;
@@ -32,21 +32,14 @@ interface FlowStep {
   /** 在哪个界面做 */
   where: string;
   route: string;
-  /** 点哪个按钮（完整说法，给展开区用） */
+  /** 点哪个按钮。一句话，只说动作 */
   action: string;
-  /**
-   * 一行式「下一步」条上用的短说法。
-   *
-   * 原来的 action 是给完整版卡片用的，里面带着"角色建议先出全身多视图"这类补充，
-   * 放进一行条里会被挤成两行、而且重点不明。短说法只说**去哪、点哪个按钮**。
-   */
-  shortAction: string;
-  /** 做完会看到什么 */
+  /** 做完会看到什么（紧凑版的展开区用） */
   expect: string;
   done: boolean;
   /** 完成度文案，例如「3/5 个角色」 */
   progress?: string;
-  /** 没做完时给一句为什么现在别往下走 */
+  /** 没做完时给一句为什么现在别往下走（紧凑版的展开区用） */
   gate?: string;
 }
 
@@ -107,11 +100,10 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
   const steps: FlowStep[] = [
     {
       key: 'split',
-      title: '让模型把故事拆成场景与角色',
+      title: '拆出角色与场景',
       where: '分镜表',
       route: '/storyboard',
-      action: '点卡片里的「① 从故事里拆角色与场景」',
-      shortAction: '点「从故事里拆角色与场景」',
+      action: '点「① 从故事里拆角色与场景」',
       expect:
         '会按故事里的场次生成场景卡与角色卡，并自动填好固定元素、光线、身份描述。之后你可以逐条改。',
       done: hasSplit,
@@ -126,25 +118,33 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
           }),
     },
     {
-      key: 'images',
-      title: '生成角色形象图与场景参考板',
-      where: '角色设定 / 场景设定',
+      key: 'chars',
+      title: '出角色形象图',
+      where: '角色设定',
       route: '/characters',
-      action:
-        '角色设定页点「全部角色形象图」；场景设定页点「全部场景参考板」。角色建议先出全身多视图，再出头部特写。',
-      shortAction: '点「全部角色形象图」和「全部场景参考板」',
-      expect: '每个角色拿到两张图（全身多视图 + 头部特写），每个场景拿到一张参考板。',
-      done: characters.length > 0 && charsReady === characters.length && scenesReady === scenes.length,
-      progress: `角色 ${pct(charsReady, characters.length)}（全身 ${pct(charsWithSheet, characters.length)}、特写 ${pct(charsWithFace, characters.length)}）· 场景 ${pct(scenesReady, scenes.length)}`,
+      action: '点「全部角色形象图」',
+      expect: '每个角色拿到两张图：全身多视图，再拿它当参考出头部特写。',
+      done: characters.length > 0 && charsReady === characters.length,
+      progress: `角色 ${pct(charsReady, characters.length)}（全身 ${pct(charsWithSheet, characters.length)}、特写 ${pct(charsWithFace, characters.length)}）`,
       gate: '形象图是后面所有关键帧的**参考图锚点**。这一步不满意就重出。等关键帧跑完再返工，前面花的钱就白花了。',
+    },
+    {
+      key: 'scenes',
+      title: '出场景参考板',
+      where: '场景设定',
+      route: '/scenes',
+      action: '点「全部场景参考板」',
+      expect: '每个场景拿到一张空镜参考板，写着这地方的空间结构与主光方向。',
+      done: scenes.length > 0 && scenesReady === scenes.length,
+      progress: `场景 ${pct(scenesReady, scenes.length)}`,
+      gate: '参考板决定「这是同一个地方」。同一个场景在不同镜头里长得不一样，观众第一眼就会出戏。',
     },
     {
       key: 'shots',
       title: '生成分镜表',
       where: '分镜表',
       route: '/storyboard',
-      action: '点卡片里的「② 生成分镜表」',
-      shortAction: '点「生成分镜表」',
+      action: '点「② 生成分镜表」',
       expect:
         '模型把故事拆成镜头，每镜带起点、唯一动作、终点，并自动挂好场景、角色和连续性锁。',
       done: hasShots,
@@ -153,12 +153,10 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
     },
     {
       key: 'frames',
-      title: '逐镜生成三帧关键帧',
+      title: '出三帧',
       where: '分镜表',
       route: '/storyboard',
-      action:
-        '用「批量生成」里的「全部镜头首帧 / 全部动作关键帧 / 全部尾帧」，或逐个镜头点「生成关键帧（锁角色）」。',
-      shortAction: '用「批量生成」一次出全部首帧',
+      action: '点「全部三帧（按镜头顺序）」',
       expect: '每个镜头三张图：首帧（构图）、动作关键帧（动态顶点）、尾帧（这一镜结束时的状态）。',
       done: shots.length > 0 && firstReady === shots.length && peakReady === shots.length && endReady === shots.length,
       progress: `首帧 ${pct(firstReady, shots.length)} · 动作关键帧 ${pct(peakReady, shots.length)} · 尾帧 ${pct(endReady, shots.length)}`,
@@ -198,10 +196,10 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
         <span className="next-step-tag">下一步 {stepNo}/{steps.length}</span>
         <span className="next-step-text">
           {onThisPage(current.route) ? (
-            <b>{current.shortAction}</b>
+            <b>{current.action}</b>
           ) : (
             <>
-              去「{current.where}」，<b>{current.shortAction}</b>
+              去「{current.where}」，<b>{current.action}</b>
             </>
           )}
         </span>
@@ -254,23 +252,16 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
         </span>
       </h3>
 
-      <p style={{ color: 'var(--text-dim)', marginTop: 0, lineHeight: 1.7 }}>
-        <RichText>
-          {'准备工作的故事已经写好了。接下来**不必手动一个个建场景和角色**。让模型先按故事拆一遍，你在这个基础上删改，通常比从空白开始快得多。'}
-        </RichText>
-      </p>
+      {/*
+        【v0.53 只留「去哪里、做什么」】
+        用户的原话：移除底下说明性文字，只写每一步去哪里、做什么，并附带跳转按钮。
+        所以引子段、「AI 生成和手动建不是二选一」提示框、「会看到什么」、
+        每一步的 gate、以及底部那句「做完这四步材料就齐了」全部删掉。
 
-      <div
-        className="issue issue-sev-info"
-        style={{ marginTop: 0, marginBottom: 14 }}
-      >
-        <div className="issue-line">
-          <RichText>
-            {'**AI 生成和手动建，不是二选一。**常见做法是：先让 AI 拆出骨架 → 逐个改掉不对的地方 → 缺什么再手动补。AI 拆出来的角色卡与场景卡，字段和你手动建的一模一样，随时可以改。'}
-          </RichText>
-        </div>
-      </div>
-
+        这些内容没有真的消失：gate 与 expect 仍然留在数据里，
+        紧凑版顶部的「为什么」展开区还在用它们。完整版是**执行清单**，
+        不是讲解——要看为什么，那里有。
+      */}
       <ol style={{ fontSize: 13, paddingLeft: 0, margin: 0, listStyle: 'none' }}>
         {steps.map((item, index) => (
           <li
@@ -278,11 +269,11 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
             style={{
               borderLeft: `3px solid ${item.done ? 'var(--ok)' : 'var(--accent)'}`,
               paddingLeft: 14,
-              marginBottom: 16,
+              marginBottom: 12,
               opacity: item.done ? 0.72 : 1,
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 4 }}>
+            <div style={{ fontWeight: 600, marginBottom: 2 }}>
               {item.done ? '已完成 · ' : ''}
               第 {index + 1} 步 · {item.title}
               {item.progress ? (
@@ -291,21 +282,19 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
                 </span>
               ) : null}
             </div>
-            <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
-              <b>怎么做：</b>
-              去「{item.where}」，<RichText>{item.action}</RichText>
-            </div>
-            <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
-              <b>会看到什么：</b>
-              <RichText>{item.expect}</RichText>
-            </div>
-            {!item.done && item.gate ? (
-              <div className="hint" style={{ marginTop: 4 }}>
-                <RichText>{item.gate}</RichText>
-              </div>
-            ) : null}
-            {!onThisPage(item.route) ? (
-              <div className="row" style={{ marginTop: 8 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                color: 'var(--text-dim)',
+                lineHeight: 1.7,
+              }}
+            >
+              <span style={{ flex: 1 }}>
+                去「{item.where}」，{item.action}
+              </span>
+              {onThisPage(item.route) ? null : (
                 <button
                   type="button"
                   className="btn btn-sm"
@@ -313,17 +302,11 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
                 >
                   去「{item.where}」
                 </button>
-              </div>
-            ) : null}
+              )}
+            </div>
           </li>
         ))}
       </ol>
-
-      <div className="hint" style={{ marginTop: 4 }}>
-        <RichText>
-          {'**做完这四步，材料就齐了。**接着去「穿帮检查」过一遍，再去「导出」打包；那两步在下面的手动清单里。'}
-        </RichText>
-      </div>
     </div>
   );
 }

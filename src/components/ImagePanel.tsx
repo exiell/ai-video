@@ -57,6 +57,7 @@ export function ImagePanel({
   const generateForCharacter = useImage((s) => s.generateForCharacter);
   const generateForScene = useImage((s) => s.generateForScene);
   const generateForFrame = useImage((s) => s.generateForFrame);
+  const framePrereqNotice = useImage((s) => s.framePrereqNotice);
 
   const prefs = useSettings((s) => s.prefs);
   const keys = useSettings((s) => s.keys);
@@ -94,8 +95,19 @@ export function ImagePanel({
       void generateForScene(refId, option.angle ?? 'master');
       return;
     }
-    // frameKind 由调用方指定；没给就是首帧（最常用的那一种）
-    void generateForFrame(refId, option.frameKind ?? 'first-frame', option.useReference && canReference);
+    /*
+      出帧之前先看一眼角色与场景的图出了没有（v0.53）。
+      少了它们不会报错，只会悄悄少放两张参考图，然后让模型拿文字去猜；
+      猜错的后果用户会记在「一致性不好」上，找不到原因。
+      所以这里问一句，但允许继续——先出一张看看风格是合理需求。
+    */
+    const frameKind = option.frameKind ?? 'first-frame';
+    const useReference = option.useReference && canReference;
+    void (async () => {
+      const notice = await framePrereqNotice();
+      if (notice && !window.confirm(notice)) return;
+      void generateForFrame(refId, frameKind, useReference);
+    })();
   }
 
   return (

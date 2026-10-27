@@ -54,6 +54,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
   const runFrames = useImage((s) => s.generateAllFrames);
   const runFramesInOrder = useImage((s) => s.generateAllFramesInOrder);
   const assetCounts = useImage((s) => s.assetCounts);
+  const framePrereqNotice = useImage((s) => s.framePrereqNotice);
 
   const project = useAppStore((s) => s.project);
   const prefs = useSettings((s) => s.prefs);
@@ -73,7 +74,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
     'end-frame': project?.shots.length ?? 0,
   };
 
-  function run(task: BatchTask) {
+  async function run(task: BatchTask) {
     if (task === 'characters') {
       void runCharacters();
       return;
@@ -82,6 +83,16 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
       void runScenes();
       return;
     }
+
+    /*
+      出帧之前先看一眼角色与场景的图出了没有（v0.53）。
+      缺了不会报错，只会悄悄少放两张参考图，让模型拿文字去猜；
+      猜错的结果用户记在「一致性不好」上，找不到原因。
+      允许继续：先出一张看看风格是合理需求。
+    */
+    const notice = await framePrereqNotice();
+    if (notice && !window.confirm(notice)) return;
+
     if (task === 'all-frames') {
       void runFramesInOrder();
       return;
@@ -134,7 +145,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             type="button"
             className="btn"
             disabled={batch !== null || !hasImageKey || counts[task] === 0}
-            onClick={() => run(task)}
+            onClick={() => void run(task)}
           >
             {TASK_LABEL[task]}（{counts[task]}）
           </button>

@@ -61,6 +61,15 @@ beforeEach(() => {
     assetCounts: {},
     batch: null,
     batchSummary: null,
+    /*
+      v0.53 之前，点「只补首帧」只会弹一个「还没有尾帧」的确认框。
+      现在出帧之前还会先检查角色形象图与场景参考板出了没有，
+      而这个测试文件里的图库是空的，那一问必然先弹出来、把后面的话挤掉。
+
+      这里把「顺序检查」单独关掉：本文件测的是**尾帧提示**那一条。
+      顺序检查自己有测试（tests/frameOrder.v053.test.ts）。
+    */
+    framePrereqNotice: async () => null,
   });
   useAppStore.setState({ project: twoShots() });
   useSettings.setState({ keys: { dashscope: 'sk-test' } });
@@ -236,14 +245,20 @@ describe('批量卡片上的按钮', () => {
     el.remove();
   });
 
-  it('**没有尾帧时点「只补首帧」会先弹确认**，说清会丢掉跨镜锚点', () => {
+  it('**没有尾帧时点「只补首帧」会先弹确认**，说清会丢掉跨镜锚点', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const el = render(<BatchGenerateCard tasks={['all-frames', 'first-frame']} />);
     const btn = [...el.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('只补首帧'),
     ) as HTMLButtonElement;
 
-    act(() => btn.click());
+    /*
+      v0.53 起这个按钮先 await 一次顺序检查再弹框，所以点击之后要多等一帧。
+      同步断言会看到「还没弹」——那不是没弹，是还没跑到。
+    */
+    await act(async () => {
+      btn.click();
+    });
 
     expect(confirmSpy).toHaveBeenCalled();
     const message = confirmSpy.mock.calls[0]![0] as string;
@@ -253,7 +268,7 @@ describe('批量卡片上的按钮', () => {
     el.remove();
   });
 
-  it('已经有尾帧时不再啰嗦', () => {
+  it('已经有尾帧时不再啰嗦', async () => {
     useImage.setState({ assetCounts: { 'end-frame': 2 } });
     const confirmSpy = vi.spyOn(window, 'confirm');
     const el = render(<BatchGenerateCard tasks={['all-frames', 'first-frame']} />);
@@ -261,7 +276,9 @@ describe('批量卡片上的按钮', () => {
       b.textContent?.includes('只补首帧'),
     ) as HTMLButtonElement;
 
-    act(() => btn.click());
+    await act(async () => {
+      btn.click();
+    });
 
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();

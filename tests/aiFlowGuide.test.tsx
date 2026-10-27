@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
@@ -132,14 +132,34 @@ describe('AI 流程指引 · 进度统计', () => {
     expect(render('compact')).toBe('');
   });
 
-  it('空项目：四个步骤都未完成，且不出现「会被覆盖」这种误导话术', () => {
+  it('空项目：五个步骤都未完成，且不出现「会被覆盖」这种误导话术', () => {
     useAppStore.setState({ project: makeEmptyProject('空项目') });
     const t = text(render());
     expect(t).toContain('第 1 步');
-    expect(t).toContain('已完成 0/4');
+    expect(t).toContain('已完成 0/5');
     // 空项目上不该说「会覆盖现有的角色与场景」
     expect(t).not.toContain('覆盖');
-    expect(t).toContain('这是起点');
+  });
+
+  /*
+    v0.53：完整版只剩「去哪里、做什么 + 跳转按钮」。
+    用户的原话是「移除底下说明性文字」。原来这里断言过「这是起点」——
+    那句 gate 现在只在紧凑版的「为什么」展开区里出现，完整版不再渲染它。
+    所以这条改成守**删掉的东西真的删了**，防止以后又把说明塞回来。
+  */
+  it('完整版只写去哪、做什么：不再有引子段与「会看到什么」', () => {
+    const p = makeEmptyProject('精简');
+    p.characters = [{ id: 'c1', name: '甲' } as never];
+    p.scenes = [{ id: 's1', name: '场景' } as never];
+    useAppStore.setState({ project: p });
+    const t = text(render());
+    expect(t).not.toContain('会看到什么');
+    expect(t).not.toContain('这是起点');
+    expect(t).not.toContain('不必手动一个个建场景和角色');
+    expect(t).not.toContain('不是二选一');
+    expect(t).not.toContain('做完这四步');
+    // 该有的还在
+    expect(t).toContain('去「角色设定」，点「全部角色形象图」');
   });
 
   it('**同一对象有多个同类型图时，进度按对象数算，不按图片张数算**', () => {
@@ -179,7 +199,7 @@ describe('AI 流程指引 · 进度统计', () => {
     expect(text(render())).toContain('角色 1/1');
   });
 
-  it('分镜表生成后，第 3 步显示镜头数并打勾', () => {
+  it('分镜表生成后，第 4 步显示镜头数并打勾', () => {
     const p = makeEmptyProject('分镜');
     p.characters = [{ id: 'c1', name: '甲' } as never];
     p.scenes = [{ id: 's1', name: '场景' } as never];
@@ -187,7 +207,8 @@ describe('AI 流程指引 · 进度统计', () => {
     useAppStore.setState({ project: p });
     const t = text(render());
     expect(t).toContain('已有 2 个镜头');
-    expect(t).toContain('已完成 · 第 3 步 · 生成分镜表');
+    // v0.53 起「生成分镜表」是第 4 步（角色与场景拆成了两步）
+    expect(t).toContain('已完成 · 第 4 步 · 生成分镜表');
   });
 
   it('三帧各自统计，不互相顶替', () => {
@@ -232,11 +253,13 @@ describe('AI 流程指引 · 紧凑版', () => {
       所以这里断言的是条上的步骤标记，不再是「第 N 步」这个措辞。
 
       「只显示第一个没做完的」这个约束没变，只是换了说法。
+      v0.53 步数从 4 变 5（角色与场景各占一步），所以分母也变了。
     */
-    // 第 1 步已完成 → 条上应指向第 2 步
-    expect(t).toContain('下一步 2/4');
-    expect(t).not.toContain('下一步 3/4');
-    expect(t).not.toContain('下一步 4/4');
+    // 第 1 步已完成 → 条上应指向第 2 步（角色形象图）
+    expect(t).toContain('下一步 2/5');
+    expect(t).not.toContain('下一步 3/5');
+    expect(t).not.toContain('下一步 4/5');
+    expect(t).not.toContain('下一步 5/5');
   });
 
   it('**一行式**：不管内容多长，标题区只占一行（不再铺开四行）', () => {

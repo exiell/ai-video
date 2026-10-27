@@ -26,6 +26,10 @@ import {
 } from '../domain/image/prompts';
 import { deleteAsset, listAssets, listAssetsFor, saveAssets } from '../services/storage';
 import {
+  missingBeforeFrames,
+  framePrereqMessage,
+} from '../domain/image/order';
+import {
   type CharacterSheetKind,
 } from '../domain/image/characterSheet';
 
@@ -96,6 +100,14 @@ interface ImageState {
   loadGallery: (refId: string) => Promise<void>;
   /** 重新统计本项目图片总数（进项目、生成完、删除后调用） */
   refreshAssetCount: () => Promise<void>;
+  /**
+   * 出三帧之前该说的一句话（v0.53）。齐了返回 null。
+   *
+   * 为什么是现查而不是读 `assetCounts`：那个数只在进项目、生成完、删除后刷新，
+   * 分镜页根本不调它，拿它判断「谁还没出图」会给出过期答案。
+   * 查不到就直接放行（返回 null）——宁可少提示一次，不该因为统计失败挡住出图。
+   */
+  framePrereqNotice: () => Promise<string | null>;
   /**
    * 按**镜头顺序**一次出完三帧：第 1 镜首帧 → 关键帧 → 尾帧，再第 2 镜……
    *
@@ -260,6 +272,18 @@ export const useImage = create<ImageState>((set, get) => ({
       set({ assetCount: withImage.length, assetCounts: counts });
     } catch {
       // 统计失败不该影响主流程：保守地保留旧值
+    }
+  },
+
+  framePrereqNotice: async () => {
+    const project = useAppStore.getState().project;
+    if (!project) return null;
+    try {
+      const assets = await listAssets(project.id);
+      return framePrereqMessage(missingBeforeFrames(project, assets));
+    } catch {
+      // 查不到就当没缺——不能因为一次查询失败把出图挡住
+      return null;
     }
   },
 
