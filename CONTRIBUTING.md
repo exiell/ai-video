@@ -52,7 +52,7 @@ git push origin fix/检查规则误报
 ### 提交前请务必跑一遍
 
 ```bash
-pnpm test        # 590 条测试，必须全过
+pnpm test        # 全部单元测试，必须全过
 pnpm typecheck   # tsc --noEmit，必须 0 错误
 ```
 

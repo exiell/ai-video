@@ -138,11 +138,23 @@ describe('帮助页的一致性防线：数字要和列表一致', () => {
     expect(CN.indexOf(m![1]!), 'README 与帮助页的说法不一致').toBe(listed);
   });
 
-  it('README 里表格列出的防线数量对得上', () => {
-    // README 的一致性那张表：每一行是一道防线
+  it('**README 表格里的防线条数对得上**', () => {
+    /*
+      原来这条靠 `**几个刻意做对的地方` 这个标题当作表格结束的位置。
+      那份 bullet 列表在 2026-10 的重写里删掉了（内容搬去 CHANGELOG 与提交信息），
+      所以改成用「表头行 + 分隔行之后连续以 | 开头的行」来数，
+      不再依赖某个会被删除的标题。
+    */
     const section = readme.slice(readme.indexOf('道一致性防线'));
-    const table = section.slice(0, section.indexOf('**几个刻意做对的地方'));
-    const rows = [...table.matchAll(/^\|\s\*\*(.+?)\*\*/gm)];
-    expect(rows.length, 'README 表格里的防线条数与正文说法不一致').toBe(highestLayer(help));
+    const lines = section.split(/\r?\n/);
+    const header = lines.findIndex((line) => /^\|\s*层\s*\|/.test(line));
+    expect(header, 'README 找不到五道防线那张表').toBeGreaterThanOrEqual(0);
+
+    let rows = 0;
+    for (let i = header + 2; i < lines.length; i += 1) {
+      if (!lines[i]!.startsWith('|')) break;
+      rows += 1;
+    }
+    expect(rows, 'README 表格里的防线条数与正文说法不一致').toBe(highestLayer(help));
   });
 });
