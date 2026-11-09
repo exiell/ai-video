@@ -19,7 +19,7 @@
 | **角色** | 身份、变体、连续性锁三层；可出全身多视图与头部特写 |
 | **场景** | 空间结构、固定元素、主光方向、主色调；可出空场景参考板 |
 | **分镜** | 每镜只答三件事：起点、一个动作、终点。另有景别、机位、运镜、时长、台词、声音、情绪、衔接 |
-| **穿帮检查** | 26 条规则，分必须修、建议修、看一眼。问题直接标在分镜页的对应字段上 |
+| **穿帮检查** | 26 条规则，分必改项、建议项、参考项。问题直接标在分镜页的对应字段上 |
 | **提示词** | 英文正文加中文对照，逐项说明；支持即梦、可灵、Seedance、Runway、Sora、Veo |
 | **导出** | 一个压缩包：分镜表、设定卡、各平台提示词、检查单、进度表、图片提示词；有图时附图包 |
 
@@ -55,13 +55,13 @@
 
 | 你的状态 | 它会说 |
 |---|---|
-| 还没打开项目 | 先打开一个项目 |
-| 故事是空的 | 先把故事写下来 |
-| 有故事、没角色 | 先定下人物和场景 |
-| 有设定、没分镜 | 把故事拆成分镜 |
-| 检查有 3 个必须修 | 先修这 3 个必须修的问题 |
-| 时长超了 8 秒 | 先减掉 8 秒 |
-| 都齐了 | 导出制作包 |
+| 还没打开项目 | 项目：看示例项目 |
+| 故事是空的 | 故事：去写故事 |
+| 有故事、没角色 | 角色与场景：去建设定 |
+| 有设定、没分镜 | 分镜：去生成分镜 |
+| 检查有 3 个必改项 | 穿帮检查：去修这 3 条 |
+| 时长超了 8 秒 | 时长：去调分镜 |
+| 都齐了 | 导出：去导出 |
 
 ## 二、一致性审查
 
@@ -133,7 +133,7 @@ chmod +x start.sh    # 只需一次
 <details>
 <summary>不想用一键脚本？点开看手动步骤</summary>
 
-需要 Node.js 20+（没有就去 https://nodejs.org/zh-cn 装 LTS 版）。
+需要 Node.js 20+ 跑开发服务器（没有就去 https://nodejs.org/zh-cn 装 LTS 版）。跑测试另需 Node.js 22.22+（`jsdom@30` 的要求）：`bash scripts/test.sh` 会优先用项目内 `.tools/node-v22`，没有的话用系统 Node；版本不够会直接报错，不会静默跳过测试。
 
 ```bash
 node -v            # 确认 >= 20
@@ -161,7 +161,7 @@ pnpm dev           # → http://localhost:5173/
 ```bash
 ./start.sh        # 一键启动（Windows 双击 start.cmd）
 pnpm dev          # 开发服务器
-pnpm test         # 跑测试
+pnpm test:local   # 跑测试（优先用项目内 Node 22.22+；pnpm test 会先检查版本，不满足直接报错）
 pnpm build        # 生产构建 → dist/
 pnpm typecheck    # 只做类型检查
 pnpm check:copy   # 界面文案与字号检查
@@ -190,9 +190,9 @@ Key 是厂商级的，同一家的对话与出图共用一个，只填一次。�
 
 ## 你的数据在哪
 
-所有数据在浏览器的 IndexedDB 里。请求只在你的浏览器和厂商之间发生，中间没有服务器。
+所有数据在浏览器的 IndexedDB 里。不配代理时，请求只在你的浏览器和厂商之间发生，中间没有服务器。
 
-API Key 默认存在这台电脑上，下次打开不用重填。电脑是共用的就勾「不保存到本机」，Key 只存在当前会话，关掉浏览器即失效。不论勾不勾，Key 都不会离开你的浏览器。
+API Key 默认存在这台电脑上，下次打开不用重填。电脑是共用的就勾「不保存到本机」，Key 只存在当前会话，关掉浏览器即失效。不配代理时，Key 只在你的浏览器与厂商之间；填了代理，请求会经过你填的代理地址，Key 和提示词对代理可见。
 
 阿里云返回的图片链接 24 小时后失效。AniGuide 在拿到图当下就下载留存成 base64，你看到的每一张图都真正属于你。
 
@@ -204,7 +204,7 @@ Vite 6、React 19、TypeScript strict、Zustand、Dexie、Zod、fflate。纯静�
 
 图标来自 [Tabler Icons](https://github.com/tabler/tabler-icons)（MIT），厂商标识来自 [Simple Icons](https://github.com/simple-icons/simple-icons)（CC0-1.0），蓝图外观的网格底纹参考 [css3patterns](https://github.com/LeaVerou/css3patterns)（MIT）。三处都是按许可引入的原始 SVG，不引入图标库运行时。
 
-所有模型调用必须经过唯一入口 `ModelGateway`，业务代码不允许直接 fetch 厂商接口。将来要接代理，只改一处配置。
+所有模型调用必须经过唯一入口 `ModelGateway`，业务代码不允许直接 fetch 厂商接口。默认直连厂商；在设置里填了代理才会走代理，代理能看到请求内容和 API Key，只填自己信任的地址。
 
 目录分工见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
@@ -220,7 +220,7 @@ Vite 6、React 19、TypeScript strict、Zustand、Dexie、Zod、fflate。纯静�
 
 报问题或提建议走 [Issue](https://github.com/exiell/ai-video/issues/new/choose)。改代码就 Fork、开分支、提 PR，流程与审阅标准见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-提交前跑 `pnpm test` 和 `pnpm typecheck`，两条都过才会被合并。
+提交前跑 `pnpm test:local` 和 `pnpm typecheck`，两条都过才会被合并。
 
 ## 开源许可
 
