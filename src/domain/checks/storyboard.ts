@@ -271,7 +271,7 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         severity: 'info',
         title: `${shotLabel(prev.number)}和${shotLabel(current.number)}都是「${SHOT_SIZE_LABEL[current.shotSize]}」`,
         why:
-           '连续两镜同一个景别，观众会觉得「没剪」——画面在动，视角没动。',
+           '连续两镜同一个景别，观众会觉得「没剪」：画面在动，视角没动。',
         suggestion:  `把其中一镜换个景别。${ current.shotSize === 'medium' ? '中景接中景最闷，把后一镜推成近景。' : '哪怕只差一档也会好很多。' }`,
         location: { kind: 'shot', id: current.id, field: 'shotSize' },
       }),
@@ -297,7 +297,7 @@ export function checkStoryboard(project: Project): CheckIssue[] {
         title: `${shotLabel(shot.number)}的画面描述里用了「${hit[1]}」`,
         why:
            '提示词是给模型看的文字，它不知道「' + hit[1] + '」指的是谁。' + (shot.characterIds.length >= 2 ? `这一镜有 ${shot.characterIds.length} 个角色（${names}），用代词会让动作错位。` : '直接写名字，对应关系更稳。'),
-        suggestion:  `把「${hit[1]}」换成具体人名（${names || '本镜的角色'}）。${ shot.characterIds.length >= 2 ? '两人同框时尤其如此。' : '' }`,
+        suggestion:  `这里的「${hit[1]}」改成具体人名（${names || '本镜的角色'}）。${ shot.characterIds.length >= 2 ? '两人同框时尤其如此。' : '' }`,
         location: { kind: 'shot', id: shot.id, field: 'action' },
       }),
     );

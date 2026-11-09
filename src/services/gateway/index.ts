@@ -1,4 +1,4 @@
-﻿import type { ModelProfile } from '../../types/model';
+import type { ModelProfile } from '../../types/model';
 import {
   buildDashScopeAsyncPayload,
   buildDashScopeHeaders,
@@ -37,6 +37,8 @@ export type GatewayErrorKind =
   | 'timeout'
   | 'parse'
   | 'aborted'
+  /** 响应体超过读取上限（见 readResponseTextLimited） */
+  | 'too-large'
   /** 内容合规拦截（阿里云百炼会因提示词触发审核而拒绝） */
   | 'content-policy';
 
@@ -121,7 +123,7 @@ export function classifyError(error: unknown, status?: number, body?: string): G
         kind: 'content-policy',
         title: '提示词被内容安全审核拦下了',
         advice:
-          '这不是技术故障。把画面描述里的敏感内容改掉——通常涉及暴力、血腥、真人肖像或特定品牌。改完再试一次即可。' +
+          '这不是技术故障。把画面描述里的敏感内容改掉，通常涉及暴力、血腥、真人肖像或特定品牌。改完再试一次即可。' +
           detail,
         ...(status !== undefined ? { status } : {}),
         raw: body,
@@ -164,7 +166,7 @@ export function classifyError(error: unknown, status?: number, body?: string): G
               : `厂商拒绝了这次请求：${detail}`
             : '请求格式有问题，厂商拒绝了',
           advice: isModelProblem
-            ? '去「设置」页把这一栏的**模型名**改成厂商列出的名字。厂商会下架旧模型、上架新模型，' +
+            ? '去「设置」页把这一栏的「模型名」改成厂商列出的名字。厂商会下架旧模型、上架新模型，' +
               '这个输入框就是为了让你不用等工具更新。'
             : '通常是参数填错了。检查一下设置里的模型名与参数范围，错误信息里通常写了原因。',
           status,
@@ -328,6 +330,91 @@ export function flavorOf(profile: ModelProfile): 'openai' | 'dashscope-sync' | '
   return profile.apiFlavor ?? 'openai';
 }
 
+// ---------------------------------------------------------------------------
+// 响应读取上限（v0.54 · P2-1）
+// ---------------------------------------------------------------------------
+
+const BYTES_PER_MB = 1024 * 1024;
+
+/**
+ * 单次模型响应允许读入的最大字节数（8 MB）。
+ *
+ * ===========================================================================
+ * 为什么要设上限
+ * ===========================================================================
+ * 原来所有响应都走 `response.text()` 全量读进内存，之后还有 JSON.parse 与
+ * zod 校验。正常模型回复只有几十 KB 到一两 MB；而用户是可以填代理的——
+ * 一个恶意/被篡改的代理返回几百 MB 的 body，标签页会直接内存耗尽，
+ * 未保存的输入一起丢。zod 那条 high 公告（CVE-2023-54404）的放大器也是它。
+ *
+ * 所以上限放在**唯一入口**这里：文本 8 MB。超限时给一句人话，
+ * 而不是让浏览器自己崩掉。
+ */
+export const MAX_RESPONSE_TEXT_BYTES = 8 * BYTES_PER_MB;
+
+function responseTooLargeInfo(limitBytes: number): GatewayErrorInfo {
+  return {
+    kind: 'too-large',
+    title: '模型返回的内容异常大，已停止读取',
+    advice:
+      `这次响应超过了 ${Math.round(limitBytes / BYTES_PER_MB)} MB，正常的模型回复不会这么大。` +
+      '直连时先重试一次；用代理时请确认代理可信（代理能看到你的 Key 和全部请求内容）。',
+  };
+}
+
+/**
+ * 按字节上限读取响应体。
+ *
+ * 优先用流式读取：这样超限时可以**立刻停**，而不是先把整个 body 吃进内存。
+ * 测试替身（以及极少数不支持 body 流的环境）只有 `text()`，那就读完之后
+ * 按字符数兜底——中文字符在 UTF-8 下占 3 字节，字符数 ≤ 字节上限是保守判断。
+ */
+export async function readResponseTextLimited(
+  response: Response,
+  limitBytes: number = MAX_RESPONSE_TEXT_BYTES,
+): Promise<string> {
+  const headers = (response as { headers?: { get?: (name: string) => string | null } }).headers;
+  const declared = Number(headers?.get?.('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > limitBytes) {
+    throw new GatewayError(responseTooLargeInfo(limitBytes));
+  }
+
+  const body = (response as { body?: ReadableStream<Uint8Array> | null }).body;
+  if (!body || typeof body.getReader !== 'function') {
+    const text = await response.text();
+    if (text.length > limitBytes) throw new GatewayError(responseTooLargeInfo(limitBytes));
+    return text;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      total += value.byteLength;
+      if (total > limitBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new GatewayError(responseTooLargeInfo(limitBytes));
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // 一次性解码，避免多字节字符被 chunk 边界截断
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(merged);
+}
+
 /**
  * 发起一次模型请求。
  * 成功返回解析后的 JSON，失败抛 GatewayError（已带人话说明）。
@@ -355,40 +442,64 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
   }
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  if (signal) {
-    signal.addEventListener('abort', () => controller.abort(), { once: true });
-  }
+  /**
+   * 【v0.54】timer 要一直活到 body 读完。
+   *
+   * 原来在 `fetch` 拿到响应头之后就 `clearTimeout` 了，`response.text()`
+   * 完全没有超时保护：服务端可以先回 200 头，再慢慢吐 body（或永远不吐完），
+   * 这个请求就会永久 pending。而出图 store 在 pending 期间拒绝新任务
+   * （`store/image.ts` 的 `if (get().pending) return`），用户看到的是整个工具卡死。
+   */
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const onCallerAbort = (): void => controller.abort();
+  if (signal) signal.addEventListener('abort', onCallerAbort, { once: true });
 
-  let response: Response;
   try {
-    response = await fetchImpl(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-  } catch (error) {
+    let response: Response;
+    let text: string;
+    try {
+      response = await fetchImpl(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      text = await readResponseTextLimited(response);
+    } catch (error) {
+      if (error instanceof GatewayError) throw error;
+      if (timedOut) {
+        throw new GatewayError({
+          kind: 'timeout',
+          title: '请求超时',
+          advice:
+            `等了约 ${Math.round(timeoutMs / 1000)} 秒还没拿到完整回复。` +
+            '网络慢或服务端卡住时会出现，重试一次通常能好；持续出现就换个模型或代理。',
+        });
+      }
+      throw new GatewayError(classifyError(error));
+    }
+
+    if (!response.ok) {
+      throw new GatewayError(classifyError(undefined, response.status, text));
+    }
+
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      throw new GatewayError({
+        kind: 'parse',
+        title: '厂商返回的内容不是合法 JSON',
+        advice: '通常是接口地址填错了（比如把页面地址当成了接口地址）。检查一下设置里的接口地址。',
+        raw: text.slice(0, 300),
+      });
+    }
+  } finally {
     clearTimeout(timer);
-    throw new GatewayError(classifyError(error));
-  }
-  clearTimeout(timer);
-
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new GatewayError(classifyError(undefined, response.status, text));
-  }
-
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new GatewayError({
-      kind: 'parse',
-      title: '厂商返回的内容不是合法 JSON',
-      advice: '通常是接口地址填错了（比如把页面地址当成了接口地址）。检查一下设置里的接口地址。',
-      raw: text.slice(0, 300),
-    });
+    if (signal) signal.removeEventListener('abort', onCallerAbort);
   }
 }
 
@@ -647,6 +758,17 @@ function testModelOf(profile: ModelProfile): string {
   return profile.model ?? profile.name;
 }
 
+/**
+ * 去掉档案 notes 里的 `**` 标记。
+ *
+ * notes 在设置页是用 RichText 渲染的，写 `**` 没问题；但这里把它拼进的是
+ * 纯文本 advice（错误说明里的一行字），不剥掉的话用户会看到字面的星号。
+ * 这是 v0.54 在服务层补「可见文案不许出现字面 **」的落点之一。
+ */
+function stripMarkdownMarks(value: string): string {
+  return value.replace(/\*\*/g, '');
+}
+
 export interface ConnectionTestResult {
   ok: boolean;
   /** 用了哪种传输方式 */
@@ -695,7 +817,7 @@ export async function testConnection(
         title: `${profile.name} 还没有填模型名`,
         advice:
           '去厂商控制台查当前可用的模型名，填到上面「模型名」那一栏再试。' +
-          (profile.notes ?? ''),
+          stripMarkdownMarks(profile.notes ?? ''),
       },
     } as ConnectionTestResult;
   }

@@ -304,7 +304,7 @@ export const useGeneration = create<GenerationState>((set) => ({
         ...s.feedback,
         style: {
           kind: 'ok',
-          message: `已生成 ${tags.length} 条英文风格关键词，并应用到项目——之后出的图都会带上它们。`,
+          message: `已生成 ${tags.length} 条英文风格关键词，并应用到项目。之后出的图都会带上它们。`,
           warnings: outcome.warnings,
           attempts: outcome.attempts,
         },

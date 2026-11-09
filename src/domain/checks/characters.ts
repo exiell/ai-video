@@ -62,7 +62,7 @@ export function checkCharacters(project: Project): CheckIssue[] {
             title: `角色「${character.name}」还没有任何连续性锁，${label}无法锁定他的形象`,
             why:
                '没有锁，模型每一镜都会重新想象他的样子，脸和衣服最容易变。',
-            suggestion:  `把「${character.name}」身上不会变、又一眼看得出不同的特征写成一条锁，例如 pine-green lapel service jacket。`,
+            suggestion:  `「${character.name}」身上不会变、又一眼看得出不同的特征，写成一条锁，例如 pine-green lapel service jacket。`,
             location: { kind: 'character', id: character.id },
           }),
         );
@@ -96,7 +96,7 @@ export function checkCharacters(project: Project): CheckIssue[] {
           severity: 'warning',
           title: `${label}引用了一个不存在的变体`,
           why:  '变体挂在角色或场景名下，提示词才知道它改的是什么。',
-          suggestion:  `重选第 ${shot.number} 镜的变体，或把「${variantId}」补登记上去。`,
+          suggestion:  `重选第 ${shot.number} 镜的变体，或补登记「${variantId}」。`,
           location: { kind: 'shot', id: shot.id, field: 'variantIds' },
         }),
       );

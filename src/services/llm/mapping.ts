@@ -284,7 +284,7 @@ export function shotsFromGenerated(
   if (autoAddedCount > 0) {
     warnings.push(
       `模型漏勾了 ${autoAddedCount} 处连续性锁，已按「这一镜有谁、在哪个场景」自动补上。` +
-        '补上比漏掉安全——漏勾的那一镜角色会变样。如果你想去掉某一条，在分镜表里取消勾选即可。',
+        '补上比漏掉安全：漏勾的那一镜角色会变样。如果你想去掉某一条，在分镜表里取消勾选即可。',
     );
   }
 

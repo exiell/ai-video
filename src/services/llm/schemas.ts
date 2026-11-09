@@ -36,20 +36,49 @@ export function stripCodeFence(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// 解析上限（v0.54 · P2-1）
+// ---------------------------------------------------------------------------
+
+/**
+ * 为什么给字段和数组加 `.max()`：模型输出是外部输入，长度不可信。
+ * 超长数组会让 zod 为每个非法元素生成一条 issue（公告 CVE-2023-54404 的机制），
+ * 超长字符串则会被原样存进 IndexedDB。`.max()` 是最便宜的一道闸。
+ *
+ * 取值一律「正常创作足够宽、异常输出拦得住」：
+ *  - 故事正文 2 万字符（约 10 分钟短片的分镜脚本量级）
+ *  - 角色/场景各 50 个、分镜 200 个（项目提示词里要求的镜头数量级远低于此）
+ *  - 单个描述字段几千字符；名称、枚举类几百
+ */
+const MAX_STORY_BODY_CHARS = 20_000;
+const MAX_STORY_FIELD_CHARS = 5_000;
+const MAX_STORY_SCENES = 50;
+const MAX_ASSETS = 50;
+const MAX_ENTITY_NAME_CHARS = 200;
+const MAX_IDENTITY_CHARS = 2_000;
+const MAX_LOCKS = 30;
+const MAX_VARIANTS = 20;
+const MAX_SHOTS = 200;
+const MAX_SHOT_TEXT_CHARS = 5_000;
+const MAX_SHOT_SHORT_CHARS = 500;
+const MAX_REFERENCES = 100;
+const MAX_OFFSCREEN = 30;
+
+// ---------------------------------------------------------------------------
 
 export const storySchema = z.object({
-  body: z.string().min(1),
-  charactersNote: z.string().default(''),
-  setting: z.string().default(''),
-  conflict: z.string().default(''),
-  ending: z.string().default(''),
+  body: z.string().min(1).max(MAX_STORY_BODY_CHARS),
+  charactersNote: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
+  setting: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
+  conflict: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
+  ending: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
   scenes: z
     .array(
       z.object({
-        label: z.string().min(1),
-        summary: z.string().default(''),
+        label: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+        summary: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
       }),
     )
+    .max(MAX_STORY_SCENES)
     .default([]),
 });
 
@@ -60,11 +89,12 @@ export type GeneratedStory = z.infer<typeof storySchema>;
 const slug = z
   .string()
   .min(1)
+  .max(120)
   .regex(/^[a-z0-9][a-z0-9-]*$/i, 'slug 只能是字母、数字和连字符');
 
 const continuityLockSchema = z.object({
-  label: z.string().min(1),
-  phrase: z.string().min(1),
+  label: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+  phrase: z.string().min(1).max(MAX_IDENTITY_CHARS),
   appliesTo: z.enum(['look', 'geography', 'lighting', 'prop', 'composition']).default('look'),
 });
 
@@ -73,48 +103,57 @@ export const assetsSchema = z.object({
     .array(
       z.object({
         slug,
-        name: z.string().min(1),
+        name: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
         role: z.enum(['protagonist', 'antagonist', 'supporting', 'cameo']).default('supporting'),
         identity: z.object({
-          face: z.string().default(''),
-          hair: z.string().default(''),
-          bodyType: z.string().default(''),
-          ageRange: z.string().default(''),
-          summary: z.string().default(''),
-          summaryEn: z.string().min(1),
+          face: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          hair: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          bodyType: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          ageRange: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          summary: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          summaryEn: z.string().min(1).max(MAX_IDENTITY_CHARS),
         }),
-        continuityLocks: z.array(continuityLockSchema).default([]),
+        continuityLocks: z.array(continuityLockSchema).max(MAX_LOCKS).default([]),
         variants: z
           .array(
             z.object({
-              label: z.string().min(1),
-              changedFeatures: z.array(z.string()).default([]),
+              label: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+              changedFeatures: z
+                .array(z.string().max(MAX_IDENTITY_CHARS))
+                .max(MAX_LOCKS)
+                .default([]),
             }),
           )
+          .max(MAX_VARIANTS)
           .default([]),
-        negativePrompt: z.string().optional(),
+        negativePrompt: z.string().max(MAX_IDENTITY_CHARS).optional(),
       }),
     )
+    .max(MAX_ASSETS)
     .default([]),
   scenes: z
     .array(
       z.object({
         slug,
-        name: z.string().min(1),
+        name: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
         identity: z.object({
-          placeType: z.string().default(''),
-          spatialStructure: z.string().default(''),
-          summary: z.string().default(''),
-          summaryEn: z.string().min(1),
+          placeType: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          spatialStructure: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          summary: z.string().max(MAX_IDENTITY_CHARS).default(''),
+          summaryEn: z.string().min(1).max(MAX_IDENTITY_CHARS),
         }),
-        fixedElements: z.array(z.string()).default([]),
-        lightDirection: z.string().default(''),
-        mainColor: z.string().default(''),
-        timeOfDay: z.string().optional(),
-        weather: z.string().optional(),
-        continuityLocks: z.array(continuityLockSchema).default([]),
+        fixedElements: z
+          .array(z.string().max(MAX_IDENTITY_CHARS))
+          .max(MAX_LOCKS)
+          .default([]),
+        lightDirection: z.string().max(MAX_SHOT_SHORT_CHARS).default(''),
+        mainColor: z.string().max(MAX_SHOT_SHORT_CHARS).default(''),
+        timeOfDay: z.string().max(MAX_ENTITY_NAME_CHARS).optional(),
+        weather: z.string().max(MAX_ENTITY_NAME_CHARS).optional(),
+        continuityLocks: z.array(continuityLockSchema).max(MAX_LOCKS).default([]),
       }),
     )
+    .max(MAX_ASSETS)
     .default([]),
 });
 
@@ -152,15 +191,15 @@ export const shotsSchema = z.object({
       z.object({
         duration: z.coerce.number().positive().max(60),
         shotSize: shotSizeEnum,
-        cameraPosition: z.string().default(''),
+        cameraPosition: z.string().max(MAX_SHOT_SHORT_CHARS).default(''),
         cameraMove: cameraMoveEnum,
-        startState: z.string().min(1),
-        action: z.string().min(1),
-        endState: z.string().min(1),
-        dialogue: z.string().default(''),
-        sound: z.string().default(''),
-        mood: z.string().default(''),
-        transition: z.string().default('硬切'),
+        startState: z.string().min(1).max(MAX_SHOT_TEXT_CHARS),
+        action: z.string().min(1).max(MAX_SHOT_TEXT_CHARS),
+        endState: z.string().min(1).max(MAX_SHOT_TEXT_CHARS),
+        dialogue: z.string().max(MAX_SHOT_TEXT_CHARS).default(''),
+        sound: z.string().max(MAX_SHOT_TEXT_CHARS).default(''),
+        mood: z.string().max(MAX_SHOT_SHORT_CHARS).default(''),
+        transition: z.string().max(MAX_SHOT_SHORT_CHARS).default('硬切'),
         /**
          * 与下一个镜头的衔接说明。
          *
@@ -168,21 +207,31 @@ export const shotsSchema = z.object({
          * 用 default 会把它变成「必填项」，导致模型漏写时整条分镜解析失败。
          * 这也影响类型：带 default 的字段在 z.infer 里是必填的。
          */
-        continuityNote: z.string().optional(),
+        continuityNote: z.string().max(MAX_SHOT_TEXT_CHARS).optional(),
         /**
          * 与上一个镜头的转场类型。模型给默认值，用户可以改。
          * optional：模型漏写时由衔接说明推断，不该因此让整条分镜解析失败。
          */
         transitionType: z.enum(['continuation', 'cut']).optional(),
         sceneSlug: slug,
-        characterSlugs: z.array(slug).default([]),
-        activeLockLabels: z.array(z.string()).default([]),
-        activeVariantLabels: z.array(z.string()).default([]),
-        offscreenCharacters: z.array(z.string()).default([]),
-        sourceSceneIndex: z.coerce.number().int().min(0).default(0),
+        characterSlugs: z.array(slug).max(MAX_REFERENCES).default([]),
+        activeLockLabels: z
+          .array(z.string().max(MAX_ENTITY_NAME_CHARS))
+          .max(MAX_REFERENCES)
+          .default([]),
+        activeVariantLabels: z
+          .array(z.string().max(MAX_ENTITY_NAME_CHARS))
+          .max(MAX_REFERENCES)
+          .default([]),
+        offscreenCharacters: z
+          .array(z.string().max(MAX_ENTITY_NAME_CHARS))
+          .max(MAX_OFFSCREEN)
+          .default([]),
+        sourceSceneIndex: z.coerce.number().int().min(0).max(1000).default(0),
       }),
     )
-    .min(1),
+    .min(1)
+    .max(MAX_SHOTS),
 });
 
 export type GeneratedShots = z.infer<typeof shotsSchema>;
@@ -307,7 +356,7 @@ function parseWith<T extends z.ZodTypeAny>(
     if (extracted.error === 'no-object') {
       return {
         ok: false,
-        error: `模型没有按 JSON 格式回答（${what}）——它返回的内容里找不到 JSON 对象。`,
+        error: `模型没有按 JSON 格式回答（${what}）：返回的内容里找不到 JSON 对象。`,
         detail: '模型可能直接用自然语言回答了，而不是按要求输出 JSON。再点一次生成通常能好；反复如此就换一个模型。',
         raw,
       };

@@ -123,11 +123,26 @@ export const useAppStore = create<AppState>((set, get) => ({
   saveError: null,
 
   setProject: (project) => {
-    set({
-      project,
-      report: project ? runChecks(project) : null,
-      dirty: false,
-    });
+    /*
+      为什么这里还要兜一层异常：
+      数据在 storage 层已经做过归一化（容器 + 元素），理论上下游都跑得动。
+      但导入/打开是本项目里**唯一**把外部文件变成项目对象的入口，
+      而检查引擎的第一个异常点会落在「某个元素缺字段」上——只要漏一个，
+      `runChecks` 就会抛，而它是在 `set()` 之前同步执行的：
+      用户点了没反应、项目也没打开，也看不到原因。
+      宁可先把项目放进去、把检查报告留空（界面上至少能看到内容），
+      也不要把整次打开/导入变成一次没有反馈的失败。
+    */
+    let report: ReturnType<typeof runChecks> | null = null;
+    if (project) {
+      try {
+        report = runChecks(project);
+      } catch {
+        // 检查可以重跑（refreshChecks），打开项目不能重来；先保住项目本身
+        report = null;
+      }
+    }
+    set({ project, report, dirty: false });
   },
 
   patchProject: (patch) => {

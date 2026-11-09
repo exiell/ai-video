@@ -1,5 +1,17 @@
 import Dexie, { type Table } from 'dexie';
-import type { Asset, Project } from '../../types/model';
+import type {
+  Asset,
+  CameraMove,
+  CharacterCard,
+  ContinuityLock,
+  LockAspect,
+  Project,
+  SceneCard,
+  Shot,
+  ShotSize,
+  StoryScene,
+  Variant,
+} from '../../types/model';
 import { SCHEMA_VERSION } from '../../types/model';
 
 /**
@@ -192,47 +204,237 @@ export async function estimateUsage(): Promise<{ usage: number; quota: number } 
  * 所以这里不做「校验后拒绝」（那会让用户打不开自己的项目），
  * 而是**补齐缺失的容器字段**：数组补成空数组、对象补成空对象。
  * 缺的东西会在检查单里如实报出来，而不是让页面崩掉。
+ *
+ * ===========================================================================
+ * 【v0.54 扩到「元素级」】
+ * ===========================================================================
+ * 只补容器是不够的。`characters: [null]` 这种文件容器是数组、JSON 合法，
+ * 但检查引擎在第一处 `character.variants.map(...)` 就会抛异常；
+ * 导入方如果没有 catch，用户看到的就是「点了没反应」。
+ *
+ * 所以这里对每个数组元素也做一次**最小结构修复**：
+ *  - `null` 或根本不是对象 → 丢弃（保留它只会让下游每处都要防御）
+ *  - 缺 `id` → 补一个本地生成的 id（对象还在，用户的内容不会丢）
+ *  - 缺检查引擎与页面都会读的字段 → 补空字符串 / 空数组 / 合法枚举默认值
+ *
+ * 注意这只是「能跑」的下限，不是完整校验：导入入口会先做元素级校验并给出
+ * 明确的错误消息（见 `parseImportedProject`），只有加载本机旧数据才走修复。
  */
-export function normalizeProject(input: unknown): Project {
-  const raw = (typeof input === 'object' && input !== null ? input : {}) as Record<string, unknown>;
-  const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
-  const obj = (v: unknown): Record<string, unknown> =>
-    typeof v === 'object' && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : {};
-  const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-  const brief = obj(raw.brief);
-  const story = obj(raw.story);
+function asRecordArray(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value) ? value.filter(isRecord) : [];
+}
+
+function text(value: unknown, fallback = ''): string {
+  return typeof value === 'string' ? value : fallback;
+}
+
+function finiteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function textArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback;
+}
+
+const CHARACTER_ROLES = ['protagonist', 'antagonist', 'supporting', 'cameo'] as const;
+const LOCK_ASPECTS: readonly LockAspect[] = ['look', 'geography', 'lighting', 'prop', 'composition'];
+const SHOT_SIZES: readonly ShotSize[] = [
+  'extreme-wide',
+  'wide',
+  'full',
+  'medium',
+  'close-up',
+  'extreme-close-up',
+];
+const CAMERA_MOVES: readonly CameraMove[] = [
+  'static',
+  'push-in',
+  'pull-out',
+  'pan-left',
+  'pan-right',
+  'tilt-up',
+  'tilt-down',
+  'orbit',
+  'tracking',
+  'crane-up',
+  'crane-down',
+  'handheld',
+];
+
+function normalizeVariant(value: unknown): Variant | null {
+  if (!isRecord(value)) return null;
+  return {
+    ...(value as unknown as Variant),
+    id: text(value.id) || newId('variant'),
+    label: text(value.label),
+    changedFeatures: textArray(value.changedFeatures),
+    shotIds: textArray(value.shotIds),
+  };
+}
+
+function normalizeLock(value: unknown): ContinuityLock | null {
+  if (!isRecord(value)) return null;
+  return {
+    ...(value as unknown as ContinuityLock),
+    id: text(value.id) || newId('lock'),
+    label: text(value.label),
+    phrase: text(value.phrase),
+    appliesTo: oneOf(value.appliesTo, LOCK_ASPECTS, 'look'),
+  };
+}
+
+function normalizeCharacter(value: unknown, now: string): CharacterCard | null {
+  if (!isRecord(value)) return null;
+  const identity = isRecord(value.identity) ? value.identity : {};
+  return {
+    ...(value as unknown as CharacterCard),
+    id: text(value.id) || newId('char'),
+    name: text(value.name, '未命名角色'),
+    role: oneOf(value.role, CHARACTER_ROLES, 'supporting'),
+    identity: {
+      ...(identity as unknown as CharacterCard['identity']),
+      face: text(identity.face),
+      hair: text(identity.hair),
+      bodyType: text(identity.bodyType),
+      ageRange: text(identity.ageRange),
+      summary: text(identity.summary),
+      summaryEn: text(identity.summaryEn),
+    },
+    variants: asRecordArray(value.variants)
+      .map(normalizeVariant)
+      .filter((item): item is Variant => item !== null),
+    continuityLocks: asRecordArray(value.continuityLocks)
+      .map(normalizeLock)
+      .filter((item): item is ContinuityLock => item !== null),
+    shotIds: textArray(value.shotIds),
+    schemaVersion: finiteNumber(value.schemaVersion, SCHEMA_VERSION),
+    createdAt: text(value.createdAt, now),
+    updatedAt: text(value.updatedAt, now),
+  };
+}
+
+function normalizeScene(value: unknown, now: string): SceneCard | null {
+  if (!isRecord(value)) return null;
+  const identity = isRecord(value.identity) ? value.identity : {};
+  return {
+    ...(value as unknown as SceneCard),
+    id: text(value.id) || newId('scene'),
+    name: text(value.name, '未命名场景'),
+    identity: {
+      ...(identity as unknown as SceneCard['identity']),
+      placeType: text(identity.placeType),
+      spatialStructure: text(identity.spatialStructure),
+      summary: text(identity.summary),
+      summaryEn: text(identity.summaryEn),
+    },
+    variants: asRecordArray(value.variants)
+      .map(normalizeVariant)
+      .filter((item): item is Variant => item !== null),
+    continuityLocks: asRecordArray(value.continuityLocks)
+      .map(normalizeLock)
+      .filter((item): item is ContinuityLock => item !== null),
+    fixedElements: textArray(value.fixedElements),
+    lightDirection: text(value.lightDirection),
+    mainColor: text(value.mainColor),
+    shotIds: textArray(value.shotIds),
+    schemaVersion: finiteNumber(value.schemaVersion, SCHEMA_VERSION),
+    createdAt: text(value.createdAt, now),
+    updatedAt: text(value.updatedAt, now),
+  };
+}
+
+function normalizeShot(value: unknown, index: number): Shot | null {
+  if (!isRecord(value)) return null;
+  return {
+    ...(value as unknown as Shot),
+    id: text(value.id) || newId('shot'),
+    // 镜号缺了就按数组位置补，保证列表排序与「第 N 镜」的说法不会变成 NaN/undefined
+    number: finiteNumber(value.number, index + 1),
+    duration: finiteNumber(value.duration, 3),
+    shotSize: oneOf(value.shotSize, SHOT_SIZES, 'medium'),
+    cameraPosition: text(value.cameraPosition),
+    cameraMove: oneOf(value.cameraMove, CAMERA_MOVES, 'static'),
+    startState: text(value.startState),
+    action: text(value.action),
+    endState: text(value.endState),
+    dialogue: text(value.dialogue),
+    sound: text(value.sound),
+    mood: text(value.mood),
+    transition: text(value.transition),
+    sceneId: text(value.sceneId),
+    characterIds: textArray(value.characterIds),
+    variantIds: textArray(value.variantIds),
+    activeLockIds: textArray(value.activeLockIds),
+    offscreenCharacters: textArray(value.offscreenCharacters),
+    sourceSceneId: text(value.sourceSceneId),
+  };
+}
+
+function normalizeStoryScene(value: unknown): StoryScene | null {
+  if (!isRecord(value)) return null;
+  return {
+    ...(value as unknown as StoryScene),
+    id: text(value.id) || newId('story-scene'),
+    label: text(value.label, '未命名场次'),
+    summary: text(value.summary),
+  };
+}
+
+export function normalizeProject(input: unknown): Project {
+  const raw = isRecord(input) ? input : {};
+  const brief = isRecord(raw.brief) ? raw.brief : {};
+  const story = isRecord(raw.story) ? raw.story : {};
   const now = new Date().toISOString();
+  const platforms = textArray(brief.platforms);
 
   return {
     ...(raw as unknown as Project),
-    id: str(raw.id, 'untitled'),
-    name: str(raw.name, '未命名项目'),
-    logline: str(raw.logline),
-    schemaVersion: typeof raw.schemaVersion === 'number' ? raw.schemaVersion : SCHEMA_VERSION,
-    createdAt: str(raw.createdAt, now),
-    updatedAt: str(raw.updatedAt, now),
+    id: text(raw.id, 'untitled'),
+    name: text(raw.name, '未命名项目'),
+    logline: text(raw.logline),
+    schemaVersion: finiteNumber(raw.schemaVersion, SCHEMA_VERSION),
+    createdAt: text(raw.createdAt, now),
+    updatedAt: text(raw.updatedAt, now),
     brief: {
       ...(brief as unknown as Project['brief']),
-      platforms: arr(brief.platforms).length > 0 ? (brief.platforms as Project['brief']['platforms']) : ['jimeng'],
-      aspectRatio: str(brief.aspectRatio, '16:9'),
-      targetDuration: typeof brief.targetDuration === 'number' ? brief.targetDuration : 30,
-      styleTone: str(brief.styleTone),
-      styleTags: arr<string>(brief.styleTags),
-      negativePrompt: str(brief.negativePrompt),
+      platforms:
+        platforms.length > 0 ? (platforms as Project['brief']['platforms']) : ['jimeng'],
+      aspectRatio: text(brief.aspectRatio, '16:9'),
+      targetDuration: finiteNumber(brief.targetDuration, 30),
+      styleTone: text(brief.styleTone),
+      styleTags: textArray(brief.styleTags),
+      negativePrompt: text(brief.negativePrompt),
     },
     story: {
       ...(story as unknown as Project['story']),
-      body: str(story.body),
-      charactersNote: str(story.charactersNote),
-      setting: str(story.setting),
-      conflict: str(story.conflict),
-      ending: str(story.ending),
-      scenes: arr(story.scenes),
+      body: text(story.body),
+      charactersNote: text(story.charactersNote),
+      setting: text(story.setting),
+      conflict: text(story.conflict),
+      ending: text(story.ending),
+      scenes: asRecordArray(story.scenes)
+        .map(normalizeStoryScene)
+        .filter((item): item is StoryScene => item !== null),
     },
-    characters: arr(raw.characters),
-    scenes: arr(raw.scenes),
-    shots: arr(raw.shots),
+    characters: asRecordArray(raw.characters)
+      .map((item) => normalizeCharacter(item, now))
+      .filter((item): item is CharacterCard => item !== null),
+    scenes: asRecordArray(raw.scenes)
+      .map((item) => normalizeScene(item, now))
+      .filter((item): item is SceneCard => item !== null),
+    shots: asRecordArray(raw.shots)
+      .map((item, index) => normalizeShot(item, index))
+      .filter((item): item is Shot => item !== null),
   };
 }
 
@@ -243,11 +445,44 @@ export function normalizeProject(input: unknown): Project {
  * 不做完整 Zod 校验的原因：这里的目标是「不能把任意 JSON 当项目直接渲染」，
  * 而不是「拒绝一切不完美的文件」——用户手工改过的项目也该能打开。
  * 所以策略是：**结构不对就明确拒绝，结构对但字段缺失就归一化补齐**。
+ *
+ * 【v0.54 补元素级校验】容器是数组还不够：`characters: [null]` 也过得了容器检查，
+ * 然后检查引擎在 `character.variants.map` 处抛异常，导入方没有 catch 就变成
+ * 「点了没反应」。所以这里在归一化之前先逐个检查必需的对象骨架，
+ * 并且**指出是第几个对象的哪个字段**——用户拿到的是一句能照着改的话，
+ * 而不是一条英文堆栈。
  */
 export interface ImportResult {
   ok: boolean;
   project?: Project;
   error?: string;
+}
+
+/** 各容器元素至少得有什么。缺失时给用户的消息会带上「第几个 + 缺什么」。 */
+const IMPORT_ELEMENT_RULES: { key: string; label: string; requiresName: boolean }[] = [
+  { key: 'characters', label: '角色', requiresName: true },
+  { key: 'scenes', label: '场景', requiresName: true },
+  { key: 'shots', label: '镜头', requiresName: false },
+];
+
+function findElementProblem(
+  list: unknown[],
+  label: string,
+  requiresName: boolean,
+): string | null {
+  for (let index = 0; index < list.length; index += 1) {
+    const item = list[index];
+    if (!isRecord(item)) {
+      return `第 ${index + 1} 个${label}不是一个对象（这一项的格式坏了）。`;
+    }
+    if (text(item.id).trim().length === 0) {
+      return `第 ${index + 1} 个${label}缺少 id。`;
+    }
+    if (requiresName && text(item.name).trim().length === 0) {
+      return `第 ${index + 1} 个${label}缺少 name。`;
+    }
+  }
+  return null;
 }
 
 export function parseImportedProject(raw: string): ImportResult {
@@ -275,6 +510,11 @@ export function parseImportedProject(raw: string): ImportResult {
       return { ok: false, error: `${key} 字段不是数组，文件结构不对。` };
     }
   }
+  // 容器里的元素也要有最小骨架：null / 非对象 / 缺 id 都会让下游崩
+  for (const rule of IMPORT_ELEMENT_RULES) {
+    const problem = findElementProblem(obj[rule.key] as unknown[], rule.label, rule.requiresName);
+    if (problem) return { ok: false, error: problem };
+  }
   if (typeof obj.story !== 'object' || obj.story === null || Array.isArray(obj.story)) {
     return { ok: false, error: 'story 字段不是一个对象，文件结构不对。' };
   }
@@ -282,6 +522,13 @@ export function parseImportedProject(raw: string): ImportResult {
   const storyScenes = (obj.story as Record<string, unknown>).scenes;
   if (storyScenes !== undefined && !Array.isArray(storyScenes)) {
     return { ok: false, error: 'story.scenes 字段不是数组，文件结构不对。' };
+  }
+  if (Array.isArray(storyScenes)) {
+    for (let index = 0; index < storyScenes.length; index += 1) {
+      if (!isRecord(storyScenes[index])) {
+        return { ok: false, error: `story.scenes 里第 ${index + 1} 个场次不是一个对象。` };
+      }
+    }
   }
 
   // 通过校验后仍然归一化一次：缺的可选字段补齐，不让下游各自防御

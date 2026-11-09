@@ -24,7 +24,7 @@ import {
   buildScenePlatePrompt,
   type ImagePromptInput,
 } from '../domain/image/prompts';
-import { deleteAsset, listAssets, listAssetsFor, saveAssets } from '../services/storage';
+import { deleteAsset, estimateUsage, listAssets, listAssetsFor, saveAssets } from '../services/storage';
 import {
   missingBeforeFrames,
   framePrereqMessage,
@@ -394,7 +394,7 @@ export const useImage = create<ImageState>((set, get) => ({
               kind: 'error',
               message: `「${scene?.name ?? '这个场景'}」还没有主视角参考板，出不了反打板。`,
               warnings: [
-                '反打板是把主视角那张转过去，不是重新画一间屋子——重画出来的门会换位置。所以要先有主视角板。',
+                '反打板是把主视角那张转过去，不是重新画一间屋子，重画出来的门会换位置。所以要先有主视角板。',
               ],
             },
           },
@@ -759,9 +759,32 @@ function confirmOverwrite(
       : ASSET_KIND_LABEL[kind];
   return window.confirm(
     `这里已经有 ${sameKind.length} 张「${label}」了。\n\n` +
-      '继续生成会**新增**一张，旧的仍然保留（可以在图库里对比后删掉不要的）。\n\n' +
+      '继续生成会新增一张，旧的仍然保留（可以在图库里对比后删掉不要的）。\n\n' +
       '注意：出图是要花钱的。确定要再生成一张吗？',
   );
+}
+
+/**
+ * 落库前的存储余量预检。
+ *
+ * 为什么是 80%：浏览器配额接近满时，`bulkPut` 失败只是时间问题；等到失败再说，
+ * 用户已经为这张图付过钱了。提前一句提示让他有机会先导出、先清理。
+ * 查询失败（隐私模式 / 不支持 estimate）时返回 null 直接放行——
+ * 一次查询失败不该挡住正常出图。
+ */
+async function storageQuotaWarning(): Promise<string | null> {
+  try {
+    const usage = await estimateUsage();
+    if (!usage || usage.quota <= 0) return null;
+    const ratio = usage.usage / usage.quota;
+    if (ratio < 0.8) return null;
+    return (
+      `本机存储已用掉约 ${Math.round(ratio * 100)}%。图片只会越存越多，` +
+      '建议先到「导出」页备份，再删掉不用的旧图；否则新图可能存不下。'
+    );
+  } catch {
+    return null;
+  }
 }
 
 async function runGeneration(args: RunArgs): Promise<void> {
@@ -838,16 +861,48 @@ async function runGeneration(args: RunArgs): Promise<void> {
   }
 
   const built = toAssets(outcome, { ...draft, model: profile.model ?? profile.name });
+  const quotaWarning = built.assets.length > 0 ? await storageQuotaWarning() : null;
   if (built.assets.length > 0) {
-    await saveAssets(built.assets);
+    /**
+     * 为什么落库必须自己 try/catch。
+     *
+     * 图片是 base64 存进 IndexedDB 的，几十张就会接近浏览器配额。配额满时
+     * `bulkPut` 抛 `QuotaExceededError`，而这里没有 catch 的话：
+     *  - 异常变成 unhandled rejection，界面什么都不显示
+     *  - feedback 还停留在上一条「生成中」之后的状态，用户以为图已经存好了
+     *  - 图只在厂商的临时链接里（24 小时失效），过一会儿就真没了
+     * 项目里的文本落盘有这层保护（store/app.ts 的 persist），图片这条不能少。
+     */
+    try {
+      await saveAssets(built.assets);
+    } catch {
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          [key]: {
+            kind: 'error',
+            message:
+              '图生成出来了，但没能存进本机：本地存储可能满了或不可用。' +
+              '这张图现在只在厂商的临时链接里，24 小时后会失效。' +
+              '先去「导出」页备份已有的图，再在「设置」页删掉一些不用的旧图，然后重试。',
+            warnings: [...built.warnings, ...(quotaWarning ? [quotaWarning] : [])],
+          },
+        },
+      }));
+      return;
+    }
     // 素材存好后立刻刷新图库，用户马上能看到图
-    const refId = draft.refId;
-    const project = useAppStore.getState().project;
-    if (project) {
-      const assets = await listAssetsFor(project.id, refId);
-      set((s) => ({ gallery: { ...s.gallery, [refId]: assets } }));
-      // 总数变了 —— 改风格提示要用它算「有多少张图是旧风格」
-      await get().refreshAssetCount();
+    try {
+      const refId = draft.refId;
+      const project = useAppStore.getState().project;
+      if (project) {
+        const assets = await listAssetsFor(project.id, refId);
+        set((s) => ({ gallery: { ...s.gallery, [refId]: assets } }));
+        // 总数变了 —— 改风格提示要用它算「有多少张图是旧风格」
+        await get().refreshAssetCount();
+      }
+    } catch {
+      // 刷新失败不影响「图已经存好了」这个事实；下次进页面会重新读图库
     }
   }
 
@@ -902,7 +957,7 @@ async function runGeneration(args: RunArgs): Promise<void> {
             `但当前模型最多只收 ${profile.capabilities.maxReferenceImages || 0} 张，` +
             `所以「${droppedLabels.join('」「')}」这一次没用上。` +
             (droppedList.some((item) => item.role === 'scene-plate')
-              ? '这一镜的空间与光线这次只有文字描述——把景别改成全景或更远，工具会优先保住场景参考板。'
+              ? '这一镜的空间与光线这次只有文字描述。把景别改成全景或更远，工具会优先保住场景参考板。'
               : '想让每个角色都用图锁住，可以在「设置」里换成支持 10 张参考图的「多图参考版」；' +
                 '不过官方建议一次 1–3 张，张数多了各项一致性会往下掉，换之前先小样本对比。'),
         ]
@@ -916,6 +971,7 @@ async function runGeneration(args: RunArgs): Promise<void> {
           built.assets.length === 0
             ? 'error'
             : built.warnings.length > 0 ||
+                quotaWarning !== null ||
                 staleWarnings.length > 0 ||
                 fallbackWarnings.length > 0 ||
                 droppedWarnings.length > 0
@@ -925,7 +981,13 @@ async function runGeneration(args: RunArgs): Promise<void> {
           built.assets.length > 0
             ? `${prompt.subjectLabel}已生成并保存到本机${referenceNote}。`
             : '图生成出来了，但没能下载到本地。请稍后重试。',
-        warnings: [...built.warnings, ...staleWarnings, ...fallbackWarnings, ...droppedWarnings],
+        warnings: [
+          ...built.warnings,
+          ...(quotaWarning ? [quotaWarning] : []),
+          ...staleWarnings,
+          ...fallbackWarnings,
+          ...droppedWarnings,
+        ],
       },
     },
   }));

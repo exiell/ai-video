@@ -333,22 +333,22 @@ describe('全链路：从一句话想法到一份可下载的方案', () => {
     // ---- 第六步：导出 ----
     const entries = buildExportManifest(project, report);
     const paths = entries.map((e) => e.path);
-    expect(paths).toContain('分镜表.csv');
-    expect(paths).toContain('角色设定卡.md');
-    expect(paths).toContain('场景设定卡.md');
-    expect(paths).toContain('穿帮检查单.md');
-    expect(paths).toContain('拍摄进度表.md');
+    expect(paths).toContain('参考文档/分镜表.csv');
+    expect(paths).toContain('参考文档/角色设定卡.md');
+    expect(paths).toContain('参考文档/场景设定卡.md');
+    expect(paths).toContain('参考文档/穿帮检查单.md');
+    expect(paths).toContain('参考文档/拍摄进度表.md');
     expect(paths).toContain('项目数据.json');
-    expect(paths.some((p) => p.startsWith('提示词/'))).toBe(true);
+    expect(paths.some((p) => p.startsWith('视频提示词★/'))).toBe(true);
 
     // zip 能真的解开，且内容可读
     const zipped = buildZip(entries);
     const unzipped = unzipSync(zipped);
-    const board = strFromU8(unzipped['分镜表.md']!);
+    const board = strFromU8(unzipped['参考文档/分镜表.md']!);
     expect(board).toContain('便利店之夜');
     expect(board).toContain('第 4 镜');
 
-    const progress = strFromU8(unzipped['拍摄进度表.md']!);
+    const progress = strFromU8(unzipped['参考文档/拍摄进度表.md']!);
     expect(progress).toContain('- [ ] 生成关键帧图');
 
     // 导出的项目数据可以再导入回来
@@ -356,10 +356,15 @@ describe('全链路：从一句话想法到一份可下载的方案', () => {
     expect(restored.shots).toHaveLength(4);
     expect(restored.characters[0]?.continuityLocks).toHaveLength(2);
 
-    const promptFile = entries.find((e) => e.path.startsWith('提示词/'))!;
+    const promptFile = entries.find((e) => e.path.startsWith('视频提示词★/'))!;
     expect(promptFile.content).toContain('英文正文');
     expect(promptFile.content).toContain('中文对照');
-    expect(promptFile.content).toContain('为什么这么写');
+    /*
+      导出的提示词文件只留「拿去粘贴」要用的东西。
+      逐项说明（为什么这么写）在应用内的「提示词」页里，对外发的文件不带，
+      否则每个镜头后面挂一大段解释，用户还得自己一份份删。
+    */
+    expect(promptFile.content).not.toContain('为什么这么写');
   });
 
   it('模型第一次输出坏结构时，整条链路仍然能走通（自动重试）', async () => {

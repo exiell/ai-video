@@ -24,6 +24,13 @@ const LS_PREFS = 'aniguide:prefs';
 const LS_MODEL_OVERRIDES = 'aniguide:model-overrides';
 const LS_KEYS = 'aniguide:keys';
 const SS_KEYS = 'aniguide:keys:session';
+/**
+ * 「不保存到本机」时，代理口令只留在会话存储里。
+ *
+ * 为什么不跟 prefs 一起直接进 localStorage：口令和 API Key 一样属于凭据，
+ * 用户勾了「不保存」之后，屏幕上、磁盘上都不该继续留着它。
+ */
+const SS_PROXY_PASSWORD = 'aniguide:proxy-password:session';
 
 export interface Prefs {
   /**
@@ -68,6 +75,57 @@ function safeParse<T>(raw: string | null, fallback: T): T {
   return fallback;
 }
 
+/** 会话里的代理口令（「不保存到本机」时用） */
+function readSessionProxyPassword(): string {
+  if (typeof sessionStorage === 'undefined') return '';
+  const parsed = safeParse<{ proxyPassword?: unknown }>(
+    sessionStorage.getItem(SS_PROXY_PASSWORD),
+    {},
+  );
+  return typeof parsed.proxyPassword === 'string' ? parsed.proxyPassword : '';
+}
+
+/**
+ * 把已经落到磁盘上的代理口令抹掉。
+ *
+ * 触发场景：用户升级前在磁盘上留过口令，升级后已经勾了「不保存到本机」。
+ * 只在读到的磁盘口令非空时调用一次，避免每次加载都重写 prefs。
+ */
+function stripSavedProxyPassword(prefs: Prefs): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(LS_PREFS, JSON.stringify({ ...prefs, proxyPassword: '' }));
+  } catch {
+    // 写不进去（隐私模式等）不该让设置页崩；内存里的值仍然是会话内可用的
+  }
+}
+
+/**
+ * 写偏好。代理口令跟着「不保存到本机」走：
+ *  - 勾选时：磁盘上的 prefs 里置空，真值放 sessionStorage（关掉浏览器就没了）
+ *  - 不勾时：跟其它偏好一起写磁盘，并清掉会话里的旧副本
+ *
+ * 为什么不干脆把口令也塞进 localStorage：它和 API Key 一样是凭据。
+ * 用户勾「不保存」的意思是「这台电脑上别留」，只清 Key 不清口令等于没做到。
+ */
+function persistPrefs(prefs: Prefs): void {
+  if (typeof localStorage === 'undefined') return;
+  if (prefs.dontSaveKeys) {
+    localStorage.setItem(LS_PREFS, JSON.stringify({ ...prefs, proxyPassword: '' }));
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(
+        SS_PROXY_PASSWORD,
+        JSON.stringify({ proxyPassword: prefs.proxyPassword }),
+      );
+    }
+    return;
+  }
+  localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.removeItem(SS_PROXY_PASSWORD);
+  }
+}
+
 /**
  * 读取偏好，并迁移旧的 `rememberKeys`。
  *
@@ -100,6 +158,16 @@ function readPrefs(): Prefs {
     } catch {
       // 解析失败时保持 safeParse 的结果，不额外处理
     }
+  }
+
+  /*
+    代理口令也遵守「不保存到本机」（v0.54）。
+    顺序很重要：先把磁盘上的旧口令抹掉，再从会话存储取当前会话该用的值。
+    否则「升级后勾了不保存、磁盘里还留着旧口令」这种情况会被静默漏过去。
+  */
+  if (prefs.dontSaveKeys) {
+    if (prefs.proxyPassword.length > 0) stripSavedProxyPassword(prefs);
+    prefs.proxyPassword = readSessionProxyPassword();
   }
   return prefs;
 }
@@ -208,9 +276,8 @@ export const useSettings = create<SettingsState>((set, get) => ({
   setPref: (key, value) => {
     const prefs = { ...get().prefs, [key]: value };
     set({ prefs });
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem(LS_PREFS, JSON.stringify(prefs));
-    }
+    // 代理口令跟着「不保存到本机」走，见 persistPrefs 的注释
+    persistPrefs(prefs);
     /**
      * 「不保存到本机」勾上时，**立刻把已经落盘的 Key 清掉**。
      *

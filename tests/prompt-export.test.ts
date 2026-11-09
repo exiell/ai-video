@@ -127,6 +127,28 @@ describe('导出 · 分镜表', () => {
     expect(csv).toContain('"他说""走"",然后离开"');
   });
 
+  it('**以 = + - @ 开头的单元格被中和，防止表格公式注入**', () => {
+    const p = structuredClone(project);
+    p.shots[0]!.startState = '=HYPERLINK("https://evil.example","点我")';
+    p.shots[1]!.action = '@SUM(1+1)';
+    p.shots[2]!.dialogue = '+cmd|calc';
+    const csv = storyboardToCsv(p);
+    // 表格软件看到前置单引号会按纯文本处理；原文一个字不丢
+    expect(csv).toContain("'=HYPERLINK");
+    expect(csv).toContain("'@SUM");
+    expect(csv).toContain("'+cmd");
+  });
+
+  it('数字字段里的负号不会被当中转公式（-3 是合法数字）', () => {
+    const p = structuredClone(project);
+    p.shots[0]!.startState = '普通文本';
+    const csv = storyboardToCsv(p);
+    expect(csv).toContain("普通文本");
+    // 表头下一行的第二列是时长；不应出现 "'3" 这种把数字当公式的中转
+    const firstRow = csv.split('\r\n')[1]!;
+    expect(firstRow).not.toContain("'3");
+  });
+
   it('Markdown 分镜表包含总时长与每一镜', () => {
     const md = storyboardToMarkdown(project);
     expect(md).toContain('分镜表');
@@ -162,7 +184,7 @@ describe('导出 · 设定卡与检查单', () => {
     const report = runChecks(project);
     const md = checkReportToMarkdown(project, report);
     expect(md).toContain('穿帮检查单');
-    expect(md).toContain('必须修');
+    expect(md).toContain('必改项');
     expect(md).toContain('**为什么**');
     expect(md).toContain('**怎么改**');
     expect(md).toContain('不是「生成出来一定没问题」');
@@ -189,15 +211,15 @@ describe('导出 · 压缩包', () => {
   it('清单包含全部承诺的交付物', () => {
     const entries = buildExportManifest(project, report);
     const paths = entries.map((e) => e.path);
-    expect(paths).toContain('分镜表.csv');
-    expect(paths).toContain('分镜表.md');
-    expect(paths).toContain('角色设定卡.md');
-    expect(paths).toContain('场景设定卡.md');
-    expect(paths).toContain('穿帮检查单.md');
-    expect(paths).toContain('拍摄进度表.md');
+    expect(paths).toContain('参考文档/分镜表.csv');
+    expect(paths).toContain('参考文档/分镜表.md');
+    expect(paths).toContain('参考文档/角色设定卡.md');
+    expect(paths).toContain('参考文档/场景设定卡.md');
+    expect(paths).toContain('参考文档/穿帮检查单.md');
+    expect(paths).toContain('参考文档/拍摄进度表.md');
     expect(paths).toContain('项目数据.json');
     for (const platform of project.brief.platforms) {
-      expect(paths.some((p) => p.startsWith('提示词/'))).toBe(true);
+      expect(paths.some((p) => p.startsWith('视频提示词★/'))).toBe(true);
       void platform;
     }
   });
@@ -216,7 +238,7 @@ describe('导出 · 压缩包', () => {
     expect(zipped.length).toBeGreaterThan(0);
     const unzipped = unzipSync(zipped);
     expect(Object.keys(unzipped).sort()).toEqual(entries.map((e) => e.path).sort());
-    const board = strFromU8(unzipped['分镜表.md']!);
+    const board = strFromU8(unzipped['参考文档/分镜表.md']!);
     expect(board).toContain('第 1 镜');
   });
 

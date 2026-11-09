@@ -67,13 +67,20 @@ export function dataUrlExtension(dataUrl: string, fallback = 'png'): string {
 
 /** 图片在压缩包里的目录：按类型分，一眼能找到 */
 const ASSET_DIR: Record<Asset['kind'], string> = {
-  'character-sheet': '图包/角色/全身多视图',
-  'character-sheet-face': '图包/角色/头部特写',
-  'scene-plate': '图包/场景',
-  'first-frame': '图包/镜头/首帧',
-  'action-peak': '图包/镜头/动作关键帧',
-  'end-frame': '图包/镜头/尾帧',
+  'character-sheet': '图包★/角色/全身多视图',
+  'character-sheet-face': '图包★/角色/头部特写',
+  'scene-plate': '图包★/场景',
+  'first-frame': '图包★/镜头/首帧',
+  'action-peak': '图包★/镜头/动作关键帧',
+  'end-frame': '图包★/镜头/尾帧',
 };
+
+/**
+ * 两个目录名带 ★：**解压后一眼能看出哪些是要拿去用的**。
+ * 其余文件都是回头看才用得上的资料，统一放进「参考文档」。
+ */
+const USER_PROMPT_DIR = '视频提示词★';
+const REFERENCE_DIR = '参考文档';
 
 /** 这张图归属哪个角色 / 场景 / 镜头，用于给图片起个能认出来的名字 */
 function describeAssetTarget(project: Project, asset: Asset): string {
@@ -217,40 +224,110 @@ export interface ExportOptions {
   assets?: Asset[];
 }
 
+/**
+ * 压缩包根目录的一页说明。
+ *
+ * 解压后第一眼要回答的问题只有一个：**哪些文件是现在就要拿去用的**。
+ * ★ 是给这个问题的答案，这里再说一遍，并指出导入要挑哪个文件。
+ *
+ * 【v0.54 · P2-7】说明必须按**实际打包结果**写：
+ * 原来无条件承诺「两个 ★ 目录」和「一致性总览」，而没有任何图片时
+ * 图包★ 与一致性总览根本不存在——用户解压后照着找会以为导出坏了。
+ * 判定依据只能是「实际写进 zip 的图片条目数」，不是 assets 数组长度：
+ * `assetEntries` 会跳过下载失败 / dataUrl 缺失的素材。
+ */
+function bundleReadme(hasImages: boolean, skippedImages: number): string {
+  const lines: string[] = [
+    'AniGuide 导出包',
+    '',
+    hasImages ? '带 ★ 的两个目录是现在就要用的：' : '带 ★ 的目录是现在就要用的：',
+    '  视频提示词★/   每一镜的英文正文，复制到即梦 / 可灵 / Seedance 等平台',
+  ];
+  if (hasImages) {
+    lines.push('  图包★/         已经生成好的角色图、场景板、每镜三帧');
+  }
+  lines.push(
+    '',
+    '其余都在「参考文档」里，是回头看才用得上的资料：',
+    '  分镜表、角色设定卡、场景设定卡、穿帮检查单、拍摄进度表、镜头衔接表、图片提示词' +
+      (hasImages ? '、一致性总览。' : '。'),
+  );
+  if (!hasImages) {
+    // 这句里不要出现目录名本身：说明文件只在**真的有**那个目录时才提它
+    lines.push('', '这个项目还没有可打包的图片，所以没有图片目录，也没有一致性对照表。');
+  }
+  if (skippedImages > 0) {
+    lines.push(
+      '',
+      `注意：有 ${skippedImages} 张图没能放进包里（下载失败或数据缺失），导出包里不会包含它们。`,
+    );
+  }
+  lines.push(
+    '',
+    '项目数据.json 是备份：在「导出」页的「项目导入」里选它，可以完整恢复文本部分。',
+    hasImages
+      ? '图片不在 json 里，重装或换电脑时请把整个「图包★」一起带走。'
+      : '图片不在 json 里；之后出了图，记得再导一次包。',
+    '',
+  );
+  return lines.join('\n');
+}
+
 export function buildExportManifest(
   project: Project,
   report: CheckReport,
   options: ExportOptions = {},
 ): ZipEntry[] {
+  /*
+    先算图片条目：说明文件怎么写、图包与一致性总览出不出，都取决于
+    「实际写进 zip 的图片数」，而不是传进来多少张素材。
+  */
+  const assets = options.assets ?? [];
+  const { entries: imageEntries, skipped: skippedImages } = assetEntries(project, assets);
+  const hasImages = imageEntries.length > 0;
+
+  /*
+    顺序按「用户解压后想先看到什么」排：
+      一页说明 → ★ 目录 → 参考文档 → 备份 json
+    zip 解压出来的先后顺序跟着这里走，所以把要用的放前面。
+  */
   const entries: ZipEntry[] = [
-    { path: '分镜表.csv', content: storyboardToCsv(project) },
-    { path: '分镜表.md', content: storyboardToMarkdown(project) },
-    { path: '角色设定卡.md', content: charactersToMarkdown(project) },
-    { path: '场景设定卡.md', content: scenesToMarkdown(project) },
-    { path: '穿帮检查单.md', content: checkReportToMarkdown(project, report) },
-    { path: '拍摄进度表.md', content: shootingProgressToMarkdown(project) },
-    // 衔接表单独出一份：做尾帧、写视频提示词、剪辑时对着它走，比来回翻分镜表快
-    { path: '镜头衔接表.md', content: continuitySheetMarkdown(project) },
+    { path: '先看这里.txt', content: bundleReadme(hasImages, skippedImages) },
   ];
 
   for (const { fileName, content } of promptsToMarkdown(project)) {
-    entries.push({ path: `提示词/${fileName}`, content });
+    entries.push({ path: `${USER_PROMPT_DIR}/${fileName}`, content });
   }
+
+  if (hasImages) {
+    entries.push(...imageEntries);
+  }
+
+  entries.push(
+    { path: `${REFERENCE_DIR}/分镜表.csv`, content: storyboardToCsv(project) },
+    { path: `${REFERENCE_DIR}/分镜表.md`, content: storyboardToMarkdown(project) },
+    { path: `${REFERENCE_DIR}/角色设定卡.md`, content: charactersToMarkdown(project) },
+    { path: `${REFERENCE_DIR}/场景设定卡.md`, content: scenesToMarkdown(project) },
+    { path: `${REFERENCE_DIR}/穿帮检查单.md`, content: checkReportToMarkdown(project, report) },
+    { path: `${REFERENCE_DIR}/拍摄进度表.md`, content: shootingProgressToMarkdown(project) },
+    // 衔接表单独出一份：做尾帧、写视频提示词、剪辑时对着它走，比来回翻分镜表快
+    { path: `${REFERENCE_DIR}/镜头衔接表.md`, content: continuitySheetMarkdown(project) },
+  );
 
   /**
    * 图片提示词（v0.43）。
    *
-   * 单独一份，因为它和「提示词/」下的视频提示词是两种东西：
+   * 单独一份，因为它和「视频提示词★」下的视频提示词是两种东西：
    * 那些是每镜一段、拿去生成视频的；这一份是角色/场景/三帧的出图依据。
    * 有了它，用户可以用本工具没接的模型出图。
    */
-  entries.push({ path: '图片提示词.md', content: imagePromptsToMarkdown(project) });
+  entries.push({ path: `${REFERENCE_DIR}/图片提示词.md`, content: imagePromptsToMarkdown(project) });
 
-  const assets = options.assets ?? [];
-  if (assets.length > 0) {
-    entries.push({ path: '一致性总览.md', content: consistencyReportMarkdown(project, assets) });
-    const { entries: imageEntries } = assetEntries(project, assets);
-    entries.push(...imageEntries);
+  if (hasImages) {
+    entries.push({
+      path: `${REFERENCE_DIR}/一致性总览.md`,
+      content: consistencyReportMarkdown(project, assets),
+    });
   }
 
   entries.push({

@@ -11,24 +11,37 @@ import {
 /**
  * 导出引擎（方案.md v0.6 §7.2 任务 7）
  *
- * 交付物清单（§1.5）：
- *  - 分镜表.csv / .md
- *  - 角色设定卡.md
- *  - 场景设定卡.md
- *  - 提示词/各平台.md        ← 英文正文 + 中文对照 + 逐项说明
- *  - 穿帮检查单.md
- *  - 拍摄进度表.md
+ * v0.54 起的目录分工（压缩包内的实际结构见 `bundle.ts` 的 `buildExportManifest`）：
+ *  - 先看这里.txt             一页说明：哪些是现在要用的、导入挑哪个文件
+ *  - 视频提示词★/各平台.md    每镜英文正文 + 中文对照，直接复制到平台
+ *  - 图包★/                   角色形象图、场景板、每镜三帧（有图时才生成）
+ *  - 参考文档/                分镜表.csv/.md、角色设定卡.md、场景设定卡.md、
+ *                            穿帮检查单.md、拍摄进度表.md、镜头衔接表.md、
+ *                            图片提示词.md、一致性总览.md（有图时）
+ *  - 项目数据.json            备份与重新导入用
+ *
+ * 注意：这个文件里的 Markdown 生成函数只管「内容」，「放在哪个目录」由 bundle.ts 决定。
+ * 改目录或文件清单时两个文件一起看。
  */
 
 // ---------------------------------------------------------------------------
 // 工具
 // ---------------------------------------------------------------------------
 
-/** CSV 字段转义：含逗号、引号、换行时用双引号包裹 */
+/**
+ * CSV 字段转义：含逗号、引号、换行时用双引号包裹。
+ *
+ * 【v0.54 · P2-3】再中和公式注入：表格软件（Excel / 飞书 / LibreOffice）会把
+ * 以 `= + - @` 或 Tab/CR 开头的单元格当**公式执行**（CSV injection / CWE-1236）。
+ * 分镜内容来自用户输入，也可能来自导入的他人项目文件，所以导出时必须当不可信内容处理。
+ * 前置一个单引号：表格会按纯文本显示，内容一个字不丢。
+ */
 function csvCell(value: string | number | undefined): string {
-  const s = value === undefined ? '' : String(value);
-  if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-  return s;
+  const raw = value === undefined ? '' : String(value);
+  // 只对字符串做中转。数字字段（镜号、时长）里的 -3 是合法数字，不是公式。
+  const guarded = typeof value === 'string' && /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw;
+  if (/[",\n\r]/.test(guarded)) return `"${guarded.replace(/"/g, '""')}"`;
+  return guarded;
 }
 
 function csvRow(cells: (string | number | undefined)[]): string {
@@ -281,9 +294,9 @@ export function scenesToMarkdown(project: Project): string {
 // ---------------------------------------------------------------------------
 
 const SEVERITY_LABEL: Record<string, string> = {
-  error: '必须修',
-  warning: '建议修',
-  info: '看一眼',
+  error: '必改项',
+  warning: '建议项',
+  info: '参考项',
 };
 
 export function checkReportToMarkdown(project: Project, report: CheckReport): string {
@@ -293,7 +306,7 @@ export function checkReportToMarkdown(project: Project, report: CheckReport): st
   out.push(`检查时间：${new Date(report.checkedAt).toLocaleString('zh-CN')}`);
   out.push('');
   out.push(
-    `结果：**${report.counts.error}** 个必须修 · **${report.counts.warning}** 个建议修 · **${report.counts.info}** 个可以看一眼`,
+    `结果：**${report.counts.error}** 个必改项 · **${report.counts.warning}** 个建议项 · **${report.counts.info}** 个参考项`,
   );
   out.push('');
   out.push('> 这份单子检查的是「该一致的地方有没有写下来」，不是「生成出来一定没问题」。');
@@ -542,7 +555,7 @@ export function imagePromptsToMarkdown(project: Project): string {
     out.push('');
     out.push('> 首帧是图生视频的输入图；动作关键帧决定动作的力度与节奏；');
     out.push('> 尾帧是下一镜首帧的接续点，也是首尾帧视频的收尾锚点。');
-    out.push('> **同一镜的三帧要一起出**——只出后两帧，它们就没有首帧当构图锚点了。');
+    out.push('> **同一镜的三帧要一起出**。只出后两帧，它们就没有首帧当构图锚点了。');
     out.push('');
     const frames: { kind: 'first-frame' | 'action-peak' | 'end-frame'; label: string }[] = [
       { kind: 'first-frame', label: '首帧' },
@@ -575,10 +588,10 @@ export function promptsToMarkdown(project: Project): { fileName: string; content
   const bundles = buildAllPrompts(project);
   return bundles.map(({ platform, lines }) => {
     const out: string[] = [];
-    out.push(`# ${project.name} · ${PLATFORM_LABEL[platform]} 提示词`);
+    out.push(`# ${project.name} · ${PLATFORM_LABEL[platform]} 视频提示词`);
     out.push('');
-    out.push('> 每镜分三块：**英文正文**（直接复制去平台）、**中文对照**（看懂自己要生成什么）、');
-    out.push('> **逐项说明**（每个片段为什么这么写）。正文里已经带了连续性锁，不要删。');
+    out.push('> 复制每镜的「英文正文」去平台。正文已经带着连续性锁，不要删。');
+    out.push('> 「中文对照」是给你自己看的。');
     out.push('');
     out.push(`画幅：${project.brief.aspectRatio || '未设置'}`);
     if (project.brief.negativePrompt) {
@@ -606,15 +619,11 @@ export function promptsToMarkdown(project: Project): { fileName: string; content
       out.push(prompt.zh);
       out.push('```');
       out.push('');
-      if (prompt.notes.length > 0) {
-        out.push('### 为什么这么写');
-        out.push('');
-        for (const note of prompt.notes) {
-          out.push(`- **${note.label}** \`${note.fragment}\``);
-          out.push(`  - ${note.reason}`);
-        }
-        out.push('');
-      }
+      /*
+        这里曾经跟着一段「为什么这么写」：逐片段列出 label + fragment + reason。
+        它对外发出去的文件没有用——用户要的是能直接粘贴的正文；
+        想看逐项说明，应用内的「提示词」页一直在，比这个文件还全。
+      */
     }
     return { fileName: `${PLATFORM_LABEL[platform]}.md`, content: out.join('\n') };
   });

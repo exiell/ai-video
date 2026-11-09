@@ -1,6 +1,12 @@
 import type { Asset, ImageRequest, ImageResult, ModelProfile } from '../../types/model';
 import { SCHEMA_VERSION } from '../../types/model';
-import { request, buildImagePayloadFor, extractImageUrlsFor, type TransportConfig } from '../gateway';
+import {
+  request,
+  buildImagePayloadFor,
+  extractImageUrlsFor,
+  readResponseTextLimited,
+  type TransportConfig,
+} from '../gateway';
 import {
   extractDashScopeTaskId,
   parseDashScopeTaskStatus,
@@ -30,6 +36,19 @@ import { newId } from '../storage';
 // ---------------------------------------------------------------------------
 // 下载并转 base64
 // ---------------------------------------------------------------------------
+
+/**
+ * 单张图片的下载上限（30 MB）。
+ *
+ * 为什么要有：图片 URL 来自厂商响应，而用户可能填了代理。恶意/被篡改的代理
+ * 可以让这个 URL 指向一个巨大的文件，浏览器会把它整个读进内存再转 base64
+ * （体积还会再涨 1/3）。30 MB 足够覆盖正常的高清关键帧。
+ */
+export const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
+
+function imageTooLargeMessage(): string {
+  return '这张图超过 30 MB，已跳过保存。它可能不是一张正常的图片，或者厂商返回了异常内容。';
+}
 
 export interface PrefetchOptions {
   fetchImpl?: typeof fetch;
@@ -61,7 +80,16 @@ export async function prefetchImage(
     if (!response.ok) {
       throw new Error(`下载图片失败：HTTP ${response.status}`);
     }
+    // 先看响应头，能提前拒绝就不下载；没有 Content-Length 时下面还要按实际大小再查一次
+    const headers = (response as { headers?: { get?: (name: string) => string | null } }).headers;
+    const declared = Number(headers?.get?.('content-length') ?? '');
+    if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) {
+      throw new Error(imageTooLargeMessage());
+    }
     const rawBlob = await response.blob();
+    if (rawBlob.size > MAX_IMAGE_BYTES) {
+      throw new Error(imageTooLargeMessage());
+    }
     const mimeType = rawBlob.type || 'image/png';
     // 有些存储返回的 blob 没有 type，FileReader 会给出 application/octet-stream。
     // 那会让 dataUrl 无法作为图片直接渲染，所以先补上正确的类型再转。
@@ -310,6 +338,8 @@ function describeGatewayFailure(error: unknown): string {
 
 const POLL_INTERVAL_MS = 3_000;
 const POLL_TIMEOUT_MS = 180_000;
+/** 单次查询的超时（总时限之外，防止某一次 GET 挂死） */
+const POLL_REQUEST_TIMEOUT_MS = 30_000;
 
 async function pollDashScopeTask(
   profile: ModelProfile,
@@ -327,11 +357,34 @@ async function pollDashScopeTask(
 
   while (Date.now() - started < POLL_TIMEOUT_MS) {
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-    const response = await fetchImpl(taskUrl, {
-      method: 'GET',
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    const text = await response.text();
+    /**
+     * 【v0.54】每次查询也要有超时与读取上限。
+     *
+     * 原来这个 GET 既没有 signal 也没有 body 上限：网络半断时它会永久 pending，
+     * 而外层 while 的时间判断根本轮不到执行。顺带把响应读取换成网关那套
+     * 8 MB 上限，和主请求保持一致。
+     */
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), POLL_REQUEST_TIMEOUT_MS);
+    let text: string;
+    try {
+      const response = await fetchImpl(taskUrl, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`查询生成任务失败：HTTP ${response.status}`);
+      }
+      text = await readResponseTextLimited(response);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('查询生成任务超时。任务可能还在厂商那边跑，稍后可以去平台控制台看结果。');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
     const parsed = parseDashScopeTaskStatus(safeJson(text));
     if (parsed.status === 'SUCCEEDED') return parsed.urls;
     if (parsed.status === 'FAILED' || parsed.status === 'CANCELED') {

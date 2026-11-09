@@ -75,7 +75,7 @@ describe('图包 · 目录与命名', () => {
     ]);
     expect(entries).toHaveLength(1);
     const path = entries[0]!.path;
-    expect(path.startsWith('图包/角色/头部特写/')).toBe(true);
+    expect(path.startsWith('图包★/角色/头部特写/')).toBe(true);
     expect(path).toContain('林冲');
     expect(path).toMatch(/\.png$/);
   });
@@ -92,12 +92,12 @@ describe('图包 · 目录与命名', () => {
     const dirs = entries.map((e) => e.path.slice(0, e.path.lastIndexOf('/')));
     expect(new Set(dirs)).toEqual(
       new Set([
-        '图包/角色/全身多视图',
-        '图包/角色/头部特写',
-        '图包/场景',
-        '图包/镜头/首帧',
-        '图包/镜头/动作关键帧',
-        '图包/镜头/尾帧',
+        '图包★/角色/全身多视图',
+        '图包★/角色/头部特写',
+        '图包★/场景',
+        '图包★/镜头/首帧',
+        '图包★/镜头/动作关键帧',
+        '图包★/镜头/尾帧',
       ]),
     );
   });
@@ -190,18 +190,18 @@ describe('导出清单 · 含图包', () => {
 
   it('没有图片时清单与原来一致（不凭空多出图包）', () => {
     const paths = buildExportManifest(sampleProject, report).map((e) => e.path);
-    expect(paths).toContain('分镜表.csv');
+    expect(paths).toContain('参考文档/分镜表.csv');
     expect(paths).toContain('项目数据.json');
-    expect(paths).not.toContain('一致性总览.md');
-    expect(paths.some((p) => p.startsWith('图包/'))).toBe(false);
+    expect(paths).not.toContain('参考文档/一致性总览.md');
+    expect(paths.some((p) => p.startsWith('图包★/'))).toBe(false);
   });
 
   it('有图片时清单里多出图包与一致性总览', () => {
     const paths = buildExportManifest(sampleProject, report, {
       assets: [makeAsset('character-sheet-face', 'ch-linchong')],
     }).map((e) => e.path);
-    expect(paths).toContain('一致性总览.md');
-    expect(paths.some((p) => p.startsWith('图包/'))).toBe(true);
+    expect(paths).toContain('参考文档/一致性总览.md');
+    expect(paths.some((p) => p.startsWith('图包★/'))).toBe(true);
   });
 
   it('图片条目走二进制，文本条目走字符串', () => {
@@ -209,7 +209,7 @@ describe('导出清单 · 含图包', () => {
       assets: [makeAsset('character-sheet', 'ch-linchong')],
     });
     const image = entries.find((e) => e.bytes);
-    const text = entries.find((e) => e.path === '分镜表.md');
+    const text = entries.find((e) => e.path === '参考文档/分镜表.md');
     expect(image?.bytes).toBeInstanceOf(Uint8Array);
     expect(text?.bytes).toBeUndefined();
     expect(text?.content.length).toBeGreaterThan(0);
@@ -236,7 +236,7 @@ describe('打包 · 图片以真实二进制进 zip', () => {
     const zip = buildZip(entries);
     const unzipped = unzipSync(zip);
 
-    const imagePath = Object.keys(unzipped).find((p) => p.startsWith('图包/'))!;
+    const imagePath = Object.keys(unzipped).find((p) => p.startsWith('图包★/'))!;
     expect(imagePath).toBeDefined();
     const imageBytes = unzipped[imagePath]!;
     expect([imageBytes[0], imageBytes[1], imageBytes[2], imageBytes[3]]).toEqual([
@@ -244,10 +244,10 @@ describe('打包 · 图片以真实二进制进 zip', () => {
     ]);
 
     // 文本仍然是可读的中文
-    const board = strFromU8(unzipped['分镜表.md']!);
+    const board = strFromU8(unzipped['参考文档/分镜表.md']!);
     expect(board).toContain('分镜表');
 
-    const consistency = strFromU8(unzipped['一致性总览.md']!);
+    const consistency = strFromU8(unzipped['参考文档/一致性总览.md']!);
     expect(consistency).toContain('一致性总览');
   });
 
@@ -261,7 +261,7 @@ describe('打包 · 图片以真实二进制进 zip', () => {
     );
     const zip = buildZip(buildExportManifest(sampleProject, report, { assets }));
     const unzipped = unzipSync(zip);
-    const imagePaths = Object.keys(unzipped).filter((p) => p.startsWith('图包/'));
+    const imagePaths = Object.keys(unzipped).filter((p) => p.startsWith('图包★/'));
     expect(imagePaths).toHaveLength(6);
     expect(new Set(imagePaths).size).toBe(6);
   });
@@ -280,7 +280,7 @@ describe('打包 · 图片以真实二进制进 zip', () => {
 
     expect(withImage.length).toBeGreaterThan(withoutImages.length);
     const unzipped = unzipSync(withImage);
-    const imagePath = Object.keys(unzipped).find((p) => p.startsWith('图包/'))!;
+    const imagePath = Object.keys(unzipped).find((p) => p.startsWith('图包★/'))!;
     // 200KB 的 base64 解出来应当是 200000 字节左右，且首字节是 0x00（'A' 解码后）
     expect(unzipped[imagePath]!.length).toBeGreaterThan(190_000);
   });

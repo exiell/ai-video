@@ -455,6 +455,28 @@ export interface GenerateContext {
 }
 
 /**
+ * 各生成任务的输出上限（token）。
+ *
+ * 为什么要显式设上限：原来请求里没有 `max_tokens`，回复长度完全由厂商/端点决定。
+ * 正常模型有服务端上限，但用户可以把请求指向自己的代理——一个不设限的端点
+ * 返回超长 JSON 时，会顺着「读取 → JSON.parse → zod 校验」一路放大内存开销
+ * （zod 那条超长数组公告的放大器就是它）。给一个**正常任务足够用**的上限，
+ * 超了就让请求在厂商侧被截断/拒绝，而不是在我们这边吃满内存。
+ *
+ * 取值依据（生成物通常远小于这些数）：
+ *  - 故事：正文 + 四格说明 + 场次，约 800–2000 token
+ *  - 角色与场景：每个对象十几个字段，常见 2–6 个对象
+ *  - 分镜：每镜十几个字段，示例项目 7 镜；200 镜的上限场景给到 8000 才够
+ *  - 风格词：最多 16 条短句
+ */
+const MAX_TOKENS_BY_TASK = {
+  story: 3_000,
+  assets: 5_000,
+  shots: 8_000,
+  styleTags: 1_200,
+} as const;
+
+/**
  * 通用生成流程。
  *
  * 第二次尝试时会把上一次的失败原因**回灌给模型**——
@@ -464,6 +486,7 @@ async function generateWithRetry<T>(
   messages: ChatMessage[],
   parse: (raw: string) => ParseOutcome<T>,
   ctx: GenerateContext,
+  maxTokens: number,
 ): Promise<GenerateOutcome<T>> {
   const maxAttempts = ctx.maxAttempts ?? 2;
   const warnings: string[] = [];
@@ -484,6 +507,7 @@ async function generateWithRetry<T>(
           messages: conversation,
           jsonMode: true,
           temperature: 0.7,
+          maxTokens,
         }),
         ...(ctx.transport ? { transport: ctx.transport } : {}),
         ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
@@ -550,20 +574,40 @@ async function generateWithRetry<T>(
 }
 
 export function generateStory(project: Project, ctx: GenerateContext) {
-  return generateWithRetry<GeneratedStory>(buildStoryMessages(project), parseStory, ctx);
+  return generateWithRetry<GeneratedStory>(
+    buildStoryMessages(project),
+    parseStory,
+    ctx,
+    MAX_TOKENS_BY_TASK.story,
+  );
 }
 
 export function generateAssets(project: Project, ctx: GenerateContext) {
-  return generateWithRetry<GeneratedAssets>(buildAssetsMessages(project), parseAssets, ctx);
+  return generateWithRetry<GeneratedAssets>(
+    buildAssetsMessages(project),
+    parseAssets,
+    ctx,
+    MAX_TOKENS_BY_TASK.assets,
+  );
 }
 
 export function generateShots(project: Project, ctx: GenerateContext) {
-  return generateWithRetry<GeneratedShots>(buildShotsMessages(project), parseShots, ctx);
+  return generateWithRetry<GeneratedShots>(
+    buildShotsMessages(project),
+    parseShots,
+    ctx,
+    MAX_TOKENS_BY_TASK.shots,
+  );
 }
 
 /** 从中文风格倾向生成英文风格关键词。不需要项目其它内容，只读 brief。 */
 export function generateStyleTags(project: Project, ctx: GenerateContext) {
-  return generateWithRetry<GeneratedStyleTags>(buildStyleMessages(project), parseStyleTags, ctx);
+  return generateWithRetry<GeneratedStyleTags>(
+    buildStyleMessages(project),
+    parseStyleTags,
+    ctx,
+    MAX_TOKENS_BY_TASK.styleTags,
+  );
 }
 
 /** 给界面用：统一的失败文案，必须给出「接下来做什么」 */
@@ -573,7 +617,7 @@ export function describeFailure(outcome: GenerateOutcome<unknown>): string {
     outcome.error ?? '生成失败。',
     '',
     '三个选择：',
-    '1. 再点一次生成——模型偶尔会抽风，重试通常就好了（本工具已自动重试过一次）。',
+    '1. 再点一次生成：模型偶尔会抽风，重试通常就好了（本工具已自动重试过一次）。',
     '2. 去「设置」页换一个模型。不同模型对「只输出 JSON」的遵守程度差别很大，' +
       '有些模型即使被要求输出 JSON，也习惯在外面包一层说明文字。',
     '3. 手动填写。示例项目里有一份完整的结构可以照着抄，填完照样能用。',

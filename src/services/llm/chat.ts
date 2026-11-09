@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { buildChatPayload, extractChatContent, request, type ChatMessage } from '../gateway';
 import type { GenerateContext, GenerateOutcome } from './generate';
 import type { ChatEditProposal, ChatReply } from '../../domain/chat/edits';
-import { EDITABLE_FIELDS, readField } from '../../domain/chat/edits';
+import { EDITABLE_FIELDS, MAX_EDITS, readField } from '../../domain/chat/edits';
 import type { Project } from '../../types/model';
 
 /**
@@ -28,33 +28,59 @@ import type { Project } from '../../types/model';
 // 模型输出契约
 // ---------------------------------------------------------------------------
 
+/**
+ * 输出上限（v0.54 · P2-1）：聊天回复同样是外部输入。
+ * 上限比生成任务更宽（用户可能一次要求大段重写），但要拦住异常超长内容。
+ */
+const MAX_REPLY_CHARS = 8_000;
+const MAX_EDIT_TEXT_CHARS = 8_000;
+const MAX_REASON_CHARS = 2_000;
+const MAX_TITLE_CHARS = 200;
+const MAX_CREATE_FIELDS = 30;
+
 export const chatEditSchema = z.object({
   /** 做什么：改 / 新建 / 删除。缺省视为「改」，兼容模型偶尔漏写 */
   op: z.enum(['set', 'create', 'delete']).default('set'),
   target: z.object({
     kind: z.enum(['shot', 'character', 'scene', 'story', 'brief']),
     /** set / delete 必填；create 时留空 */
-    id: z.string().optional(),
+    id: z.string().max(200).optional(),
     /** 仅 set 用 */
-    field: z.string().optional(),
+    field: z.string().max(200).optional(),
   }),
   /** 一句话说明改什么（给人看，不要字段名） */
-  title: z.string().min(1),
+  title: z.string().min(1).max(MAX_TITLE_CHARS),
   /** 为什么这么改 */
-  reason: z.string().default(''),
+  reason: z.string().max(MAX_REASON_CHARS).default(''),
   /** 修改后的**完整内容**（set 用）。create 时留空，内容放 createFields */
-  after: z.union([z.string(), z.number(), z.array(z.string())]).optional(),
-  /** 新建时的字段内容（create 用）；**不要给 id**，程序会生成 */
-  createFields: z.record(z.string(), z.unknown()).optional(),
+  after: z
+    .union([
+      z.string().max(MAX_EDIT_TEXT_CHARS),
+      z.number(),
+      z.array(z.string().max(MAX_EDIT_TEXT_CHARS)).max(MAX_CREATE_FIELDS),
+    ])
+    .optional(),
+  /**
+   * 新建时的字段内容（create 用）；**不要给 id**，程序会生成。
+   *
+   * 键的数量也要卡住：`z.record` 本身不限制键数，一个 10 万键的对象
+   * 会让下面的对象遍历与校验都变慢。30 个字段远多于新建卡片需要的数量。
+   */
+  createFields: z
+    .record(z.string().max(200), z.unknown())
+    .refine((value) => Object.keys(value).length <= MAX_CREATE_FIELDS, {
+      message: `新建字段最多 ${MAX_CREATE_FIELDS} 个`,
+    })
+    .optional(),
   /** 可能的副作用 */
-  sideEffect: z.string().optional(),
+  sideEffect: z.string().max(MAX_REASON_CHARS).optional(),
 });
 
 export const chatReplySchema = z.object({
-  reply: z.string().min(1),
+  reply: z.string().min(1).max(MAX_REPLY_CHARS),
   /** 这次改动是单点还是牵动多处 —— 只用于界面上的措辞 */
   scope: z.enum(['single', 'related']).default('single'),
-  edits: z.array(chatEditSchema).default([]),
+  edits: z.array(chatEditSchema).max(MAX_EDITS).default([]),
 });
 
 export type GeneratedChatReply = z.infer<typeof chatReplySchema>;
@@ -555,6 +581,11 @@ async function generateRaw(
            * 因为那是用户已经认可的内容。
            */
           temperature: 0.4,
+          /**
+           * 一次改稿最多 40 条（MAX_EDITS），每条带标题、理由、完整替换文本；
+           * 给 4000 token 是留足余量，同时防住「不设上限的端点返回超长回复」。
+           */
+          maxTokens: 4_000,
         }),
         ...(ctx.transport ? { transport: ctx.transport } : {}),
         ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
