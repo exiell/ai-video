@@ -1,0 +1,37 @@
+# 依赖安全审计（不阻塞日常 CI）
+#
+# 为什么单独开一个：pnpm audit 的结论有时间性——上游今天没有公告，不代表下周
+# 没有。把它挂进每次 push 的 CI，早晚会有一个和本次改动无关的红灯，红灯就失去
+# 意义。这里每周一跑一次，也可以在 Actions 页面手动触发。
+#
+# 只对 high / critical 失败：low / moderate 的修复通常要等上游发版，
+# 天天红着没人看。审计结果为 0 时保持安静。
+name: Dependency audit
+
+on:
+  schedule:
+    # 每周一 02:00 UTC（北京时间 10:00）
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm（版本读 package.json 的 packageManager）
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 依赖审计（high 及以上失败；含开发依赖，因为 vitest 这类工具也会在本机执行代码）
+        run: pnpm audit --audit-level=high
