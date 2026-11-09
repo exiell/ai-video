@@ -318,7 +318,7 @@ describe('分镜页 · 接真实检查引擎', () => {
   function brokenProject(): Project {
     const project = structuredClone(sampleProject);
     project.shots = project.shots.slice(0, 2);
-    // 起点清空 → shot-incomplete（必须修，field: startState）
+    // 起点清空 → shot-incomplete（必改项，field: startState）
     project.shots[0]!.startState = '';
     return project;
   }
@@ -338,8 +338,9 @@ describe('分镜页 · 接真实检查引擎', () => {
 
     const el = render(<StoryboardPage />);
     // 镜头的细分区默认收起，先点开这一镜
-    const toggle = [...el.querySelectorAll('button')].find((b) =>
-      (b.textContent ?? '').includes('展开'),
+    // 展开按钮现在是纯图标，按 aria-label 找（顺带钉住图标按钮要有无障碍名）
+    const toggle = [...el.querySelectorAll<HTMLButtonElement>('.expand-toggle')].find((b) =>
+      (b.getAttribute('aria-label') ?? '').includes('展开'),
     );
     expect(toggle).toBeDefined();
     act(() => {
@@ -358,9 +359,9 @@ describe('分镜页 · 接真实检查引擎', () => {
     useAppStore.setState({ project, report: runChecks(project) });
     const el = render(<ChecksPage />);
     const text = el.textContent ?? '';
-    expect(text).toContain('必须修');
-    expect(text).toContain('建议修');
-    expect(text).toContain('看一眼');
+    expect(text).toContain('必改项');
+    expect(text).toContain('建议项');
+    expect(text).toContain('参考项');
     cleanup(el);
   });
 });

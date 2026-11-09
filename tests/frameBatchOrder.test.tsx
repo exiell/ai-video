@@ -234,6 +234,19 @@ describe('批量卡片上的按钮', () => {
     el.remove();
   });
 
+  it('第一个按钮是实心、其余是描边，先点哪个一眼能看出来', () => {
+    const el = render(
+      <BatchGenerateCard tasks={['all-frames', 'first-frame', 'action-peak', 'end-frame']} />,
+    );
+    const buttons = [...el.querySelectorAll('.row button')];
+    expect(buttons.length).toBe(4);
+    expect(buttons[0]!.className).toContain('btn-blue');
+    for (const button of buttons.slice(1)) {
+      expect(button.className).toContain('btn-ai');
+    }
+    el.remove();
+  });
+
   it('数量是 镜头数 × 3', () => {
     const el = render(
       <BatchGenerateCard tasks={['characters', 'scenes', 'all-frames']} />,

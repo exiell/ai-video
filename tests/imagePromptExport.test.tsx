@@ -211,7 +211,7 @@ describe('导出包清单里必须有这份文件', () => {
   it('**压缩包里出现「图片提示词.md」**', () => {
     const project = fresh();
     const entries = buildExportManifest(project, runChecks(project));
-    const hit = entries.find((e) => e.path === '图片提示词.md');
+    const hit = entries.find((e) => e.path === '参考文档/图片提示词.md');
     expect(hit, '导出清单里没有 图片提示词.md').toBeTruthy();
     expect(hit!.content).toContain('# 角色形象图');
   });
@@ -219,8 +219,8 @@ describe('导出包清单里必须有这份文件', () => {
   it('视频提示词和图片提示词是两份东西，互不覆盖', () => {
     const project = fresh();
     const entries = buildExportManifest(project, runChecks(project));
-    const image = entries.filter((e) => e.path === '图片提示词.md');
-    const video = entries.filter((e) => e.path.startsWith('提示词/'));
+    const image = entries.filter((e) => e.path === '参考文档/图片提示词.md');
+    const video = entries.filter((e) => e.path.startsWith('视频提示词★/'));
     expect(image).toHaveLength(1);
     expect(video.length).toBeGreaterThan(0);
     // 两者内容不同：视频提示词是每镜一段的动作描述
@@ -322,9 +322,13 @@ describe('出图按钮旁边要看得到提示词', () => {
     const el = render(<CharactersPage />);
     expect(el.textContent).not.toContain('显示图片提示词');
 
-    const expand = [...el.querySelectorAll('button')].find(
-      (b) => b.textContent?.trim() === '展开',
-    ) as HTMLButtonElement | undefined;
+    /*
+      展开按钮改成了纯图标（文字换成 chevron），所以不能再按文字找。
+      改成按无障碍名找 —— 这同时钉住「图标按钮必须有 aria-label」这条。
+    */
+    const expand = [...el.querySelectorAll<HTMLButtonElement>('.expand-toggle')].find(
+      (b) => b.getAttribute('aria-label')?.includes('展开'),
+    );
     expect(expand, '找不到展开按钮').toBeTruthy();
     act(() => expand!.click());
 

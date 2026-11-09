@@ -62,7 +62,7 @@ export function TermHint({ term }: { term: string }) {
             maxWidth: 380,
             background: 'var(--bg-card)',
             border: '1px solid var(--border-strong)',
-            borderRadius: 8,
+            borderRadius: 'var(--radius)',
             padding: '10px 12px',
             boxShadow: 'var(--shadow)',
             display: 'block',

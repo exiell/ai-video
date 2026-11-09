@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cloneAsNewProject, useAppStore } from '../store/app';
 import { useImage } from '../store/image';
+import { Icon } from '../components/Icon';
 import { sampleProject } from '../data/samples/sampleProject';
 import {
   CAMERA_MOVE_LABEL,
@@ -38,10 +39,6 @@ function fmtSeconds(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function pct(value: number): string {
-  return `${Math.max(0, Math.min(100, Math.round(value)))}%`;
-}
-
 export function HomePage() {
   const navigate = useNavigate();
   const project = useAppStore((s) => s.project);
@@ -55,6 +52,8 @@ export function HomePage() {
 
   const [records, setRecords] = useState<ProjectRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
+  /** 打开存档失败时的提示。不能静默：点了没反应，用户会以为项目丢了。 */
+  const [openError, setOpenError] = useState<string | null>(null);
 
   async function refresh() {
     try {
@@ -141,11 +140,30 @@ export function HomePage() {
     openBlank();
   }
 
+  /**
+   * 打开一条存档。
+   *
+   * loadProject 会读 IndexedDB 再走 normalizeProject + setProject；后两步都可能
+   * 因为旧数据/坏数据抛异常。原样 void 掉的结果是「点了没反应」，用户以为项目没了。
+   * 所以这里整段兜住，失败时在「已有项目」列表上方给人话提示。
+   */
   async function open(id: string) {
-    const next = await loadProject(id);
-    if (!next) return;
-    setProject(next);
-    navigate('/');
+    setOpenError(null);
+    try {
+      const next = await loadProject(id);
+      if (!next) {
+        setOpenError(
+          '这个项目读不出来：本机里没有找到它。可能已经被删除，或者浏览器的本地数据被清理过。',
+        );
+        return;
+      }
+      setProject(next);
+      navigate('/');
+    } catch {
+      setOpenError(
+        '这个项目读不出来。可能是浏览器本地数据损坏，或者项目来自旧版本；可以试试重新导入一次「项目数据.json」。',
+      );
+    }
   }
 
   async function remove(id: string) {
@@ -158,16 +176,12 @@ export function HomePage() {
   const storyboardDone = shots.length > 0 && !durationOff;
   const deliveryDone = shots.length > 0 && errorCount === 0;
 
-  const storyPct = storyDone ? 100 : 0;
-  const settingPct = settingDone ? 100 : 0;
-  const storyboardPct = target > 0 ? (total / target) * 100 : 0;
-  const deliveryPct = deliveryDone ? 100 : shots.length > 0 ? 35 : 0;
 
   // 下一步：按用户真正会卡住的地方排序，而不是按模块编号。
   let next: { title: string; body: string; cta: string; to: string; time: string };
   if (!project) {
     next = {
-      title: '先打开一个项目',
+      title: '项目',
       body: '看一个做完了的例子，或者从零开始写你自己的故事。',
       cta: '看示例项目',
       to: '/',
@@ -175,31 +189,31 @@ export function HomePage() {
     };
   } else if (!storyDone) {
     next = {
-      title: '先把故事写下来',
-      body: '不用写成剧本。谁、在哪、发生了什么、最后停在哪一帧，四句话就够。写完再拆场次。',
+      title: '故事',
+      body: '谁、在哪、发生了什么、停在哪一帧，四句话就够。',
       cta: '去写故事',
       to: '/guide',
       time: '约 3 分钟',
     };
   } else if (!settingDone) {
     next = {
-      title: '先定下人物和场景',
-      body: '每个角色至少锁两条不会变的外观，每个场景记下固定元素和光的方向。后面每一镜都会用到。',
+      title: '角色与场景',
+      body: '每个角色至少锁两条不会变的外观，每个场景记下固定元素和光的方向。',
       cta: '去建设定',
       to: characters.length === 0 ? '/characters' : '/scenes',
       time: '约 5 分钟',
     };
   } else if (shots.length === 0) {
     next = {
-      title: '把故事拆成分镜',
-      body: '让模型先拆一版，每镜只做一件事：起点、动作、终点。拆完再逐镜改，比对着空白页想快得多。',
+      title: '分镜',
+      body: '让模型先拆一版，再逐镜改。',
       cta: '去生成分镜',
       to: '/storyboard',
       time: '约 2 分钟',
     };
   } else if (errorCount > 0) {
     next = {
-      title: `先修这 ${errorCount} 个必须修的问题`,
+      title: '穿帮检查',
       body: '这些问题会让角色或场景在镜头之间对不上。修完才能导出；其余建议可以稍后处理。',
       cta: `去修这 ${errorCount} 条`,
       to: '/checks',
@@ -207,7 +221,7 @@ export function HomePage() {
     };
   } else if (durationOff) {
     next = {
-      title: diff > 0 ? `先减掉 ${fmtSeconds(Math.abs(diff))} 秒` : `再补 ${fmtSeconds(Math.abs(diff))} 秒`,
+      title: '时长',
       body: `现在 ${fmtSeconds(total)} 秒，目标 ${fmtSeconds(target)} 秒。先让总时长对上，再进导出。`,
       cta: '去调分镜',
       to: '/storyboard',
@@ -215,7 +229,7 @@ export function HomePage() {
     };
   } else {
     next = {
-      title: '导出制作包',
+      title: '导出',
       body: '分镜和检查都过了。压缩包里有拍摄进度表、多平台提示词、一致性总览和检查单。',
       cta: '去导出',
       to: '/export',
@@ -229,7 +243,7 @@ export function HomePage() {
       tasks.push({
         key: 'errors',
         tone: 'danger',
-        title: `修 ${errorCount} 个必须修的问题`,
+        title: `必改项 ${errorCount} 个`,
         meta: '穿帮检查里最要紧的一档',
         to: '/checks',
         action: '去修',
@@ -249,7 +263,7 @@ export function HomePage() {
       tasks.push({
         key: 'story',
         tone: 'accent',
-        title: '写一句话故事',
+        title: '故事',
         meta: '先有故事，才能拆场次和镜头',
         to: '/guide',
         action: '去写',
@@ -259,7 +273,7 @@ export function HomePage() {
       tasks.push({
         key: 'setting',
         tone: 'quiet',
-        title: '定角色与场景',
+        title: '角色与场景',
         meta: `${characters.length} 个角色 · ${scenes.length} 个场景`,
         to: '/characters',
         action: '去定',
@@ -269,7 +283,7 @@ export function HomePage() {
       tasks.push({
         key: 'shots',
         tone: 'quiet',
-        title: '生成第一版分镜',
+        title: '分镜',
         meta: '模型起草，你再改',
         to: '/storyboard',
         action: '去拆',
@@ -278,7 +292,7 @@ export function HomePage() {
     tasks.push({
       key: 'prompts',
       tone: 'quiet',
-      title: '看一遍提示词',
+      title: '提示词',
       meta: `${shots.length} 组 · 英文正文 + 中文对照`,
       to: '/prompts',
       action: '去看',
@@ -286,7 +300,7 @@ export function HomePage() {
     tasks.push({
       key: 'export',
       tone: 'quiet',
-      title: '导出制作包',
+      title: '导出',
       meta: '分镜表、提示词、检查单一起带走',
       to: '/export',
       action: '去导出',
@@ -294,12 +308,6 @@ export function HomePage() {
   }
   const visibleTasks = tasks;
   const recentShots = shots.slice(-3);
-
-  function stepClass(done: boolean, current: boolean): string {
-    if (done) return 'stage-cell done';
-    if (current) return 'stage-cell now';
-    return 'stage-cell todo';
-  }
 
   return (
     <div className="home">
@@ -311,7 +319,7 @@ export function HomePage() {
                 {isSample ? '示例项目' : '项目'} · {project.brief.aspectRatio}
               </div>
               <h1>{project.name}</h1>
-              <p className="home-logline">{project.logline || '还没有一句话简介。去「故事」里补上，导出时会用到。'}</p>
+              <p className="home-logline">{project.logline || '还没有一句话简介。'}</p>
               <p className="home-meta">
                 {fmtSeconds(target)} 秒目标 · {shots.length} 个镜头 ·{' '}
                 {project.brief.platforms.map((p) => PLATFORM_LABEL[p]).join(' / ') || '未选平台'}
@@ -322,7 +330,7 @@ export function HomePage() {
                 看分镜
               </Link>
               <Link className="btn" to="/export">
-                导出制作包
+                导出
               </Link>
               {/*
                 【为什么要这个按钮】原来「新建项目」只在没打开项目时出现，
@@ -335,90 +343,66 @@ export function HomePage() {
             </div>
           </header>
 
-          <section className="stage-card" aria-label="四步进度">
-            <div className={stepClass(storyDone, !storyDone)}>
-              <div className="stage-top">
-                <span className="stage-name">故事</span>
-                <span className="stage-state">{storyDone ? '完成' : '待写'}</span>
-              </div>
-              <div className="stage-detail">
-                {storyDone ? (
-                  <>
-                    一句话 + {story?.scenes.length ?? 0} 个场次
-                    <br />
-                    冲突和结局都写清了
-                  </>
-                ) : (
-                  <>
-                    还没有故事
-                    <br />
-                    先写谁、在哪、发生了什么
-                  </>
-                )}
-              </div>
-              <div className="stage-bar">
-                <i style={{ width: pct(storyPct) }} />
-              </div>
-            </div>
-
-            <div className={stepClass(settingDone, storyDone && !settingDone)}>
-              <div className="stage-top">
-                <span className="stage-name">角色与场景</span>
-                <span className="stage-state">{settingDone ? '完成' : '待定'}</span>
-              </div>
-              <div className="stage-detail">
-                {characters.length} 个角色 · {scenes.length} 个场景
-                <br />
-                {characters.length + scenes.length > 0
-                  ? `${characters.reduce((n, c) => n + c.continuityLocks.length, 0) + scenes.reduce((n, s) => n + s.continuityLocks.length, 0)} 条连续性锁`
-                  : '还没有角色与场景卡'}
-              </div>
-              <div className="stage-bar">
-                <i style={{ width: pct(settingPct) }} />
-              </div>
-            </div>
-
-            <div className={stepClass(storyboardDone, settingDone && !storyboardDone)}>
-              <div className="stage-top">
-                <span className="stage-name">分镜</span>
-                <span className="stage-state">
-                  {shots.length === 0 ? '待开始' : storyboardDone ? '时长吻合' : `差 ${fmtSeconds(Math.abs(diff))} 秒`}
-                </span>
-              </div>
-              <div className="stage-detail">
-                {shots.length} 个镜头 · {fmtSeconds(total)} / {fmtSeconds(target)} 秒
-                <br />
-                {shots.length === 0
-                  ? '还没有排时长'
-                  : errorCount > 0
-                    ? `有 ${errorCount} 个必须修`
-                    : '还没有必须修的问题'}
-              </div>
-              <div className="stage-bar">
-                <i style={{ width: pct(storyboardPct) }} />
-              </div>
-            </div>
-
-            <div className={stepClass(deliveryDone, storyboardDone && !deliveryDone)}>
-              <div className="stage-top">
-                <span className="stage-name">交付</span>
-                <span className="stage-state">{deliveryDone ? '可以导出' : '待完成'}</span>
-              </div>
-              <div className="stage-detail">
-                {shots.length > 0 ? `提示词 ${shots.length} 组已生成` : '分镜出来后生成提示词'}
-                <br />
-                {deliveryDone ? '导出包里有全套材料' : shots.length === 0 ? '还早，先把分镜排出来' : `导出前还差 ${errorCount} 个必须修`}
-              </div>
-              <div className="stage-bar">
-                <i style={{ width: pct(deliveryPct) }} />
-              </div>
-            </div>
+          {/*
+            四步进度的紧凑版。改之前是四张等高卡片，每张带进度条和两行说明，
+            占掉第一屏三分之一的竖向空间；而「现在做什么」在下面已经说了。
+            这里只留「走到哪、下一步是谁」，点一下直接进对应页面。
+          */}
+          <section className="stage-strip" aria-label="四步进度">
+            {[
+              {
+                key: 'story',
+                name: '故事',
+                to: '/guide',
+                done: storyDone,
+                prevDone: true,
+                state: storyDone ? '完成' : '待写',
+              },
+              {
+                key: 'setting',
+                name: '角色与场景',
+                to: '/characters',
+                done: settingDone,
+                prevDone: storyDone,
+                state: settingDone ? '完成' : '待定',
+              },
+              {
+                key: 'storyboard',
+                name: '分镜',
+                to: '/storyboard',
+                done: storyboardDone,
+                prevDone: settingDone,
+                state: storyboardDone
+                  ? '时长吻合'
+                  : shots.length === 0
+                    ? '待开始'
+                    : `差 ${fmtSeconds(Math.abs(diff))} 秒`,
+              },
+              {
+                key: 'delivery',
+                name: '交付',
+                to: '/export',
+                done: deliveryDone,
+                prevDone: storyboardDone,
+                state: deliveryDone ? '可以导出' : '待完成',
+              },
+            ].map((step) => (
+              <Link
+                key={step.key}
+                to={step.to}
+                className={`stage-step ${step.done ? 'is-done' : step.prevDone ? 'is-now' : 'is-todo'}`}
+              >
+                <i className="stage-step-dot" aria-hidden="true" />
+                <span className="stage-step-name">{step.name}</span>
+                <span className="stage-step-state">{step.state}</span>
+              </Link>
+            ))}
           </section>
 
           <div className="home-grid">
             <section className="next-card">
               <div className="next-top">
-                <span className="next-label">现在做</span>
+                <span className="next-label">下一步</span>
                 <span className="next-time">{next.time}</span>
               </div>
               <h2>{next.title}</h2>
@@ -427,16 +411,15 @@ export function HomePage() {
                 <Link className="btn btn-blue" to={next.to}>
                   {next.cta}
                 </Link>
-                <span className="next-hint">
-                  {errorCount > 0 ? `还有 ${warningCount} 条建议，可以稍后再看` : '先做这一件，别的先放着'}
-                </span>
+                {errorCount > 0 ? (
+                  <span className="next-hint">还有 {warningCount} 条建议，可以稍后再看</span>
+                ) : null}
               </div>
             </section>
 
             <section className="tasks-card">
               <div className="panel-head">
-                <h3>接下来</h3>
-                <span>按顺序处理</span>
+                <h3>待办</h3>
               </div>
               <ul className="task-list">
                 {visibleTasks.map((task) => (
@@ -446,7 +429,14 @@ export function HomePage() {
                       <b>{task.title}</b>
                       <span>{task.meta}</span>
                     </div>
-                    <Link to={task.to}>{task.action}</Link>
+                    <Link
+                      to={task.to}
+                      className="task-go"
+                      aria-label={`${task.action}：${task.title}`}
+                      title={task.action}
+                    >
+                      <Icon name="arrow-right" size={14} />
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -456,7 +446,7 @@ export function HomePage() {
           <div className="home-lower">
             <section className="panel shots-panel">
               <div className="panel-head">
-                <h3>最近在做的镜头</h3>
+                <h3>最近镜头</h3>
                 <Link to="/storyboard">看全部 {shots.length} 镜 →</Link>
               </div>
 
@@ -525,9 +515,7 @@ export function HomePage() {
               <p className="shots-foot">
                 <span>
                   {story?.scenes.length ? `按 ${story.scenes.length} 个场次排的` : '还没有拆场次'}
-                  {shots.length > 0 ? ' · 点任一镜直接跳到它' : ''}
                 </span>
-                <Link to="/storyboard">去分镜表 →</Link>
               </p>
             </section>
 
@@ -536,30 +524,29 @@ export function HomePage() {
                 <div className="panel-head">
                   <h3>穿帮检查</h3>
                   <span>
-                    {report ? new Date(report.checkedAt).toLocaleTimeString('zh-CN') : '还没跑'} 跑的
+                    {report ? new Date(report.checkedAt).toLocaleTimeString('zh-CN') : '还没跑'}
                   </span>
                 </div>
                 <div className="check-total">
                   <b className={errorCount > 0 ? 'bad' : ''}>{errorCount}</b>
-                  <span>{errorCount > 0 ? '个必须修，修完才能导出' : '个必须修'}</span>
+                  <span>{errorCount > 0 ? '个必改项，修完才能导出' : '个必改项'}</span>
                 </div>
                 <div className="check-row">
-                  <span>建议看</span>
+                  <span>建议项</span>
                   <b>{warningCount} 条</b>
                 </div>
                 <div className="check-row">
-                  <span>仅供参考</span>
+                  <span>参考项</span>
                   <b>{infoCount} 条</b>
                 </div>
-                <Link className="panel-link" to="/checks">
-                  逐条看，或先修必须项 →
+                <Link className="task-go" to="/checks" aria-label="去检查" title="去检查">
+                  <Icon name="arrow-right" size={14} />
                 </Link>
               </section>
 
               <section className="panel">
                 <div className="panel-head">
                   <h3>参考图</h3>
-                  <span>决定像不像同一个人</span>
                 </div>
                 <div className="assets">
                   <div className="asset">
@@ -577,10 +564,10 @@ export function HomePage() {
                 </div>
                 <p className="asset-note">
                   {characters.length === 0
-                    ? '先建角色，再谈形象图。'
+                    ? '先建角色。'
                     : charWithArt < characters.length
-                      ? '还没出齐。先出角色多视图，后面返工更少。'
-                      : '角色和场景的参考图都齐了。'}
+                      ? '还没出齐，先出角色多视图。'
+                      : '都齐了。'}
                 </p>
                 <div className="asset-links">
                   <Link to="/characters">角色设定 →</Link>
@@ -590,8 +577,7 @@ export function HomePage() {
 
               <section className="panel save-panel">
                 <div className="panel-head">
-                  <h3>这份方案</h3>
-                  <span>只存在这台电脑</span>
+                  <h3>存档</h3>
                 </div>
                 <div className="save-row">
                   <span>保存状态</span>
@@ -602,10 +588,10 @@ export function HomePage() {
                 <p className="asset-note">
                   {saveError
                     ? saveError
-                    : '刷新或清缓存可能丢数据。做完一版就导出，压缩包也是备份。'}
+                    : '刷新或清缓存可能丢数据。'}
                 </p>
-                <Link className="panel-link" to="/export">
-                  去导出备份 →
+                <Link className="task-go" to="/export" aria-label="去导出备份" title="去导出备份">
+                  <Icon name="arrow-right" size={14} />
                 </Link>
               </section>
             </aside>
@@ -615,7 +601,7 @@ export function HomePage() {
         <>
           <header className="start-head">
             <div className="home-crumb">AniGuide · 免注册 · 数据在本机</div>
-            <h1>先写故事，再拆镜头。</h1>
+            <h1>从故事到分镜</h1>
             <p>
               这里只做前期：故事、角色、场景、分镜和提示词。视频生成去即梦、可灵或 Seedance。
             </p>
@@ -624,7 +610,7 @@ export function HomePage() {
           <div className="start-grid">
             <section className="start-card start-card-sample">
               <div className="start-card-top">
-                <span>先看一个做完了的</span>
+                <span>示例项目</span>
                 <span>不用配 API Key</span>
               </div>
               <h2>林教头风雪山神庙</h2>
@@ -654,10 +640,10 @@ export function HomePage() {
 
             <section className="start-card">
               <div className="start-card-top">
-                <span>从零开始</span>
+                <span>新建项目</span>
                 <span>约 15 分钟</span>
               </div>
-              <h2>新建一个项目</h2>
+              <h2>新项目</h2>
               <p className="start-quote">
                 先回答四个问题：故事从哪来、故事是什么、什么风格、最后怎么交付。每一步都可以回头改。
               </p>
@@ -675,7 +661,7 @@ export function HomePage() {
 
           <section className="start-guide">
             <div className="start-guide-copy">
-              <h2>它会带你走完这四步</h2>
+              <h2>四步流程</h2>
               <p>每一步都只问当前必须回答的问题；不知道选哪个，就按默认值走。</p>
             </div>
             <div className="start-guide-steps">
@@ -702,9 +688,14 @@ export function HomePage() {
 
       <section className="saved">
         <div className="panel-head">
-          <h3>我保存过的项目</h3>
-          <span>数据只存在这个浏览器里</span>
+          <h3>已有项目</h3>
         </div>
+        {openError ? (
+          <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
+            <div className="issue-title">打不开这个项目</div>
+            <div className="issue-line">{openError}</div>
+          </div>
+        ) : null}
         {!loaded ? (
           <div className="empty">读取中…</div>
         ) : records.length === 0 ? (
@@ -732,14 +723,16 @@ export function HomePage() {
                 <span>{new Date(record.updatedAt).toLocaleString('zh-CN')}</span>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-icon is-danger"
+                  aria-label={`删除项目「${record.name}」`}
+                  title="删除"
                   onClick={() => {
                     if (window.confirm(`确定删除「${record.name}」吗？此操作不可撤销。`)) {
                       void remove(record.id);
                     }
                   }}
                 >
-                  删除
+                  <Icon name="trash" size={14} />
                 </button>
               </div>
             ))}

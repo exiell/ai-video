@@ -85,14 +85,14 @@ afterEach(() => {
 });
 
 describe('故事向导的完成状态', () => {
-  it('点下一步不会把没写完的「填写故事」标成已完成', () => {
+  it('点下一步不会把没写完的「故事正文」标成已完成', () => {
     const view = render();
     expect(view.querySelector('.wizard-step.active')?.textContent).toContain('故事来源');
 
     next();
     expect(stateOf('故事来源')).toBe('已完成');
-    expect(stateOf('填写故事')).toBe('当前');
-    expect(stateOf('填写故事')).not.toContain('已完成');
+    expect(stateOf('故事正文')).toBe('当前');
+    expect(stateOf('故事正文')).not.toContain('已完成');
   });
 
   it('空项目手动切到「风格与规格」，不会因为默认值自动算完成', () => {
@@ -107,18 +107,18 @@ describe('故事向导的完成状态', () => {
     next();
 
     writeBody('林冲在风雪夜看守草料场，听见门外有人密谋烧死他。');
-    expect(stateOf('填写故事')).toBe('当前 · 已完成');
+    expect(stateOf('故事正文')).toBe('当前 · 已完成');
 
     // 去风格页，再回故事页：完成态不能因为 index < step 失效
     viewStep(2);
-    expect(stateOf('填写故事')).toBe('已完成');
+    expect(stateOf('故事正文')).toBe('已完成');
 
     viewStep(1);
-    expect(stateOf('填写故事')).toBe('当前 · 已完成');
+    expect(stateOf('故事正文')).toBe('当前 · 已完成');
 
     // 回到第 0 步，第 1 步仍然是已完成
     viewStep(0);
-    expect(stateOf('填写故事')).toBe('已完成');
+    expect(stateOf('故事正文')).toBe('已完成');
   });
 
   it('删掉正文后完成态跟着消失', () => {
@@ -126,13 +126,13 @@ describe('故事向导的完成状态', () => {
     next();
     writeBody('先写一段。');
     viewStep(2);
-    expect(stateOf('填写故事')).toBe('已完成');
+    expect(stateOf('故事正文')).toBe('已完成');
 
     viewStep(1);
     writeBody('');
-    expect(stateOf('填写故事')).toBe('当前');
+    expect(stateOf('故事正文')).toBe('当前');
     viewStep(2);
-    expect(stateOf('填写故事')).toBe('未完成');
+    expect(stateOf('故事正文')).toBe('未完成');
   });
 });
 

@@ -161,6 +161,7 @@ export function ChatSidebar() {
           <div className="chat-input-wrap">
             <textarea
               className="chat-input"
+              aria-label="用中文描述你想怎么改"
               value={draft}
               placeholder={
                 project
@@ -513,7 +514,7 @@ function EditCard({ edit, isActive }: { edit: ChatEditProposal; isActive: boolea
         */}
         {styleImpact?.needed ? (
           <div className="hint" style={{ marginTop: 6, color: 'var(--warning)' }}>
-            这条会换掉全片风格 —— 应用时会再确认一次，并告诉你该按什么顺序重做。
+            这条会换掉全片风格。应用时会再确认一次，并告诉你该按什么顺序重做。
           </div>
         ) : null}
 
@@ -627,7 +628,7 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
 
       {bubble.rejected && bubble.rejected > 0 ? (
         <div className="hint" style={{ marginTop: 6, color: 'var(--warning)' }}>
-          有 {bubble.rejected} 条建议没法自动应用（{bubble.rejectedReasons?.join('；')}）——
+          有 {bubble.rejected} 条建议没法自动应用（{bubble.rejectedReasons?.join('；')}）：
           这些需要在界面上手动改。
         </div>
       ) : null}

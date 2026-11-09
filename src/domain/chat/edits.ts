@@ -899,7 +899,7 @@ export function buildProjectContext(
     lines.push('');
     lines.push(`# 穿帮检查结果（共 ${report.issues.length} 条，本地引擎算出来的，可信）`);
     lines.push(
-      `必须修 ${report.counts.error} 条，建议修 ${report.counts.warning} 条，看一眼 ${report.counts.info} 条`,
+      `必改项 ${report.counts.error} 条，建议项 ${report.counts.warning} 条，参考项 ${report.counts.info} 条`,
     );
     const show = report.issues.slice(0, 30);
     for (const issue of show) {

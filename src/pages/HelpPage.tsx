@@ -69,7 +69,7 @@ export function HelpPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">一致性怎么保证</h3>
+        <h3 className="card-title">一致性机制</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           <RichText>
             {'一致性是**五道防线**叠起来的结果：角色锁、场景固定元素、首帧、尾帧、动作关键帧。缺一道，单张图能看，放一起就不像同一部片子。'}
@@ -162,7 +162,7 @@ export function HelpPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">几条不用查表也知道的经验</h3>
+        <h3 className="card-title">实战经验</h3>
         <ul style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
           <li>
             <b>一镜只做一件事。</b>这是新手最容易踩的坑，也是模型最容易崩的地方。
@@ -200,6 +200,7 @@ export function HelpPage() {
         <div className="row" style={{ marginBottom: 12 }}>
           <input
             type="text"
+            aria-label="搜索术语"
             placeholder="搜索：景别、运镜、连续性锁、reference…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}

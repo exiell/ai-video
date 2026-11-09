@@ -281,7 +281,7 @@ function buildNotes(facts: AssembledFacts, platform: TargetPlatform): PromptNote
       fragment: facts.startState,
       label: '起点',
       reason:
-        '起点是这一镜的第一格画面，也是上一镜的接续点。只写这一瞬间能看见的东西——终点才出现的动作不要写在这里，否则模型会提前做出来。',
+        '起点是这一镜的第一格画面，也是上一镜的接续点。只写这一瞬间能看见的东西。终点才出现的动作不要写在这里，否则模型会提前做出来。',
     });
   }
 

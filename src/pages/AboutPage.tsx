@@ -17,7 +17,7 @@ export function AboutPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">这个工具是什么</h3>
+        <h3 className="card-title">项目简介</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           你想做一部动漫视频，但还不清楚要准备什么。这个工具用问答带你写出故事、角色、场景、分镜和提示词，
           最后给一份能直接开拍的方案：动漫分镜表、角色与场景设定卡、多平台提示词，外加一份穿帮检查单。
@@ -29,9 +29,11 @@ export function AboutPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">你的数据在哪里</h3>
+        <h3 className="card-title">数据位置</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          全部在你浏览器的本地存储里。没有账号，没有云端，没有服务器在中间转手任何内容。
+          全部在你浏览器的本地存储里。没有账号，没有云端。
+          不配代理时，网络请求只发生在你的浏览器与厂商之间；填了代理，请求会经过你填的代理地址，
+          代理能看到 Key 和提示词。
           你可以在断网状态下使用除「生成」之外的全部功能。
         </p>
       </div>

@@ -85,6 +85,31 @@ describe('渲染结果里不能有字面星号', () => {
   });
 });
 
+/**
+ * 把向导切到最后一步（「完成」），返回挂载容器。
+ *
+ * 原来这条用例只断言 `typeof html === 'string'`——那是个占位断言，
+ * 测不到标题里声称的顺序。这里真的点一下最后一步，再按 DOM 顺序断言。
+ */
+function renderGuideAtFinishStep(): HTMLDivElement {
+  container = document.createElement('div');
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  act(() => {
+    root.render(
+      <MemoryRouter>
+        <GuidePage />
+      </MemoryRouter>,
+    );
+  });
+  const steps = [...container.querySelectorAll<HTMLButtonElement>('.wizard-step')];
+  expect(steps.length).toBeGreaterThan(0);
+  act(() => {
+    steps[steps.length - 1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  });
+  return container;
+}
+
 describe('引导向导「4. 完成」把 AI 流程放在手动手册之前', () => {
   beforeEach(() => {
     useAppStore.setState({ project: makeEmptyProject('向导'), report: null, dirty: false, revision: 0, saveError: null });
@@ -92,10 +117,21 @@ describe('引导向导「4. 完成」把 AI 流程放在手动手册之前', () 
   });
 
   it('**AI 生成流程出现在页面上，且排在手动清单前面**', () => {
-    const html = renderPage(<GuidePage />);
-    // 向导默认在第 0 步，需要它渲染出第 4 步 —— 直接断言组件树里的文案存在
-    // （GuidePage 的 step 是内部 state，默认不在第 4 步，
-    //   所以这里改为断言页面能渲染，具体顺序由 AiFlowGuide 的测试覆盖）
-    expect(typeof html).toBe('string');
+    const el = renderGuideAtFinishStep();
+
+    const manual = el.querySelector('details.manual-guide');
+    expect(manual, '第 4 步应该有「也可以全程手动」的折叠区').toBeTruthy();
+
+    const aiCard =
+      [...el.querySelectorAll('.card')].find((card) =>
+        (card.textContent ?? '').includes('让 AI 先生成'),
+      ) ?? null;
+    expect(aiCard, '第 4 步应该有 AI 生成流程卡片').toBeTruthy();
+
+    const relation = aiCard!.compareDocumentPosition(manual!);
+    expect(
+      relation & Node.DOCUMENT_POSITION_FOLLOWING,
+      'AI 生成流程必须排在手动清单前面（新手先看到省事的那条路）',
+    ).toBeTruthy();
   });
 });

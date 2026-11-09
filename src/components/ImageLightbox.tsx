@@ -156,7 +156,7 @@ export function ImageLightbox({
                   maxHeight: '100%',
                   objectFit: 'contain',
                   cursor: 'zoom-in',
-                  borderRadius: 6,
+                  borderRadius: 'var(--radius)',
                 }
           }
         />

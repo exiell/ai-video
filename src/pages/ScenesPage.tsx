@@ -155,6 +155,7 @@ export function ScenesPage() {
               <div className="row" style={{ flex: 1 }}>
                 <input
                   type="text"
+                  aria-label="场景名字"
                   style={{ maxWidth: 220 }}
                   value={scene.name}
                   onChange={(e) => upsertScene({ ...scene, name: e.target.value })}
@@ -169,24 +170,27 @@ export function ScenesPage() {
               <div className="row">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm expand-toggle"
+                  className="btn btn-ghost btn-icon expand-toggle"
                   aria-expanded={open}
                   aria-controls={`scene-more-${scene.id}`}
+                  aria-label={open ? '收起这个场景' : '展开这个场景'}
+                  title={open ? '收起' : '展开'}
                   onClick={() => setOpenId(open ? null : scene.id)}
                 >
-                  {open ? '收起' : '展开'}
-                  <Icon name="chevron-right" size={13} className="expand-chevron" />
+                  <Icon name="chevron-right" size={15} className="expand-chevron" />
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-icon is-danger"
+                  aria-label={`删除场景「${scene.name}」`}
+                  title="删除"
                   onClick={() => {
                     if (window.confirm(`删除场景「${scene.name}」？用到它的镜头会变成「未指定场景」。`)) {
                       removeScene(scene.id);
                     }
                   }}
                 >
-                  删除
+                  <Icon name="trash" size={15} />
                 </button>
               </div>
             </div>
@@ -324,6 +328,7 @@ export function ScenesPage() {
                   <div className="row" key={lock.id} style={{ marginBottom: 8 }}>
                     <input
                       type="text"
+                      aria-label="这条锁的名字（中文短名）"
                       style={{ maxWidth: 160 }}
                       value={lock.label}
                       onChange={(e) =>
@@ -338,6 +343,7 @@ export function ScenesPage() {
                     />
                     <input
                       type="text"
+                      aria-label="锁面，会原样写进提示词"
                       style={{ flex: 1, minWidth: 220 }}
                       value={lock.phrase}
                       onChange={(e) =>
@@ -352,7 +358,9 @@ export function ScenesPage() {
                     />
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      aria-label={`删除锁「${lock.label}」`}
+                      title="删除"
+                      className="btn btn-ghost btn-icon is-danger"
                       onClick={() =>
                         upsertScene({
                           ...scene,
@@ -360,7 +368,7 @@ export function ScenesPage() {
                         })
                       }
                     >
-                      删除
+                      <Icon name="trash" size={14} />
                     </button>
                   </div>
                 ))}
@@ -405,11 +413,19 @@ export function ScenesPage() {
                   }
                 />
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>⑤ 变体（随剧情变）</h4>
+                <details className="card-fold">
+                  <summary>
+                    <span className="card-fold-title">⑤ 变体（随剧情变）</span>
+                    <span className="card-fold-count">{scene.variants.length} 个</span>
+                  </summary>
+                  <p className="card-fold-desc">
+                    同一个地方的不同状态，例：窗户被打碎。不填就只用上面写好的那一套。
+                  </p>
                 {scene.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>
                     <input
                       type="text"
+                      aria-label="变体名字"
                       style={{ maxWidth: 180 }}
                       value={variant.label}
                       onChange={(e) =>
@@ -424,6 +440,7 @@ export function ScenesPage() {
                     />
                     <input
                       type="text"
+                      aria-label="变体改变了什么，用顿号分隔"
                       style={{ flex: 1, minWidth: 220 }}
                       value={variant.changedFeatures.join('、')}
                       onChange={(e) =>
@@ -446,7 +463,9 @@ export function ScenesPage() {
                     />
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      aria-label={`删除变体「${variant.label}」`}
+                      title="删除"
+                      className="btn btn-ghost btn-icon is-danger"
                       onClick={() =>
                         upsertScene({
                           ...scene,
@@ -454,7 +473,7 @@ export function ScenesPage() {
                         })
                       }
                     >
-                      删除
+                      <Icon name="trash" size={14} />
                     </button>
                   </div>
                 ))}
@@ -473,16 +492,9 @@ export function ScenesPage() {
                 >
                   + 加一个变体
                 </button>
+                </details>
               </div>
             </Reveal>
-            {!open ? (
-              <div className="hint" style={{ marginTop: 6 }}>
-                {scene.lightDirection || '（没写光线）'} · {scene.mainColor || '（没写色调）'}
-                {scene.fixedElements.length > 0
-                  ? ` · 固定元素：${scene.fixedElements.slice(0, 2).join(' / ')}`
-                  : ''}
-              </div>
-            ) : null}
           </div>
         );
       })}

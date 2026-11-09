@@ -275,7 +275,7 @@ export function checkContinuity(project: Project): CheckIssue[] {
           severity: 'info',
           title: `从第 ${shot.number - chainLength + 1} 镜到第 ${shot.number} 镜已经连续承接了 ${chainLength} 镜`,
           why:
-             '每一镜比上一镜偏一点，累积到后面就明显漂了——色调、质感、人物都在漂。',
+             '每一镜比上一镜偏一点，累积到后面就明显漂了：色调、质感、人物都在漂。',
           suggestion:
              '在下一个场景切点重新起锚：改用场景板与角色形象图当参考。',
           location: { kind: 'shot', id: shot.id, field: 'transitionType' },

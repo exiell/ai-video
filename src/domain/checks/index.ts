@@ -25,13 +25,13 @@ const SEVERITY_ORDER: Record<CheckSeverity, number> = {
  * 严重度的显示名与配色（v0.48 从 ChecksPage 提到这里）。
  *
  * 提到领域层的原因：分镜页现在也要就地标出每一处问题，
- * 两个页面各写一份「必须修/建议修/看一眼」，措辞迟早会分叉——
- * 同一个规则在检查页叫「必须修」、在分镜页叫「必须改」，用户会以为是两件事。
+ * 两个页面各写一份严重度标签，措辞迟早会分叉——
+ * 同一个规则在检查页叫一个名字、在分镜页叫另一个，用户会以为是两件事。
  */
 export const SEVERITY_LABEL: Record<CheckSeverity, string> = {
-  error: '必须修',
-  warning: '建议修',
-  info: '看一眼',
+  error: '必改项',
+  warning: '建议项',
+  info: '参考项',
 };
 
 /** 严重度对应的 tag 样式类 */

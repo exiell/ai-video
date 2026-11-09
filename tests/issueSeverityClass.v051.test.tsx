@@ -99,7 +99,12 @@ describe('v0.51 · 严重度修饰类不再和工具类撞名', () => {
     expect(document.querySelectorAll('.issue.info').length).toBe(0);
   });
 
-  it('三档的卡片结构完全相同：标题 + 两段解释 + 一个按钮', () => {
+  it('三档的卡片结构完全相同：标题 + 两段解释 + 一个动作', () => {
+    /*
+      动作从卡片底部的独立按钮挪进了标题行（见 ChecksPage 注释）：
+      十一条问题排下来，底部一排同样的按钮会把卡片节奏拉成模板。
+      结构契约没变，仍是「一个动作」，只是位置和样式换了。
+    */
     const el = mount();
     const bySeverity = new Map<string, Element>();
     for (const card of el.querySelectorAll('.issue')) {
@@ -111,7 +116,8 @@ describe('v0.51 · 严重度修饰类不再和工具类撞名', () => {
       expect(card, sev).toBeTruthy();
       expect(card!.querySelector('.issue-title'), sev).toBeTruthy();
       expect(card!.querySelectorAll('.issue-explain .issue-mark').length, sev).toBe(2);
-      expect(card!.querySelector('.row .btn'), sev).toBeTruthy();
+      expect(card!.querySelector('.issue-title .issue-go'), sev).toBeTruthy();
+      expect(card!.querySelectorAll('.issue-go').length, sev).toBe(1);
     }
   });
 

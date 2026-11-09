@@ -5,6 +5,7 @@ import { ConfirmDialog, Field, WhyDetails } from '../components/bits';
 import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
+import { Icon } from '../components/Icon';
 import { TermHint } from '../components/TermHint';
 import { SelectMenu } from '../components/SelectMenu';
 import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
@@ -25,7 +26,7 @@ import { newId } from '../services/storage';
  * 不装作能生成——那会让用户在按下按钮后一头雾水。
  */
 
-const STEPS = ['故事来源', '填写故事', '风格与规格', '完成'] as const;
+const STEPS = ['故事来源', '故事正文', '风格与规格', '完成'] as const;
 
 interface GuideStep {
   title: string;
@@ -75,7 +76,7 @@ const STEPS_AFTER_GUIDE: GuideStep[] = [
   {
     title: '跑一次穿帮检查',
     how: '去「穿帮检查」看一眼。有问题的话，页面上方会出现「自动修复」卡片。点它可以看见每条修改的前后对照，勾选你认可的，确认后才生效，而且能撤销。',
-    done: '「必须修」那一档清零，或剩下的都是你认可的。',
+    done: '「必改项」那一档清零，或剩下的都是你认可的。',
     why: '这一步在你花钱出图之前，把必须保持一致的地方列成清单。',
     route: '/checks',
     routeLabel: '穿帮检查',
@@ -107,7 +108,7 @@ const STEPS_AFTER_GUIDE: GuideStep[] = [
   },
   {
     title: '导出并开始做视频',
-    how: '去「导出」点「打包下载」。拿到压缩包后：打开「拍摄进度表.md」逐镜执行；对着「提示词/平台名.md」把英文正文复制到即梦/可灵等平台生成视频；拿不准的地方翻「一致性总览.md」和「穿帮检查单.md」。',
+    how: '去「导出」点「打包下载」。解压后先打开「先看这里.txt」，按它说的拿文件；再用「参考文档/拍摄进度表.md」逐镜执行，从「视频提示词★/即梦.md」里复制英文正文到即梦/可灵等平台生成视频；拿不准的地方翻「参考文档/一致性总览.md」和「参考文档/穿帮检查单.md」。',
     done: '到这里，本工具的部分结束。视频生成和剪辑在平台完成。',
     why: '导出的压缩包同时也是你唯一的备份：所有数据只在本机浏览器里，浏览器清理磁盘时可能整个清空。',
     route: '/export',
@@ -229,12 +230,19 @@ export function GuidePage() {
     imageCount: assetCount,
   });
 
+  const storyFilledCount = [
+    story.charactersNote,
+    story.setting,
+    story.conflict,
+    story.ending,
+  ].filter((value) => value.trim().length > 0).length;
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>故事</h1>
-          <p>一次只问一个问题。写完故事，下一步是场次、角色和镜头。</p>
+          <p>一次只问一个问题。</p>
         </div>
       </div>
 
@@ -258,20 +266,18 @@ export function GuidePage() {
               >
                 <span className="wizard-dot" aria-hidden="true" />
                 <span>{label}</span>
+                {done ? <Icon name="circle-check" size={14} className="wizard-state-icon" /> : null}
+                {/* 状态文字只留给读屏；视觉上是勾 / 圆环 / 橙点 */}
                 <span className="wizard-state">{stepState(index)}</span>
               </button>
             );
           })}
-          <p className="guide-rail-note">
-            不知道选哪个就按默认值走。所有内容随时可以回来改，不会因为点了下一步就定死。
-            完成状态按内容判断：内容齐了才算完成，切换步骤不会改动它。
-          </p>
         </aside>
 
         <div className="guide-main">
           {step === 0 ? (
             <div className="card">
-              <h3 className="card-title">这个故事是你自己的，还是让工具给你一个？</h3>
+              <h3 className="card-title">故事来源</h3>
               <div className="choice-row">
                 <button
                   type="button"
@@ -327,7 +333,7 @@ export function GuidePage() {
 
       {step === 1 ? (
         <div className="card">
-          <h3 className="card-title">把故事写下来</h3>
+          <h3 className="card-title">故事正文</h3>
           <Field
             label="故事正文"
             hint="可以只写一段话，也可以粘贴整篇小说。写清楚：谁、在哪、发生了什么、最后怎么了。"
@@ -340,7 +346,18 @@ export function GuidePage() {
             />
           </Field>
 
-          <div className="grid-2">
+          {/*
+            四个补充格子默认收起：这一页的主任务是「把故事写下来」。
+            四格是给检查引擎核对「该拍的是不是都拍了」用的，没想好可以先空着，
+            所以做成可选的一段，而不是一上来就五个输入框。
+          */}
+          <details className="card-fold">
+            <summary>
+              <span className="card-fold-title">补充四个格子（可选）</span>
+              <span className="card-fold-count">{storyFilledCount} / 4 已填</span>
+            </summary>
+            <p className="card-fold-desc">写清楚这四格，检查引擎才能核对分镜有没有漏拍。</p>
+            <div className="grid-2">
             <Field label="主要人物" hint="谁在这个故事里，他们是什么关系">
               <textarea
                 rows={3}
@@ -369,20 +386,18 @@ export function GuidePage() {
                 onChange={(e) => patchStory({ ending: e.target.value })}
               />
             </Field>
-          </div>
+            </div>
 
-          <WhyDetails>
-            这四个格子不是形式主义。分镜引擎要靠它们决定「哪些内容必须拍出来」，
-            穿帮检查也会拿它们来核对「你说要讲的事，分镜里是不是真的都有镜头承载」。
-            如果某一格你还没想好，可以先空着，后面回来补。
-          </WhyDetails>
+            <WhyDetails>
+              分镜引擎要靠它们决定「哪些内容必须拍出来」，
+              穿帮检查也会拿它们核对「你说要讲的事，分镜里是不是真的都有镜头承载」。
+              没想好可以先空着，后面回来补。
+            </WhyDetails>
+          </details>
 
           <h3 className="card-title" style={{ marginTop: 22 }}>
             场次拆分
           </h3>
-          <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-            按地点或时间切场，防止漏拍一整场。
-          </p>
           {story.scenes.length === 0 ? (
             <div className="empty">还没有场次。可以先不分，等写完分镜再回来补。</div>
           ) : (
@@ -390,6 +405,7 @@ export function GuidePage() {
               <div className="row" key={scene.id} style={{ marginBottom: 8, alignItems: 'flex-start' }}>
                 <input
                   type="text"
+                  aria-label="场次名"
                   style={{ maxWidth: 220 }}
                   value={scene.label}
                   onChange={(e) => updateStoryScene(scene.id, { label: e.target.value })}
@@ -397,6 +413,7 @@ export function GuidePage() {
                 />
                 <input
                   type="text"
+                  aria-label="这一场发生了什么"
                   style={{ flex: 1, minWidth: 200 }}
                   value={scene.summary}
                   onChange={(e) => updateStoryScene(scene.id, { summary: e.target.value })}
@@ -404,10 +421,12 @@ export function GuidePage() {
                 />
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-icon is-danger"
+                  aria-label={`删除场次「${scene.label}」`}
+                  title="删除"
                   onClick={() => removeStoryScene(scene.id)}
                 >
-                  删除
+                  <Icon name="trash" size={14} />
                 </button>
               </div>
             ))
@@ -443,10 +462,7 @@ export function GuidePage() {
           </Field>
 
           <div className="grid-2">
-            <Field
-              label="目标时长（秒）"
-              hint="新手建议 30–60 秒。按每镜 3 秒算，30 秒大约是 10 个镜头。"
-            >
+            <Field label="目标时长（秒）" hint="新手建议 30–60 秒">
               <input
                 type="number"
                 min={5}
@@ -456,7 +472,7 @@ export function GuidePage() {
               />
             </Field>
 
-            <Field label="画面比例" hint="竖屏短视频选 9:16，横屏投稿选 16:9。必须在提示词里写明，否则模型可能把竖屏出成横屏。">
+            <Field label="画面比例" hint="竖屏选 9:16，横屏选 16:9">
               <SelectMenu
                 value={project.brief.aspectRatio}
                 options={ASPECT_OPTIONS}
@@ -584,9 +600,9 @@ export function GuidePage() {
             />
           </div>
 
-          <div className="field-label" style={{ marginBottom: 6 }}>选一个风格（决定全片质感的就是它）</div>
+          <div className="field-label" style={{ marginBottom: 6 }}>风格</div>
           <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
-            点一下整套风格词都配好，全片共用同一套。再点一下取消。
+            点一下配好整套风格词，再点一下取消。
           </p>
           <div className="row" style={{ marginBottom: 12 }}>
             {STYLE_PRESETS.map((preset) => {
@@ -623,9 +639,6 @@ export function GuidePage() {
           </div>
 
           <div className="row" style={{ marginBottom: 8 }}>
-            <span className="hint" style={{ marginTop: 0 }}>
-              不确定下面几个词的意思？点旁边的问号看解释：
-            </span>
             <TermHint term="画幅比例" />
             <TermHint term="主色调" />
             <TermHint term="主光方向" />
@@ -633,7 +646,7 @@ export function GuidePage() {
 
           <Field
             label="风格关键词（英文，真正进提示词的就是这几行）"
-            hint="每行一条。上面的预设就是往这里填内容，也可以自己改。模型对英文风格词的理解更稳，所以这里是英文。"
+            hint="每行一条。预设就是往这里填内容。"
           >
             <textarea
               rows={6}
@@ -654,8 +667,7 @@ export function GuidePage() {
             <div className="issue warning" style={{ marginBottom: 12 }}>
               <div className="issue-title">还没有选风格</div>
               <div className="issue-line">
-                不选也能生成，但角色的形象图和关键帧会缺少统一的质感词，看起来可能不像同一部片子。
-                上面点一下就好。
+                不选也能生成，但各镜质感可能不统一。
               </div>
             </div>
           ) : null}
@@ -758,11 +770,13 @@ export function GuidePage() {
       <div className="wizard-actions">
         <button
           type="button"
-          className="btn"
+          className="btn btn-icon"
           disabled={step === 0}
+          aria-label="上一步"
+          title="上一步"
           onClick={() => setStep((s) => Math.max(0, s - 1))}
         >
-          上一步
+          <Icon name="chevron-left" size={16} />
         </button>
         <div className="row">
           <span className="wizard-actions-note">

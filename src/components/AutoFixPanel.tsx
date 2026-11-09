@@ -85,7 +85,7 @@ export function AutoFixPanel({ report }: { report: CheckReport }) {
     <div className="card">
       <div className="row" style={{ justifyContent: 'space-between' }}>
         <h3 className="card-title" style={{ margin: 0 }}>
-          自动修复
+          自动修复项
           {plan.proposals.length > 0 ? (
             <span className="tag tag-ok">可修 {plan.proposals.length} 处</span>
           ) : null}

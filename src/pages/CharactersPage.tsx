@@ -128,6 +128,7 @@ export function CharactersPage() {
               <div className="row" style={{ flex: 1 }}>
                 <input
                   type="text"
+                  aria-label="角色名字"
                   style={{ maxWidth: 200 }}
                   value={character.name}
                   onChange={(e) => upsertCharacter({ ...character, name: e.target.value })}
@@ -154,24 +155,27 @@ export function CharactersPage() {
               <div className="row">
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm expand-toggle"
+                  className="btn btn-ghost btn-icon expand-toggle"
                   aria-expanded={open}
                   aria-controls={`character-more-${character.id}`}
+                  aria-label={open ? '收起这个角色' : '展开这个角色'}
+                  title={open ? '收起' : '展开'}
                   onClick={() => setOpenId(open ? null : character.id)}
                 >
-                  {open ? '收起' : '展开'}
-                  <Icon name="chevron-right" size={13} className="expand-chevron" />
+                  <Icon name="chevron-right" size={15} className="expand-chevron" />
                 </button>
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-icon is-danger"
+                  aria-label={`删除角色「${character.name}」`}
+                  title="删除"
                   onClick={() => {
                     if (window.confirm(`删除角色「${character.name}」？分镜里对他的引用也会一并清掉。`)) {
                       removeCharacter(character.id);
                     }
                   }}
                 >
-                  删除
+                  <Icon name="trash" size={15} />
                 </button>
               </div>
             </div>
@@ -278,6 +282,7 @@ export function CharactersPage() {
                   <div className="row" key={lock.id} style={{ marginBottom: 8 }}>
                     <input
                       type="text"
+                      aria-label="这条锁的名字（中文短名）"
                       style={{ maxWidth: 160 }}
                       value={lock.label}
                       onChange={(e) =>
@@ -292,6 +297,7 @@ export function CharactersPage() {
                     />
                     <input
                       type="text"
+                      aria-label="锁面，会原样写进提示词"
                       style={{ flex: 1, minWidth: 220 }}
                       value={lock.phrase}
                       onChange={(e) =>
@@ -320,7 +326,9 @@ export function CharactersPage() {
                     />
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      aria-label={`删除锁「${lock.label}」`}
+                      title="删除"
+                      className="btn btn-ghost btn-icon is-danger"
                       onClick={() =>
                         upsertCharacter({
                           ...character,
@@ -328,7 +336,7 @@ export function CharactersPage() {
                         })
                       }
                     >
-                      删除
+                      <Icon name="trash" size={14} />
                     </button>
                   </div>
                 ))}
@@ -351,11 +359,24 @@ export function CharactersPage() {
                   + 加一条锁
                 </button>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>③ 变体（随剧情变）</h4>
+                {/*
+                  ③④ 默认收起：一个角色真正要填的只有身份和锁。
+                  变体与负向词是「已经会用的人再往下调」的层次；
+                  收起时把条目数放在标题旁边，这样收起来也看得见里面有没有内容。
+                */}
+                <details className="card-fold">
+                  <summary>
+                    <span className="card-fold-title">③ 变体（随剧情变）</span>
+                    <span className="card-fold-count">{character.variants.length} 个</span>
+                  </summary>
+                  <p className="card-fold-desc">
+                    同一角色的不同状态，例：风雪中·满身落雪。不填就只用身份那一套。
+                  </p>
                 {character.variants.map((variant) => (
                   <div className="row" key={variant.id} style={{ marginBottom: 8 }}>
                     <input
                       type="text"
+                      aria-label="变体名字"
                       style={{ maxWidth: 180 }}
                       value={variant.label}
                       onChange={(e) =>
@@ -370,6 +391,7 @@ export function CharactersPage() {
                     />
                     <input
                       type="text"
+                      aria-label="变体改变了什么，用顿号分隔"
                       style={{ flex: 1, minWidth: 220 }}
                       value={variant.changedFeatures.join('、')}
                       onChange={(e) =>
@@ -392,7 +414,9 @@ export function CharactersPage() {
                     />
                     <button
                       type="button"
-                      className="btn btn-ghost btn-sm"
+                      aria-label={`删除变体「${variant.label}」`}
+                      title="删除"
+                      className="btn btn-ghost btn-icon is-danger"
                       onClick={() =>
                         upsertCharacter({
                           ...character,
@@ -400,7 +424,7 @@ export function CharactersPage() {
                         })
                       }
                     >
-                      删除
+                      <Icon name="trash" size={14} />
                     </button>
                   </div>
                 ))}
@@ -419,8 +443,16 @@ export function CharactersPage() {
                 >
                   + 加一个变体
                 </button>
+                </details>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>④ 负向词与种子</h4>
+                <details className="card-fold">
+                  <summary>
+                    <span className="card-fold-title">④ 负向词与种子</span>
+                    <span className="card-fold-count">
+                      {character.negativePrompt || character.seed !== undefined ? '已填' : '未填'}
+                    </span>
+                  </summary>
+                  <p className="card-fold-desc">两项都是可选补充，不填不影响前面的一致性。</p>
                 <Field label="负向词（这个角色不该出现的特征）">
                   <input
                     type="text"
@@ -444,6 +476,7 @@ export function CharactersPage() {
                     }
                   />
                 </Field>
+                </details>
 
                 <ImagePanel
                   refId={character.id}
@@ -481,14 +514,6 @@ export function CharactersPage() {
                 </WhyDetails>
               </div>
             </Reveal>
-            {!open ? (
-              <div className="hint" style={{ marginTop: 6 }}>
-                {character.identity.summary || '（还没写身份描述）'}
-                {character.continuityLocks.length > 0
-                  ? ` · 锁：${character.continuityLocks.map((l) => l.label).join('、')}`
-                  : ''}
-              </div>
-            ) : null}
           </div>
         );
       })}

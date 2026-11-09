@@ -126,11 +126,15 @@ export function ImagePanel({
       ) : null}
 
       <div className="row">
-        {options.map((option) => (
+        {/*
+          这些都是「让模型出图」的动作，统一用描边的 .btn-ai；
+          第一个（各页自己排的推荐项）给实心，其余同权。
+        */}
+        {options.map((option, index) => (
           <button
             key={option.label}
             type="button"
-            className={`btn${option.useReference ? '' : ' btn-primary'}`}
+            className={`btn ${index === 0 ? 'btn-blue' : 'btn-ai'}`}
             disabled={busy || !hasKey}
             onClick={() => run(option)}
           >
@@ -238,7 +242,7 @@ export function AssetGallery({
               style={{
                 padding: 0,
                 border: '1px solid var(--border)',
-                borderRadius: 8,
+                borderRadius: 'var(--radius)',
                 background: 'var(--bg)',
                 cursor: 'zoom-in',
                 display: 'block',
@@ -268,11 +272,13 @@ export function AssetGallery({
               {asset.referenceCount ? ` · ${asset.referenceCount} 张参考图` : ''}
               <button
                 type="button"
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost btn-icon is-danger"
                 style={{ marginLeft: 6 }}
+                aria-label="删除这张图"
+                title="删除这张图"
                 onClick={() => void removeAsset(asset.refId, asset.id)}
               >
-                删除
+                <Icon name="trash" size={14} />
               </button>
             </figcaption>
           </figure>

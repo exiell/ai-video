@@ -138,7 +138,7 @@ export function checkScenes(project: Project): CheckIssue[] {
           severity: 'warning',
           title: `${label}没有写空间结构`,
           why:  '不写布局，模型每镜重新猜一遍，就成了「角色在动、场景在换」。',
-          suggestion:  '用房间的方位写：门在哪、什么在左、什么在右。别写「左边有门」——那是画面左边，反打之后就不对了。',
+          suggestion:  '用房间的方位写：门在哪、什么在左、什么在右。别写「左边有门」，那是画面左边，反打之后就不对了。',
           location: { kind: 'scene', id: scene.id, field: 'identity.spatialStructure' },
         }),
       );

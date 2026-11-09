@@ -90,6 +90,8 @@ export function SettingsPage() {
   const [results, setResults] = useState<Record<string, ConnectionTestResult>>({});
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [imageStats, setImageStats] = useState<{ count: number; bytes: number } | null>(null);
+  /** 代理口令默认遮起来；给一个「显示」按钮，和填 Key 的体验一致。 */
+  const [showProxyPassword, setShowProxyPassword] = useState(false);
 
   useEffect(() => {
     void estimateUsage().then(setUsage);
@@ -186,7 +188,7 @@ export function SettingsPage() {
       {tab === 'connection' ? (<>
 
       <div className="card">
-        <h3 className="card-title">能不能直连</h3>
+        <h3 className="card-title">直连检测</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           点开测一下能不能直连。通就不用管下面「代理」那一栏。
         </p>
@@ -233,7 +235,7 @@ export function SettingsPage() {
 
       {tab === 'connection' ? (<>
       <div className="card">
-        <h3 className="card-title">按厂商填 Key</h3>
+        <h3 className="card-title">厂商 Key</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           一个厂商一个 Key，只填你要用的那几家。
         </p>
@@ -282,6 +284,7 @@ export function SettingsPage() {
               <div className="row">
                 <input
                   type="password"
+                  aria-label={`${vendor.name} 的 API Key`}
                   style={{ flex: 1, minWidth: 240 }}
                   value={key}
                   autoComplete="off"
@@ -328,6 +331,7 @@ export function SettingsPage() {
                       </span>
                       <input
                         type="text"
+                        aria-label={`${m.id} 的模型名`}
                         style={{ flex: 1, minWidth: 200 }}
                         value={modelOverrides[m.id] ?? ''}
                         placeholder={m.model || '（必须填）'}
@@ -365,15 +369,16 @@ export function SettingsPage() {
                 >
                   <div className="issue-title">
                     {result.ok ? '连接正常' : (result.info?.title ?? '连接失败')}
-                    <span className="tag" style={{ marginLeft: 8 }}>
+                    <span className="tag" title="代理能看到这次请求的内容">
                       {result.via === 'proxy' ? '经代理' : '直连'}
                     </span>
                     {result.elapsedMs > 0 ? (
-                      <span className="tag" style={{ marginLeft: 6 }}>
-                        {result.elapsedMs}ms
-                      </span>
+                      <span className="tag">{result.elapsedMs}ms</span>
                     ) : null}
                   </div>
+                  {result.via === 'proxy' ? (
+                    <div className="issue-line">这次请求经过了代理，代理能看到 Key 和提示词。</div>
+                  ) : null}
                   {result.ok ? (
                     <div className="issue-line">
                       模型回复：<code>{result.sample}</code>
@@ -421,6 +426,16 @@ export function SettingsPage() {
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           直连不通时才需要。填了之后所有模型请求都经过它转发。
         </p>
+        {/*
+          代理不是本项目提供的服务：请求头里带着厂商 Key，代理运营者（或被入侵的代理）
+          能拿到 Key 与全部提示词。用户有权在填之前知道这件事。
+        */}
+        <div className="issue warning" style={{ marginBottom: 12 }}>
+          <div className="issue-title">代理能看到你的 API Key 和全部提示词</div>
+          <div className="issue-line">
+            只填你自己信任的地址。用别人的代理，等于把 Key 和提示词交给对方。
+          </div>
+        </div>
         <Field
           label="代理地址"
           hint="例：https://your-worker.example.workers.dev；留空表示不使用代理"
@@ -433,12 +448,26 @@ export function SettingsPage() {
           />
         </Field>
         <Field label="通行口令（可选）" hint="防止别人蹭你的代理额度。代理侧校验后会丢弃，不参与记录。">
-          <input
-            type="text"
-            value={prefs.proxyPassword}
-            onChange={(e) => setPref('proxyPassword', e.target.value)}
-          />
+          <div className="row" style={{ gap: 6 }}>
+            <input
+              type={showProxyPassword ? 'text' : 'password'}
+              value={prefs.proxyPassword}
+              onChange={(e) => setPref('proxyPassword', e.target.value)}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              className="btn btn-sm"
+              aria-pressed={showProxyPassword}
+              onClick={() => setShowProxyPassword((v) => !v)}
+            >
+              {showProxyPassword ? '隐藏' : '显示'}
+            </button>
+          </div>
         </Field>
+        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
+          通行口令和 API Key 用同一套保存方式：勾了「不保存到本机」，两者都只在当前会话有效。
+        </p>
         <WhyDetails>
           想自己搭一个的话，Cloudflare Workers 免费版每天 10 万次请求够个人用。
           这一栏填上就启用，清空就回到直连。
@@ -502,7 +531,7 @@ export function SettingsPage() {
       </div>
 
       <div className="card appearance-note">
-        <h3 className="card-title">换外观时不会发生什么</h3>
+        <h3 className="card-title">外观改动范围</h3>
         <div className="appearance-note-grid">
           <div>
             <b>不重写项目</b>
@@ -574,7 +603,7 @@ export function SettingsPage() {
               style={{
                 height: 6,
                 background: 'var(--bg)',
-                borderRadius: 3,
+                borderRadius: 'var(--radius-sm)',
                 overflow: 'hidden',
                 border: '1px solid var(--border)',
               }}

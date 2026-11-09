@@ -138,12 +138,16 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
         </div>
       ) : null}
 
+      {/*
+        第一个是推荐顺序（见 TASK_LABEL 上方那段注释），给它实心，
+        其余用描边的 .btn-ai。这样一眼能看出「先点哪个」。
+      */}
       <div className="row">
-        {tasks.map((task) => (
+        {tasks.map((task, index) => (
           <button
             key={task}
             type="button"
-            className="btn"
+            className={`btn ${index === 0 ? 'btn-blue' : 'btn-ai'}`}
             disabled={batch !== null || !hasImageKey || counts[task] === 0}
             onClick={() => void run(task)}
           >
@@ -189,7 +193,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             style={{
               height: 6,
               background: 'var(--bg)',
-              borderRadius: 3,
+              borderRadius: 'var(--radius-sm)',
               overflow: 'hidden',
               border: '1px solid var(--border)',
               marginTop: 6,

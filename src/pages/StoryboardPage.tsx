@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { SummaryBar } from '../components/bits';
@@ -20,7 +20,6 @@ import {
   type ShotSize,
 } from '../types/model';
 import { newId } from '../services/storage';
-import { PLATFORM_MAX_DURATION } from '../domain/checks/storyboard';
 import { SEVERITY_TAG, worstSeverity } from '../domain/checks';
 import { FieldIssues, UnplacedIssues } from '../components/IssueViews';
 import type { CheckIssue } from '../types/model';
@@ -28,6 +27,17 @@ import type { CheckIssue } from '../types/model';
 function formatTimecode(seconds: number): string {
   const safe = Math.max(0, Math.round(seconds));
   return `${String(Math.floor(safe / 60)).padStart(2, '0')}:${String(safe % 60).padStart(2, '0')}`;
+}
+
+/**
+ * 点完「更多」里的某一项就把它收起来。
+ *
+ * 用 `<details>` 做下拉是为了不引入浮层状态：它自带键盘与无障碍行为，
+ * 但浏览器不会在点内部按钮时自动收起，会一直盖住下一镜，所以手动关。
+ */
+function closeMenu(event: MouseEvent<HTMLElement>): void {
+  const details = event.currentTarget.closest('details');
+  if (details) details.open = false;
 }
 
 /**
@@ -194,6 +204,9 @@ export function StoryboardPage() {
   const [expanded, setExpanded] = useState<string | null>(params.get('shot'));
   const [located, setLocated] = useState<string | null>(params.get('shot'));
 
+  /** 「用模型生成」抽屉：空状态里的按钮要能直接把它打开。 */
+  const toolsRef = useRef<HTMLDetailsElement>(null);
+
   const flaggedFields = useMemo(() => {
     const map = new Map<string, Set<string>>();
     for (const issue of report?.issues ?? []) {
@@ -251,10 +264,6 @@ export function StoryboardPage() {
   const total = project.shots.reduce((s, x) => s + (Number.isFinite(x.duration) ? x.duration : 0), 0);
   const target = project.brief.targetDuration;
   const diff = total - target;
-  const maxPerShot = Math.max(
-    ...project.brief.platforms.map((p) => PLATFORM_MAX_DURATION[p] ?? 10),
-    10,
-  );
 
   const shotSizeOptions = SHOT_SIZE_OPTIONS.map((s) => ({
     value: s,
@@ -336,10 +345,7 @@ export function StoryboardPage() {
 
       <SummaryBar>
         <span>
-          共 <b>{project.shots.length}</b> 镜
-        </span>
-        <span>
-          总时长 <b>{total}</b> 秒
+          <b>{project.shots.length}</b> 镜 · 共 <b>{total}</b> 秒
         </span>
         <span style={{ color: 'var(--text-dim)' }}>目标 {target} 秒</span>
         {Math.abs(diff) > Math.max(target * 0.1, 2) ? (
@@ -350,13 +356,10 @@ export function StoryboardPage() {
           <span className="tag tag-ok">时长吻合</span>
         ) : null}
         {report && report.counts.error > 0 ? (
-          <span className="tag tag-error">{report.counts.error} 个必须修</span>
+          <span className="tag tag-error">{report.counts.error} 个必改项</span>
         ) : project.shots.length > 0 ? (
           <span className="tag tag-ok">检查通过</span>
         ) : null}
-        <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
-          单镜上限约 {maxPerShot} 秒（按所选平台）
-        </span>
         {generatingAssets ? <span className="tag tag-info">正在拆角色与场景</span> : null}
       </SummaryBar>
 
@@ -400,13 +403,13 @@ export function StoryboardPage() {
                   style={{ flexGrow: Math.max(duration, 1) }}
                   onClick={() => openShot(shot.id)}
                   aria-label={`第 ${index + 1} 镜，${duration} 秒${
-                    mustFix > 0 ? `，${mustFix} 个必须修` : ''
+                    mustFix > 0 ? `，${mustFix} 个必改项` : ''
                   }`}
                   aria-current={expanded === shot.id ? 'true' : undefined}
                   title={`${formatTimecode(start)}–${formatTimecode(start + duration)} · ${duration} 秒 · 首帧${
                     hasFirst ? '有' : '无'
                   } · 尾帧${hasEnd ? '有' : '无'} · ${lockCount} 条锁${
-                    mustFix > 0 ? ` · ${mustFix} 个必须修` : ''
+                    mustFix > 0 ? ` · ${mustFix} 个必改项` : ''
                   }`}
                 >
                   <span className="shot-strip-no">{String(index + 1).padStart(2, '0')}</span>
@@ -423,7 +426,7 @@ export function StoryboardPage() {
         生成工具收进折叠区。
         页面首先应该是「看和改这 7 个镜头」；没配 Key 时的两条警告不该占满第一屏。
       */}
-      <details className="tools-drawer">
+      <details className="tools-drawer" ref={toolsRef}>
         <summary>
           <span className="tools-drawer-title">
             <Icon name="sparkles" size={14} className="tools-icon" />
@@ -433,7 +436,7 @@ export function StoryboardPage() {
         </summary>
         <div className="tools-drawer-body">
           <div className="card">
-            <h3 className="card-title">生成分镜</h3>
+            <h3 className="card-title">分镜生成</h3>
             <GenerateBar
               task="assets"
               label="① 从故事里拆角色与场景"
@@ -457,7 +460,25 @@ export function StoryboardPage() {
 
       {project.shots.length === 0 ? (
         <div className="empty">
-          还没有镜头。展开上面的「用模型生成」让模型拆，或点右上角「加一个镜头」手动写。
+          还没有镜头。
+          {/*
+            原来这里是一句话，教用户「展开上面的用模型生成」。
+            让他读一句说明再去找按钮，不如按钮就是这个。
+          */}
+          <div className="row" style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              className="btn btn-blue"
+              onClick={() => {
+                const drawer = toolsRef.current;
+                if (!drawer) return;
+                drawer.open = true;
+                drawer.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+              }}
+            >
+              用模型生成分镜
+            </button>
+          </div>
           {generatingShots ? (
             <div style={{ marginTop: 8 }}>模型正在拆镜头，请稍等…</div>
           ) : null}
@@ -492,6 +513,19 @@ export function StoryboardPage() {
            * 同名会在那个块里把外层的函数遮住，将来若在里面调一次就是 `boolean is not a function`。
            */
           const issuesOf = (field: string) => byField.get(field) ?? [];
+          /*
+            展开面板里「声音与情绪」「剪辑与衔接」两段默认收起：
+            一镜真正要常驻的只有画面。收起不等于藏起来，标题旁边直接标这一段有几处要改。
+            两个计数必须在 issuesOf 之后声明 —— 箭头函数里的引用也要等它先初始化。
+          */
+          const soundSectionIssues = ['sound', 'mood', 'offscreenCharacters'].reduce(
+            (count, field) => count + issuesOf(field).length,
+            0,
+          );
+          const cutSectionIssues = ['transition', 'transitionType', 'continuityNote'].reduce(
+            (count, field) => count + issuesOf(field).length,
+            0,
+          );
           return (
             <div
               className={`shot-card${located === shot.id ? ' shot-located' : ''}`}
@@ -504,6 +538,7 @@ export function StoryboardPage() {
                   type="number"
                   min={0.5}
                   step={0.5}
+                  aria-label="这一镜的时长，单位秒"
                   style={{ width: 74 }}
                   value={shot.duration}
                   onChange={(e) => patch(shot, { duration: Number(e.target.value) || 0 })}
@@ -539,7 +574,26 @@ export function StoryboardPage() {
                   onChange={(value) => patch(shot, { sceneId: value })}
                 />
 
-                <span style={{ flex: 1 }} />
+                {/*
+                  动作提到表头里：折叠态一行就是这一镜的全部常驻信息。
+                  原先下面还有一整个 shot-primary 区块（标签 + 输入 + 帮助 + 摘要行），
+                  一屏只放得下两镜半；现在镜号、四项参数、动作、问题数、展开都在一行。
+                */}
+                <input
+                  type="text"
+                  className={`shot-action${isFlagged(shot.id, 'action') ? ' field-flagged' : ''}`}
+                  value={shot.action}
+                  onChange={(e) => patch(shot, { action: e.target.value })}
+                  placeholder="这一镜做什么"
+                  aria-label={`第 ${shot.number} 镜的动作`}
+                  title="这一镜只做一件事"
+                />
+
+                {/*
+                  折叠时也能看图（v0.52）。挪进表头，不展开也看得见，
+                  而且不再单独占一行。
+                */}
+                <AssetPeek assets={galleryFor(shot.id)} />
 
                 {/*
                   这一镜有几处要改。以前这个数字只在检查页有，
@@ -556,80 +610,75 @@ export function StoryboardPage() {
                   </button>
                 ) : null}
 
+                <details className="shot-menu">
+                  <summary className="shot-menu-toggle" aria-label="更多操作" title="上移、下移、删除">
+                    ⋯
+                  </summary>
+                  <div className="shot-menu-body">
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={(event) => {
+                        closeMenu(event);
+                        moveShot(shot.id, -1);
+                      }}
+                    >
+                      上移
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === project.shots.length - 1}
+                      onClick={(event) => {
+                        closeMenu(event);
+                        moveShot(shot.id, 1);
+                      }}
+                    >
+                      下移
+                    </button>
+                    <button
+                      type="button"
+                      className="shot-menu-danger"
+                      onClick={(event) => {
+                        closeMenu(event);
+                        if (window.confirm(`删除第 ${shot.number} 镜？`)) removeShot(shot.id);
+                      }}
+                    >
+                      删除这一镜
+                    </button>
+                  </div>
+                </details>
+
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
-                  disabled={index === 0}
-                  onClick={() => moveShot(shot.id, -1)}
-                  title="上移"
-                >
-                  ↑
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  disabled={index === project.shots.length - 1}
-                  onClick={() => moveShot(shot.id, 1)}
-                  title="下移"
-                >
-                  ↓
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm expand-toggle"
+                  className="btn btn-ghost btn-icon expand-toggle"
                   aria-expanded={open}
                   aria-controls={`shot-more-${shot.id}`}
+                  aria-label={open ? '收起这一镜' : '展开这一镜'}
+                  title={open ? '收起' : '展开'}
                   onClick={() => setExpanded(open ? null : shot.id)}
                 >
-                  {open ? '收起' : '展开'}
-                  <Icon name="chevron-right" size={13} className="expand-chevron" />
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => {
-                    if (window.confirm(`删除第 ${shot.number} 镜？`)) removeShot(shot.id);
-                  }}
-                >
-                  删除
+                  <Icon name="chevron-right" size={15} className="expand-chevron" />
                 </button>
               </div>
-
-              {/*
-                折叠时也能看图（v0.52）。放在头部正下面，三页位置一致——
-                要比几镜的画面，眼睛不用在每张卡里重新找按钮。
-              */}
-              <AssetPeek assets={galleryFor(shot.id)} />
 
               {/*
                 表头这三个控件（时长 / 景别 / 场景）挤在同一个 flex 行里，
                 展开面板塞不进那一行，所以放在行下面——但仍然是各自一条、
                 点哪一条只展开那一条，不会一次糊一大片。
+                动作也在表头里，所以它的问题跟这三个并列。
               */}
               {shotIssues.length > 0 ? (
                 <div className="shot-head-issues">
                   <FieldIssues issues={issuesOf('duration')} label="时长" />
                   <FieldIssues issues={issuesOf('shotSize')} label="景别" />
                   <FieldIssues issues={issuesOf('sceneId')} label="场景" />
+                  <FieldIssues issues={issuesOf('action')} label="动作" />
                   <UnplacedIssues
                     issues={unplaced}
                     placed={shotIssues.length - unplaced.length}
                   />
                 </div>
               ) : null}
-
-              <div className="shot-primary">
-                <div className="field-label">动作</div>
-                <input
-                  type="text"
-                  value={shot.action}
-                  onChange={(e) => patch(shot, { action: e.target.value })}
-                  className={isFlagged(shot.id, 'action') ? 'field-flagged' : ''}
-                  placeholder="例：他抬手拂去肩上的雪"
-                />
-                <div className="field-help">这一镜只做一件事</div>
-                <FieldIssues issues={issuesOf('action')} label="动作" />
-              </div>
 
               {open ? (
                 <div className="shot-more" id={`shot-more-${shot.id}`}>
@@ -645,31 +694,30 @@ export function StoryboardPage() {
                           <Icon name="photo" size={16} />
                         </span>
                         <h4 className="shot-section-title">画面</h4>
-                        <p className="shot-section-desc">起点、终点、人物和机位</p>
                       </div>
                       <div className="shot-section-body">
                         <div>
                           <div className="field-label">起点</div>
                           <textarea
                             rows={3}
+                            aria-label="这一镜的起点"
                             value={shot.startState}
                             onChange={(e) => patch(shot, { startState: e.target.value })}
                             className={isFlagged(shot.id, 'startState') ? 'field-flagged' : ''}
                             placeholder="只写这一瞬间看得见的东西"
                           />
-                          <div className="field-help">镜头开始那一瞬间能看见什么</div>
                           <FieldIssues issues={issuesOf('startState')} label="起点" />
                         </div>
                         <div>
                           <div className="field-label">终点</div>
                           <textarea
                             rows={3}
+                            aria-label="这一镜的终点"
                             value={shot.endState}
                             onChange={(e) => patch(shot, { endState: e.target.value })}
                             className={isFlagged(shot.id, 'endState') ? 'field-flagged' : ''}
                             placeholder="下一镜要从这里接下去"
                           />
-                          <div className="field-help">镜头结束画面停在哪</div>
                           <FieldIssues issues={issuesOf('endState')} label="终点" />
                         </div>
                         <div>
@@ -705,6 +753,7 @@ export function StoryboardPage() {
                           <div className="field-label">台词 / 旁白</div>
                           <input
                             type="text"
+                            aria-label="这一镜的台词或旁白"
                             value={shot.dialogue}
                             onChange={(e) => patch(shot, { dialogue: e.target.value })}
                           />
@@ -714,6 +763,7 @@ export function StoryboardPage() {
                           <div className="field-label">机位</div>
                           <input
                             type="text"
+                            aria-label="这一镜的机位"
                             value={shot.cameraPosition}
                             onChange={(e) => patch(shot, { cameraPosition: e.target.value })}
                             placeholder="例：略低角度，与桌面齐平"
@@ -746,19 +796,22 @@ export function StoryboardPage() {
                       </div>
                     </section>
 
-                    <section className="shot-section">
-                      <div className="shot-section-rail">
+                    <details className="shot-section">
+                      <summary className="shot-section-rail">
                         <span className="shot-section-icon">
                           <Icon name="volume" size={16} />
                         </span>
                         <h4 className="shot-section-title">声音与情绪</h4>
-                        <p className="shot-section-desc">声音、情绪和画外音</p>
-                      </div>
+                        {soundSectionIssues > 0 ? (
+                          <span className="shot-section-count">{soundSectionIssues} 处要改</span>
+                        ) : null}
+                      </summary>
                       <div className="shot-section-body">
                         <div>
                           <div className="field-label">声音</div>
                           <input
                             type="text"
+                            aria-label="这一镜的声音"
                             value={shot.sound}
                             onChange={(e) => patch(shot, { sound: e.target.value })}
                             placeholder="环境音 / 音效"
@@ -769,6 +822,7 @@ export function StoryboardPage() {
                           <div className="field-label">情绪</div>
                           <input
                             type="text"
+                            aria-label="这一镜的情绪"
                             value={shot.mood}
                             onChange={(e) => patch(shot, { mood: e.target.value })}
                           />
@@ -779,6 +833,7 @@ export function StoryboardPage() {
                           <div className="field-label">画外人物</div>
                           <input
                             type="text"
+                            aria-label="这一镜的画外人物，用顿号分隔"
                             value={shot.offscreenCharacters.join('、')}
                             onChange={(e) =>
                               patch(shot, {
@@ -795,25 +850,28 @@ export function StoryboardPage() {
                         </div>
 
                       </div>
-                    </section>
+                    </details>
 
-                    <section className="shot-section">
-                      <div className="shot-section-rail">
+                    <details className="shot-section">
+                      <summary className="shot-section-rail">
                         <span className="shot-section-icon">
                           <Icon name="scissors" size={16} />
                         </span>
                         <h4 className="shot-section-title">剪辑与衔接</h4>
-                        <p className="shot-section-desc">镜头之间怎么接</p>
-                      </div>
+                        {cutSectionIssues > 0 ? (
+                          <span className="shot-section-count">{cutSectionIssues} 处要改</span>
+                        ) : null}
+                      </summary>
                       <div className="shot-section-body">
                         <div>
                           <div className="field-label">转场</div>
                           <input
                             type="text"
+                            aria-label="这一镜的转场说明"
                             value={shot.transition}
                             onChange={(e) => patch(shot, { transition: e.target.value })}
                           />
-                          <div className="field-help">剪辑阶段用，不进生成提示词。多数镜头用硬切就好。</div>
+                          <div className="field-help">不进提示词；多数镜头硬切就够</div>
                         </div>
 
                         <div>
@@ -841,15 +899,15 @@ export function StoryboardPage() {
                           <div className="field-label">下一镜的衔接</div>
                           <input
                             type="text"
+                            aria-label="这一镜和下一镜的衔接"
                             value={shot.continuityNote ?? ''}
                             onChange={(e) => patch(shot, { continuityNote: e.target.value })}
                             placeholder="例：他保持这个姿势不动，下一镜从同一机位推进"
                           />
-                          <div className="field-help">这一镜怎么接到下一镜</div>
                           <FieldIssues issues={issuesOf('continuityNote')} label="衔接" />
                         </div>
                       </div>
-                    </section>
+                    </details>
 
                     <section className="shot-section">
                       <div className="shot-section-rail">
@@ -857,7 +915,6 @@ export function StoryboardPage() {
                           <Icon name="lock" size={16} />
                         </span>
                         <h4 className="shot-section-title">连续性锁</h4>
-                        <p className="shot-section-desc">勾选这一镜不能变的部分</p>
                       </div>
                       <div className="shot-section-body">
                         {/*
@@ -1017,13 +1074,7 @@ export function StoryboardPage() {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="hint" style={{ marginTop: 6 }}>
-                  {shot.startState ? `起点：${shot.startState.slice(0, 60)}` : '起点还没写'}
-                  {' · '}
-                  {scene ? `场景：${scene.name}` : '未指定场景'}
-                </div>
-              )}
+              ) : null}
             </div>
           );
         })}

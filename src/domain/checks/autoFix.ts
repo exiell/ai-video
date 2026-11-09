@@ -192,7 +192,7 @@ export function buildFixPlan(project: Project, report: { issues: CheckIssue[] },
           issueId: issue.id,
           title: `用草稿填上第 ${shot.number} 镜的「${field === 'startState' ? '起点' : field === 'endState' ? '终点' : '动作'}」`,
           reason:
-            '这一格是空的。下面这条是从这一镜的其它字段和场景设定里拼出来的草稿——' +
+            '这一格是空的。下面这条是从这一镜的其它字段和场景设定里拼出来的草稿，' +
             '它能占住位置、让检查通过，但多半不如你手写的好。',
           target: { shotId: shot.id },
           before: '（空）',
@@ -271,7 +271,7 @@ function addLockProposals(project: Project, proposals: FixProposal[], affected: 
         issueId: 'character-missing-lock',
         title: `第 ${shot.number} 镜补上「${character.name}」的 ${missing.length} 条锁`,
         reason:
-          '这一镜出现了这个角色，但没声明他的锁。锁面不会被写进提示词，角色在这一镜就会变样——' +
+          '这一镜出现了这个角色，但没声明他的锁。锁面不会被写进提示词，角色在这一镜就会变样。' +
           '这是最难排查的问题，因为其他镜头都对，只有这一镜不对。',
         target: { shotId: shot.id, characterId: character.id },
         before: shot.activeLockIds.length === 0 ? '没有勾任何锁' : `已勾 ${shot.activeLockIds.length} 条`,
@@ -292,7 +292,7 @@ function addLockProposals(project: Project, proposals: FixProposal[], affected: 
       issueId: 'scene-missing-elements',
       title: `第 ${shot.number} 镜补上场景「${scene.name}」的 ${sceneMissing.length} 条锁`,
       reason:
-        '场景锁固定的是空间与固定元素。缺了它，观众会觉得这一镜换了地方——即使桌椅黑板一个没变。',
+        '场景锁固定的是空间与固定元素。缺了它，观众会觉得这一镜换了地方，即使桌椅黑板一个没变。',
       target: { shotId: shot.id, sceneId: scene.id },
       before: shot.activeLockIds.length === 0 ? '没有勾任何锁' : `已勾 ${shot.activeLockIds.length} 条`,
       after: `再补 ${sceneMissing.length} 条（${sceneMissing.map((l) => l.label).join('、')}）`,

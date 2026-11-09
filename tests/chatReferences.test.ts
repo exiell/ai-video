@@ -47,7 +47,7 @@ describe('AI 能看到穿帮检查的结果', () => {
     if (report.issues.length > 0) {
       // 至少能看到条数与分档统计
       expect(ctx).toContain(`共 ${report.issues.length} 条`);
-      expect(ctx).toContain('必须修');
+      expect(ctx).toContain('必改项');
     }
   });
 

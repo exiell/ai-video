@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_TAG, summarizeReport } from '../domain/checks';
+import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_TAG } from '../domain/checks';
+import { Icon } from '../components/Icon';
 import { SummaryBar, Info } from '../components/bits';
 import type { CheckIssue, CheckSeverity } from '../types/model';
 import { AutoFixPanel } from '../components/AutoFixPanel';
@@ -77,10 +78,15 @@ export function ChecksPage() {
       <AutoFixPanel report={report} />
 
       <SummaryBar>
-        <b>{summarizeReport(report)}</b>
-        <span className="tag tag-error">{report.counts.error} 必须修</span>
-        <span className="tag tag-warning">{report.counts.warning} 建议修</span>
-        <span className="tag tag-info">{report.counts.info} 看一眼</span>
+        {report.issues.length > 0 ? (
+          <>
+            <span className="tag tag-error">{report.counts.error} 必改项</span>
+            <span className="tag tag-warning">{report.counts.warning} 建议项</span>
+            <span className="tag tag-info">{report.counts.info} 参考项</span>
+          </>
+        ) : (
+          <b>没有发现问题</b>
+        )}
         <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>
           检查时间 {new Date(report.checkedAt).toLocaleTimeString('zh-CN')}
         </span>
@@ -110,18 +116,20 @@ export function ChecksPage() {
             </h3>
             {group.map((issue) => (
               <div className={`issue issue-sev-${issue.severity}`} key={issue.id}>
+                {/*
+                  动作放进标题行，不再在每张卡底部各占一个带边框的按钮。
+                  十一条问题排下来，底部一排一模一样的按钮会把卡片节奏拉成模板。
+                  放在标题右侧仍是一条一张，但视觉上退到和文字同一层。
+                */}
                 <div className="issue-title">
-                  <span className="tag" style={{ marginRight: 8 }}>
-                    {RULE_LABEL[issue.ruleId] ?? issue.ruleId}
-                  </span>
-                  {issue.title}
-                </div>
-                <IssueBody issue={issue} />
-                <div className="row" style={{ marginTop: 8 }}>
-                  <button type="button" className="btn btn-sm" onClick={() => goTo(issue)}>
+                  <span className="tag">{RULE_LABEL[issue.ruleId] ?? issue.ruleId}</span>
+                  <span className="issue-title-text">{issue.title}</span>
+                  <button type="button" className="issue-go" onClick={() => goTo(issue)}>
                     {issue.location.kind === 'shot' ? '跳到这一镜' : '去处理'}
+                    <Icon name="arrow-right" size={12} className="issue-go-arrow" />
                   </button>
                 </div>
+                <IssueBody issue={issue} />
               </div>
             ))}
           </section>

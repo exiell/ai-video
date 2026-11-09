@@ -82,16 +82,23 @@ export function ExportPage() {
   async function importFile(file: File) {
     setImportError(null);
     setImportOk(null);
-    const text = await file.text();
-    const result: ImportResult = parseImportedProject(text);
-    if (!result.ok || !result.project) {
-      setImportError(result.error ?? '导入失败。');
-      return;
+    try {
+      const text = await file.text();
+      const result: ImportResult = parseImportedProject(text);
+      if (!result.ok || !result.project) {
+        setImportError(result.error ?? '导入失败。');
+        return;
+      }
+      setProject(result.project);
+      setImportOk(
+        `已导入「${result.project.name}」。注意：项目数据里不含图片，图片需要从「图包★」里手动查看。`,
+      );
+    } catch {
+      // 文件读不出来时不能什么都不发生：给一句人话，并告诉用户下一步能做什么。
+      setImportError(
+        '这个项目文件读不出来。可能不是 AniGuide 导出的 项目数据.json，或者文件已经不完整；可以让对方重新导出一次再试。',
+      );
     }
-    setProject(result.project);
-    setImportOk(
-      `已导入「${result.project.name}」。注意：项目数据里不含图片，图片需要从图包里手动查看。`,
-    );
   }
 
   const textEntries = entries.filter((e) => !e.bytes);
@@ -127,7 +134,7 @@ export function ExportPage() {
 
       {imageAssets.length === 0 ? (
         <div className="card">
-          <h3 className="card-title">现在还没有图片</h3>
+          <h3 className="card-title">图片包</h3>
           <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
             等你生成了角色形象图或关键帧，它们会一起进图包。
           </p>
@@ -138,7 +145,7 @@ export function ExportPage() {
       ) : null}
 
       <div className="card">
-        <h3 className="card-title">压缩包里有什么</h3>
+        <h3 className="card-title">压缩包内容</h3>
         <div className="scroll-x">
           <table className="simple">
             <thead>
@@ -198,7 +205,7 @@ export function ExportPage() {
             <div className="hint">
               文件名是<code>对象名_生成时间.png</code>
             <Info label="文件名长什么样">
-              例如 <code>图包/角色/头部特写/林冲_2026-10-12_18-30-00.png</code>，
+              例如 <code>图包★/角色/头部特写/林冲_2026-10-12_18-30-00.png</code>，
               打开文件夹就知道哪张是谁的、什么时候生成的。
             </Info>
             </div>
@@ -208,7 +215,7 @@ export function ExportPage() {
 
       {imageAssets.length > 0 ? (
         <div className="card">
-          <h3 className="card-title">你生成的图</h3>
+          <h3 className="card-title">已生成的图</h3>
           <div className="scroll-x">
             <table className="simple">
               <thead>
@@ -243,27 +250,30 @@ export function ExportPage() {
         <summary>拿到包之后怎么用</summary>
         <div className="why-body">
           <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
-            <li>打开「拍摄进度表.md」，从第 1 镜开始做。</li>
+            <li>解压后先打开「先看这里.txt」，它写了哪些要拿去用、哪些只是备查。</li>
+            <li>用「参考文档/拍摄进度表.md」逐镜执行，从第 1 镜开始做。</li>
             <li>
-              对着「提示词/即梦.md」（或你选的平台），把每一镜的<b>英文正文</b>复制过去生成图。
+              从「视频提示词★/即梦.md」（或你选的平台）里复制每一镜的<b>英文正文</b>，
+              粘到对应平台生成视频。
             </li>
-            <li>图满意了再生成视频。先出图能省很多钱。</li>
+            <li>图还没出的话，先按「参考文档/图片提示词.md」出这一镜的三帧。先出图能省很多钱。</li>
             <li>每一镜做完，在进度表上打勾。</li>
             <li>
-              遇到「看起来不像同一个人 / 同一个地方」时，先翻「一致性总览.md」看当时锁了什么，
-              再翻「穿帮检查单.md」看有没有哪条锁没带上。
+              遇到「看起来不像同一个人 / 同一个地方」时，先翻「参考文档/一致性总览.md」看当时锁了什么，
+              再翻「参考文档/穿帮检查单.md」看有没有哪条锁没带上。
             </li>
           </ol>
         </div>
       </details>
 
       <div className="card">
-        <h3 className="card-title">导入项目文件</h3>
+        <h3 className="card-title">项目导入</h3>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          迁移到另一台电脑用。注意：<b>不含图片</b>，图片在图包里。
+          选压缩包根目录的 <code>项目数据.json</code>。注意：<b>不含图片</b>，图片在「图包★」里。
         </p>
         <input
           type="file"
+          aria-label="选择项目数据文件"
           accept="application/json,.json"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -307,18 +317,20 @@ export function ExportPage() {
 }
 
 function describeText(path: string): string {
-  if (path === '分镜表.csv') return '可以用 Excel / 飞书表格打开，方便你改和打印';
-  if (path === '分镜表.md') return '带完整字段的分镜表，适合直接看';
-  if (path === '角色设定卡.md') return '身份 / 变体 / 连续性锁三层设定';
-  if (path === '场景设定卡.md') return '固定元素 / 光线 / 色调，场景不走样的依据';
-  if (path === '穿帮检查单.md') return '出图前该核对的全部问题，每条都写了为什么和怎么改';
-  if (path === '拍摄进度表.md') return '逐镜执行清单，可以打勾';
-  if (path === '镜头衔接表.md') return '每一镜怎么接到下一镜；做尾帧、写转场、剪辑时对着它走';
-  if (path === '一致性总览.md') return '逐张记录每张图当时锁了什么、用了哪张参考图';
-  if (path === '图片提示词.md')
+  const name = path.split('/').pop() ?? path;
+  if (name === '先看这里.txt') return '这个包怎么用：哪些要拿去用，哪些是备查的';
+  if (name === '分镜表.csv') return '可以用 Excel / 飞书表格打开，方便你改和打印';
+  if (name === '分镜表.md') return '带完整字段的分镜表，适合直接看';
+  if (name === '角色设定卡.md') return '身份 / 变体 / 连续性锁三层设定';
+  if (name === '场景设定卡.md') return '固定元素 / 光线 / 色调，场景不走样的依据';
+  if (name === '穿帮检查单.md') return '出图前该核对的全部问题，每条都写了为什么和怎么改';
+  if (name === '拍摄进度表.md') return '逐镜执行清单，可以打勾';
+  if (name === '镜头衔接表.md') return '每一镜怎么接到下一镜；做尾帧、写转场、剪辑时对着它走';
+  if (name === '一致性总览.md') return '逐张记录每张图当时锁了什么、用了哪张参考图';
+  if (name === '图片提示词.md')
     return '角色 / 场景 / 三帧的出图提示词。拿到任何模型里都能出图，不限本工具支持的厂商';
-  if (path === '项目数据.json') return '备份用。导入它可以完整恢复这个项目的文本部分';
-  if (path.startsWith('提示词/')) return '可直接粘贴的英文正文 + 中文对照 + 逐项说明';
+  if (name === '项目数据.json') return '备份用。导入它可以完整恢复这个项目的文本部分';
+  if (path.startsWith('视频提示词★/')) return '直接复制去平台：每镜英文正文 + 中文对照';
   return '';
 }
 

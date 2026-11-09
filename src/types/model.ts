@@ -756,7 +756,7 @@ export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
 /** 三种镜头帧的说明，供界面复用 */
 export const FRAME_KIND_HINT: Record<'first-frame' | 'action-peak' | 'end-frame', string> = {
   'first-frame': '镜头开始那一格。**它是图生视频的输入图**，必须先有它。',
-  'action-peak': '动作最有张力的那一瞬间。它决定动作的力度与节奏——只给首尾帧，模型可能把动作演得软绵绵。',
+  'action-peak': '动作最有张力的那一瞬间。它决定动作的力度与节奏。只给首尾帧，模型可能把动作演得软绵绵。',
   'end-frame': '镜头结束那一格。**下一镜的首帧要接住它**，镜头之间的衔接靠这一对。',
 };
 

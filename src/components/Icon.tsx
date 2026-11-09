@@ -10,6 +10,8 @@ import download from '../assets/icons/tabler-download.svg?url';
 import settings from '../assets/icons/tabler-settings.svg?url';
 import help from '../assets/icons/tabler-help-circle.svg?url';
 import chevronRight from '../assets/icons/tabler-chevron-right.svg?url';
+import chevronLeft from '../assets/icons/tabler-chevron-left.svg?url';
+import trash from '../assets/icons/tabler-trash.svg?url';
 import plus from '../assets/icons/tabler-plus.svg?url';
 import sparkles from '../assets/icons/tabler-sparkles.svg?url';
 import movie from '../assets/icons/tabler-movie.svg?url';
@@ -51,6 +53,8 @@ const ICONS = {
   settings,
   help,
   'chevron-right': chevronRight,
+  'chevron-left': chevronLeft,
+  trash,
   plus,
   sparkles,
   movie,
