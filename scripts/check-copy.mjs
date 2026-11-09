@@ -4,12 +4,43 @@ import ts from 'typescript';
 
 const ROOT = process.cwd();
 const PAGE_DIRS = ['src/pages', 'src/components'];
+/**
+ * 领域层也会产出用户可见文案（检查建议、出图 notes、导出说明、错误提示）。
+ *
+ * 【v0.54 · P2-13】原来只扫页面与组件，于是 domain/services 里 14 处
+ * 用户可见的长破折号一直没被规则覆盖（第 10 批「48→0」只扫了页面层）。
+ * 这些目录里同时有**给模型的英文提示词**，所以不能像页面那样见字符串就收，
+ * 而是按「字段名白名单」只收用户可见的那几类。
+ */
+const DOMAIN_DIRS = ['src/domain', 'src/services', 'src/data'];
+/**
+ * 收集哪些字段的值。正向词、负向词、fragment、build*Messages 等
+ * 进提示词的字段**不在这里**——它们不该受用户文案规则约束。
+ */
+const VISIBLE_FIELD_KEYS = new Set([
+  'advice',
+  'description',
+  'error',
+  'example',
+  'hint',
+  'label',
+  'message',
+  'notes',
+  'reason',
+  'suggestion',
+  'summary',
+  'title',
+  'warnings',
+  'whenToUse',
+  'why',
+]);
 const ALLOWED_FONT_SIZES = new Set([12, 13, 14, 16, 20, 26]);
 
-function walk(dir) {
+function walk(dir, extensions) {
   return readdirSync(dir).flatMap((name) => {
     const full = path.join(dir, name);
-    return statSync(full).isDirectory() ? walk(full) : full.endsWith('.tsx') ? [full] : [];
+    if (statSync(full).isDirectory()) return walk(full, extensions);
+    return extensions.some((ext) => full.endsWith(ext)) ? [full] : [];
   });
 }
 
@@ -17,7 +48,8 @@ function lineOf(source, node) {
   return source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
 }
 
-function collectCopy(file) {
+/** 页面/组件：JSX 文本与所有字符串字面量都算可见文案 */
+function collectJsxCopy(file) {
   const text = readFileSync(file, 'utf8');
   const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const found = [];
@@ -54,6 +86,71 @@ function collectCopy(file) {
   return found;
 }
 
+/**
+ * 领域/服务层：只收白名单字段的值。
+ *
+ * 递归只走「字符串 / 数组 / 拼接 / 条件」这几种表达式，遇到对象字面量就停——
+ * 避免把 `positive`、`negative` 这类提示词字段里嵌套的文案也扫进来。
+ */
+function collectDomainCopy(file) {
+  const text = readFileSync(file, 'utf8');
+  const source = ts.createSourceFile(
+    file,
+    text,
+    ts.ScriptTarget.Latest,
+    true,
+    file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const found = [];
+  const seen = new Set();
+
+  const add = (value, node, kind = 'text') => {
+    const clean = value.replace(/\s+/g, ' ').trim();
+    if (!clean || !/[\u4e00-\u9fff]/.test(clean)) return;
+    const key = `${file}:${lineOf(source, node)}:${clean}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push({ file: path.relative(ROOT, file), line: lineOf(source, node), text: clean, kind });
+  };
+
+  const collectStrings = (node) => {
+    if (!node) return;
+    if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+      add(node.text, node);
+      return;
+    }
+    if (ts.isTemplateExpression(node)) {
+      add(node.head.text, node.head);
+      for (const span of node.templateSpans) add(span.literal.text, span.literal);
+      return;
+    }
+    if (ts.isArrayLiteralExpression(node)) {
+      for (const element of node.elements) collectStrings(element);
+      return;
+    }
+    if (
+      ts.isBinaryExpression(node) ||
+      ts.isParenthesizedExpression(node) ||
+      ts.isConditionalExpression(node) ||
+      ts.isAsExpression(node) ||
+      ts.isSatisfiesExpression?.(node)
+    ) {
+      ts.forEachChild(node, collectStrings);
+    }
+  };
+
+  const visit = (node) => {
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name)) {
+      if (VISIBLE_FIELD_KEYS.has(node.name.text)) collectStrings(node.initializer);
+      return; // 白名单字段内部不再深入，避免重复收集
+    }
+    ts.forEachChild(node, visit);
+  };
+
+  visit(source);
+  return found;
+}
+
 const hard = [
   { re: /——/g, label: '长破折号 ——' },
   { re: /不是[^。！？\n]{0,30}而是/g, label: '不是…而是' },
@@ -66,11 +163,9 @@ const soft = [
   { re: /不只是/g, label: '不只是' },
 ];
 
-const files = PAGE_DIRS.flatMap((dir) => walk(path.join(ROOT, dir))).filter(
-  // 这个文件还有一笔外部未提交的 AssetPeek 改动；等它落地后再纳入审计，避免混提交。
-  (file) => !file.endsWith(path.join('components', 'ChatSidebar.tsx')),
-);
-const copy = files.flatMap(collectCopy);
+const pageFiles = PAGE_DIRS.flatMap((dir) => walk(path.join(ROOT, dir), ['.tsx', '.ts']));
+const domainFiles = DOMAIN_DIRS.flatMap((dir) => walk(path.join(ROOT, dir), ['.ts', '.tsx']));
+const copy = [...pageFiles.flatMap(collectJsxCopy), ...domainFiles.flatMap(collectDomainCopy)];
 const failures = [];
 const warnings = [];
 
@@ -84,7 +179,6 @@ for (const item of copy) {
   }
   for (const rule of soft) {
     if (rule.re.test(item.text)) {
-      rule.re.lastIndex = 0;
       warnings.push({ ...item, rule: rule.label });
     }
     rule.re.lastIndex = 0;
@@ -92,7 +186,7 @@ for (const item of copy) {
   if (item.kind === 'hint' && item.text.length > 45) {
     warnings.push({ ...item, rule: `hint 超过 45 字（${item.text.length}）` });
   }
-  if (item.text.length > 45) {
+  if (item.kind === 'text' && item.text.length > 45) {
     warnings.push({ ...item, rule: `单条文案超过 45 字（${item.text.length}）` });
   }
 }
@@ -119,7 +213,7 @@ const unique = (items) => {
 const failureList = unique(failures);
 const warningList = unique(warnings);
 
-console.log(`可见文案：${copy.length} 条`);
+console.log(`可见文案：${copy.length} 条（页面/组件 ${pageFiles.length} 个文件，领域/服务 ${domainFiles.length} 个文件）`);
 console.log(`字号：${[...new Set(fontSizes)].join(', ') || '无'}`);
 console.log(`硬规则失败：${failureList.length}`);
 for (const item of failureList.slice(0, 12)) {

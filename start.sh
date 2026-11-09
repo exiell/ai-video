@@ -73,30 +73,49 @@ step 1 "Node.js v${NODE_VER}"
 # ---------------------------------------------------------------------------
 # 第 2 步：pnpm
 # ---------------------------------------------------------------------------
-# 优先 corepack（Node 自带，版本最稳），不行再退回 npm 全局安装。
-if ! command -v pnpm >/dev/null 2>&1; then
-  echo "  ${C_YELLOW}[2/4] 没有 pnpm，正在自动安装...${C_RESET}"
+# 只往项目目录里装：不碰 /usr、不碰全局 npm 前缀，也不要求 $HOME 可写。
+# 共享服务器、公司电脑、容器里经常没有 sudo，`npm install -g` 会直接 EACCES；
+# 把 pnpm、npm 缓存都放进 .tools/ 后，这类机器上 ./start.sh 也能跑通。
+TOOLS_DIR="$PWD/.tools"
+NPM_CACHE="$TOOLS_DIR/npm-cache"
+LOCAL_PNPM="$TOOLS_DIR/node_modules/.bin/pnpm"
+PNPM=""
 
-  if command -v corepack >/dev/null 2>&1; then
-    corepack enable >/dev/null 2>&1 || true
-    corepack prepare pnpm@latest --activate >/dev/null 2>&1 || true
+if command -v pnpm >/dev/null 2>&1; then
+  # 系统里已经有 pnpm，直接用，不重复安装
+  PNPM="$(command -v pnpm)"
+elif [ -x "$LOCAL_PNPM" ] && "$LOCAL_PNPM" --version >/dev/null 2>&1; then
+  # 上次运行装过，直接用
+  PNPM="$LOCAL_PNPM"
+else
+  echo "  ${C_YELLOW}[2/4] 没有 pnpm，正在装到项目内 .tools/（不需要 sudo）...${C_RESET}"
+
+  if command -v npm >/dev/null 2>&1; then
+    # --prefix：装到项目内，不写全局 npm 目录
+    # --cache：npm 缓存也留在项目内，否则 $HOME 不可写时连解包都会失败
+    # pnpm@10：与 pnpm-lock.yaml 的 9.0 锁文件格式对应，要升级改这里
+    npm install --prefix "$TOOLS_DIR" --cache "$NPM_CACHE" \
+      --no-fund --no-audit --loglevel=error pnpm@10 >/dev/null 2>&1 || true
   fi
 
-  if ! command -v pnpm >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
-    echo "        改用 npm 安装..."
-    npm install -g pnpm >/dev/null 2>&1 || true
-  fi
-
-  if ! command -v pnpm >/dev/null 2>&1; then
-    fail "pnpm 自动安装失败" \
-      "请手动执行：" \
-      "  npm install -g pnpm" \
-      "" \
-      "如果提示权限不足，试试：" \
-      "  sudo npm install -g pnpm"
+  if [ -x "$LOCAL_PNPM" ] && "$LOCAL_PNPM" --version >/dev/null 2>&1; then
+    PNPM="$LOCAL_PNPM"
   fi
 fi
-step 2 "pnpm $(pnpm --version)"
+
+if [ -z "$PNPM" ]; then
+  fail "pnpm 安装失败" \
+    "脚本只把 pnpm 装进当前项目的 .tools/，不写系统目录，也不需要 sudo。" \
+    "" \
+    "常见原因与做法：" \
+    "  · 网络不通 —— 检查网络，或换一个 npm 镜像源" \
+    "  · 项目目录不可写 —— 把项目放到你有写权限的目录再跑" \
+    "" \
+    "也可以手动执行（同样只装到当前目录）：" \
+    "  npm install --prefix .tools --cache .tools/npm-cache pnpm@10" \
+    "  ./.tools/node_modules/.bin/pnpm install"
+fi
+step 2 "pnpm $("$PNPM" --version)"
 
 # ---------------------------------------------------------------------------
 # 第 3 步：依赖
@@ -118,7 +137,9 @@ fi
 if [ "$NEED_INSTALL" = "1" ]; then
   step 3 "正在安装依赖（第一次大约需要 1 分钟）..."
   echo
-  if ! pnpm install; then
+  # --store-dir 把 pnpm 的包仓库也放在项目内。默认仓库在 $HOME，
+  # 家目录只读或不可写时会在安装到一半才报权限错误。
+  if ! "$PNPM" install --store-dir "$PWD/.pnpm-store"; then
     fail "依赖安装失败" \
       "常见原因与做法：" \
       "  · 网络不通 —— 检查网络，或换一个 npm 镜像源" \
@@ -190,7 +211,7 @@ OPENER_PID=$!
 # 退出时收掉后台的探测进程
 trap 'kill "$OPENER_PID" 2>/dev/null || true' EXIT
 
-pnpm dev
+"$PNPM" dev
 
 echo
 echo "  ${C_DIM}开发服务器已停止。${C_RESET}"

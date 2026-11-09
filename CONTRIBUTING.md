@@ -38,7 +38,7 @@ git checkout -b fix/检查规则误报
 #    Windows 双击 start.cmd；macOS / Linux 跑 ./start.sh
 
 # 6. 改完先自检（这一步很重要，见下文）
-pnpm test
+pnpm test:local   # 全部测试；优先用项目内的 Node 22（脚本会校验版本）
 pnpm typecheck
 
 # 7. 提交并推送
@@ -52,12 +52,19 @@ git push origin fix/检查规则误报
 ### 提交前请务必跑一遍
 
 ```bash
-pnpm test        # 全部单元测试，必须全过
+pnpm test:local  # 全部单元测试，必须全过（= bash scripts/test.sh）
 pnpm typecheck   # tsc --noEmit，必须 0 错误
 ```
 
 **这两条不过的 PR 不会被合并。** 不是因为严格，而是因为这个项目的正确性
 大量依赖测试——提示词构造和检查规则有太多「看起来对但实际错」的写法。
+
+> **测试请用 `pnpm test:local` 或 `bash scripts/test.sh`。** `pnpm test` 现在也会先校验 Node 版本
+> （不满足直接失败），但它不会自动切到项目内的 Node 22，所以本地仍推荐 `test:local`。
+> 不要直接 `npx vitest`——那条路没有任何版本检查。
+> `jsdom@30` 要求 Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`（23.x / 25.x 不满足）；在 Node 20 下，`.tsx` 组件测试会在加载阶段
+> 直接崩掉并被 vitest **静默跳过**（不计入 Failed Tests），屏幕上却是全绿。
+> 脚本会在 Node 版本不够时直接退出并给出安装方法，不给你假结果。CI 用的也是它。
 
 ---
 
@@ -155,8 +162,11 @@ pnpm typecheck   # tsc --noEmit，必须 0 错误
 
 ## 开发环境
 
-- Node.js 20+
-- pnpm（推荐；项目按 pnpm 调过配置）
+- Node.js 20+（只跑应用足够）；**跑测试需要 Node.js `^22.22.2 || ^24.15.0 || >=26.0.0`**
+  （22.22.2+ / 24.15.0+ / 26+；23.x 与 25.x 不满足，`jsdom@30` 的 engines 就是这个区间）。
+  `pnpm test` 与 `pnpm test:local` 都会先做版本检查；后者会优先使用项目内
+  `.tools/node-v22/`，所以通常不用手动切版本。
+- pnpm 10（版本见 `package.json` 的 `packageManager`）
 - Windows / macOS / Linux 都行
 
 一键启动：Windows 双击 `start.cmd`；macOS / Linux 跑 `./start.sh`。

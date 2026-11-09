@@ -1,0 +1,43 @@
+# 最小 CI（v0.54 · P2-6）
+#
+# 盯三件事，与本地提交前的自检一致：
+#   1. 测试全过 —— 必须走 scripts/test.sh（它会校验 Node 版本）
+#   2. 类型检查 0 错误
+#   3. 可见文案硬规则 0 失败（长破折号 / 字面 ** 之外的规范在 check-copy 里）
+#
+# 为什么这里不放 pnpm audit：已知 zod high（<4.6.6）尚未升级，放进来会让
+# CI 长期红着，红灯就失去意义。审计单独开定时任务跟踪。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 pnpm（版本读 package.json 的 packageManager）
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 跑测试（scripts/test.sh 会用系统 Node 22，因为 CI 没有 .tools）
+        run: bash scripts/test.sh
+
+      - name: 类型检查
+        run: npx tsc --noEmit
+
+      - name: 可见文案规范
+        run: npm run check:copy
