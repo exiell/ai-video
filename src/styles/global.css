@@ -2369,11 +2369,6 @@ table.simple tbody tr:last-child td {
   font-size: 12px;
 }
 
-.next-time {
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
 .next-card h2 {
   margin: 7px 0 4px;
   color: var(--text);
@@ -2383,24 +2378,11 @@ table.simple tbody tr:last-child td {
   letter-spacing: -0.01em;
 }
 
-.next-card p {
-  margin: 0;
-  max-width: 58ch;
-  color: var(--text-dim);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
 .next-foot {
   display: flex;
   align-items: center;
   gap: 12px;
   margin-top: 15px;
-}
-
-.next-hint {
-  color: #3b568f;
-  font-size: 12px;
 }
 
 .tasks-card {
@@ -2483,14 +2465,6 @@ table.simple tbody tr:last-child td {
   line-height: 1.45;
 }
 
-.task-main span {
-  display: block;
-  margin-top: 1px;
-  color: var(--text-faint);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
 .task-row > a {
   padding-top: 2px;
   color: var(--text-dim);
@@ -2567,14 +2541,6 @@ table.simple tbody tr:last-child td {
   color: #f2f6fb;
   font-size: 12px;
   line-height: 1.6;
-}
-
-.shot-tile-foot {
-  margin-top: 10px;
-  padding-top: 6px;
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
-  color: #7f8ea3;
-  font-size: 12px;
 }
 
 .shot-tile-meta {
@@ -2660,25 +2626,6 @@ table.simple tbody tr:last-child td {
   font-size: 12px;
 }
 
-.shots-foot {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  margin: auto 0 0;
-  padding-top: 12px;
-  color: var(--text-faint);
-  font-size: 12px;
-}
-
-.shots-foot a {
-  color: var(--text-dim);
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 2px;
-  white-space: nowrap;
-}
-
 /* 右栏不再是一个大卡片套四个小面板，改成「小标题 + 一条分隔线」。 */
 .home-rail {
   display: flex;
@@ -2723,21 +2670,6 @@ table.simple tbody tr:last-child td {
 .check-total span {
   color: var(--text-dim);
   font-size: 12px;
-}
-
-.check-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 5px 0;
-  color: var(--text-dim);
-  font-size: 12px;
-}
-
-.check-row b {
-  color: var(--text);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
 }
 
 .assets {
@@ -3642,21 +3574,12 @@ table.simple tbody tr:last-child td {
   border-color: var(--border);
 }
 
-[data-theme='night'] .next-label,
-[data-theme='night'] .next-hint {
+[data-theme='night'] .next-label {
   color: var(--text-dim);
-}
-
-[data-theme='night'] .next-time {
-  color: var(--text-faint);
 }
 
 [data-theme='night'] .next-card h2 {
   color: var(--text);
-}
-
-[data-theme='night'] .next-card p {
-  color: var(--text-dim);
 }
 
 [data-theme='night'] .next-step {
@@ -3686,11 +3609,6 @@ table.simple tbody tr:last-child td {
 
 [data-theme='night'] .shot-tile:hover .shot-tile-frame {
   background: #10161e;
-}
-
-[data-theme='night'] .shot-tile-foot {
-  border-top-color: #29313b;
-  color: #8493a5;
 }
 
 [data-theme='night'] .runtime-bars i {
@@ -3953,12 +3871,6 @@ table.simple tbody tr:last-child td {
 
 [data-theme='blueprint'] .next-card h2 {
   color: var(--text);
-}
-
-[data-theme='blueprint'] .next-card p,
-[data-theme='blueprint'] .next-hint,
-[data-theme='blueprint'] .next-time {
-  color: var(--text-dim);
 }
 
 [data-theme='blueprint'] .next-label {

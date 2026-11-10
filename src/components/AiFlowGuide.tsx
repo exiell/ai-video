@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RichText } from './bits';
 import { useImage } from '../store/image';
-import type { AssetKind } from '../types/model';
+import { computeImageCoverage } from './imageCoverage';
 
 /**
  * AI 生成流程指引（方案.md §7.6.19）
@@ -60,39 +60,16 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
 
   const { characters, scenes, shots } = project;
 
-  /** 数某类素材覆盖了多少个对象（不是数图片张数——一个对象可能出了好几张） */
-  const coveredBy = (refIds: string[], kinds: AssetKind[]): number =>
-    refIds.filter((id) => (gallery[id] ?? []).some((a) => kinds.includes(a.kind))).length;
-
-  const charsWithSheet = coveredBy(
-    characters.map((c) => c.id),
-    ['character-sheet'],
-  );
-  const charsWithFace = coveredBy(
-    characters.map((c) => c.id),
-    ['character-sheet-face'],
-  );
-  const charsReady = characters.filter(
-    (c) =>
-      (gallery[c.id] ?? []).some((a) => a.kind === 'character-sheet') &&
-      (gallery[c.id] ?? []).some((a) => a.kind === 'character-sheet-face'),
-  ).length;
-  const scenesReady = coveredBy(
-    scenes.map((s) => s.id),
-    ['scene-plate'],
-  );
-  const firstReady = coveredBy(
-    shots.map((s) => s.id),
-    ['first-frame'],
-  );
-  const peakReady = coveredBy(
-    shots.map((s) => s.id),
-    ['action-peak'],
-  );
-  const endReady = coveredBy(
-    shots.map((s) => s.id),
-    ['end-frame'],
-  );
+  // 覆盖度统一由纯函数算（主页算「下一步」也用同一份规则，避免两处漂）
+  const {
+    charsWithSheet,
+    charsWithFace,
+    charsReady,
+    scenesReady,
+    firstReady,
+    peakReady,
+    endReady,
+  } = computeImageCoverage(project, gallery);
 
   const hasSplit = characters.length > 0 && scenes.length > 0;
   const hasShots = shots.length > 0;

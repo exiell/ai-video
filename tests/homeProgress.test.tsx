@@ -6,7 +6,9 @@ import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { HomePage } from '../src/pages/HomePage';
 import { useAppStore } from '../src/store/app';
+import { useImage } from '../src/store/image';
 import { sampleProject } from '../src/data/samples/sampleProject';
+import type { Asset } from '../src/types/model';
 
 /**
  * 作品主页的四步进度：一行，不是四张卡片
@@ -37,9 +39,50 @@ function render(node: React.ReactElement): HTMLDivElement {
   return el;
 }
 
+function asset(refId: string, kind: Asset['kind']): Asset {
+  return {
+    schemaVersion: 1,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    id: `${refId}-${kind}`,
+    projectId: sampleProject.id,
+    kind,
+    refId,
+    mimeType: 'image/png',
+    promptSnapshot: 'test',
+  };
+}
+
+/** 参考图 + 每镜三帧全部齐 */
+function fullGallery(): Record<string, Asset[]> {
+  const gallery: Record<string, Asset[]> = {};
+  for (const character of sampleProject.characters) {
+    gallery[character.id] = [
+      asset(character.id, 'character-sheet'),
+      asset(character.id, 'character-sheet-face'),
+    ];
+  }
+  for (const scene of sampleProject.scenes) gallery[scene.id] = [asset(scene.id, 'scene-plate')];
+  for (const shot of sampleProject.shots) {
+    gallery[shot.id] = [
+      asset(shot.id, 'first-frame'),
+      asset(shot.id, 'action-peak'),
+      asset(shot.id, 'end-frame'),
+    ];
+  }
+  return gallery;
+}
+
+function deliveryStep(el: Element): Element | undefined {
+  return [...el.querySelectorAll('.stage-step')].find(
+    (node) => (node.querySelector('.stage-step-name')?.textContent ?? '').trim() === '交付',
+  );
+}
+
 beforeEach(() => {
   document.body.innerHTML = '';
   useAppStore.setState({ project: structuredClone(sampleProject), report: null });
+  useImage.setState({ gallery: {} });
 });
 
 function steps(el: Element): Element[] {
@@ -87,6 +130,26 @@ describe('工作主页四步进度', () => {
     expect(
       todo.map((node) => (node.querySelector('.stage-step-name')?.textContent ?? '').trim()),
     ).toEqual(['分镜', '交付']);
+  });
+
+  it('交付阶段纳入图片进度：图没出齐时显示「待出图」，不算完成', () => {
+    const el = render(<HomePage />);
+    const delivery = deliveryStep(el);
+    expect(delivery).toBeTruthy();
+    expect(delivery?.classList.contains('is-done')).toBe(false);
+    expect((delivery?.querySelector('.stage-step-state')?.textContent ?? '').trim()).toBe(
+      '待出图',
+    );
+  });
+
+  it('参考图与三帧全齐、检查无必改项时，交付阶段才标记完成', () => {
+    useImage.setState({ gallery: fullGallery() });
+    const el = render(<HomePage />);
+    const delivery = deliveryStep(el);
+    expect(delivery?.classList.contains('is-done')).toBe(true);
+    expect((delivery?.querySelector('.stage-step-state')?.textContent ?? '').trim()).toBe(
+      '可以导出',
+    );
   });
 
   it('没有项目时不渲染进度条（空状态优先）', () => {

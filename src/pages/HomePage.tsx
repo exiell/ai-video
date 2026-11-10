@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { cloneAsNewProject, useAppStore } from '../store/app';
 import { useImage } from '../store/image';
 import { Icon } from '../components/Icon';
+import { computeImageCoverage } from '../components/imageCoverage';
 import { sampleProject } from '../data/samples/sampleProject';
 import {
   CAMERA_MOVE_LABEL,
@@ -29,7 +30,6 @@ interface TaskItem {
   key: string;
   tone: Tone;
   title: string;
-  meta: string;
   to: string;
   action: string;
 }
@@ -88,21 +88,20 @@ export function HomePage() {
   const durationOff = shots.length > 0 && Math.abs(diff) > tolerance;
 
   const errorCount = report?.counts.error ?? 0;
-  const warningCount = report?.counts.warning ?? 0;
-  const infoCount = report?.counts.info ?? 0;
 
-  const assetIds = [...characters.map((c) => c.id), ...scenes.map((s) => s.id)].join('|');
+  // 图库是懒加载的：角色、场景、镜头都要拉，缺一个都会让「下一步」误判。
+  const galleryRefIds = [...characters, ...scenes, ...shots].map((item) => item.id);
+  const assetIds = galleryRefIds.join('|');
   useEffect(() => {
     if (!project) return;
-    for (const id of [...characters.map((c) => c.id), ...scenes.map((s) => s.id)]) {
+    for (const id of galleryRefIds) {
       if (!gallery[id]) void loadGallery(id);
     }
     // 只按项目里的对象集合加载；gallery 变化不重新拉一遍。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id, assetIds, loadGallery]);
 
-  const charWithArt = characters.filter((c) => (gallery[c.id]?.length ?? 0) > 0).length;
-  const sceneWithArt = scenes.filter((s) => (gallery[s.id]?.length ?? 0) > 0).length;
+  const coverage = computeImageCoverage(project, gallery);
   const isSample = !!project && (project.name.startsWith('示例') || project.id.startsWith('sample'));
 
   async function openSample() {
@@ -195,67 +194,50 @@ export function HomePage() {
   const storyDone = !!story?.body.trim();
   const settingDone = characters.length > 0 && scenes.length > 0;
   const storyboardDone = shots.length > 0 && !durationOff;
-  const deliveryDone = shots.length > 0 && errorCount === 0;
+  const framesAll = shots.length > 0 && coverage.framesReady === shots.length;
+  // 交付的完成条件纳入图片进度：参考图和每镜三帧都齐了才算能导出
+  const deliveryDone = shots.length > 0 && errorCount === 0 && coverage.imagesReady;
+  const deliveryState = deliveryDone
+    ? '可以导出'
+    : !storyDone || !settingDone || shots.length === 0
+      ? '待完成'
+      : !coverage.referencesReady
+        ? '待出图'
+        : !framesAll
+          ? '待出帧'
+          : '待完成';
 
 
   // 下一步：按用户真正会卡住的地方排序，而不是按模块编号。
-  let next: { title: string; body: string; cta: string; to: string; time: string };
+  // 图片没出齐时不能推荐导出：先补参考图，再补三帧，最后才是导出。
+  let next: { title: string; cta: string; to: string };
   if (!project) {
-    next = {
-      title: '项目',
-      body: '看一个做完了的例子，或者从零开始写你自己的故事。',
-      cta: '看示例项目',
-      to: '/',
-      time: '约 1 分钟',
-    };
+    next = { title: '项目', cta: '看示例项目', to: '/' };
   } else if (!storyDone) {
-    next = {
-      title: '故事',
-      body: '谁、在哪、发生了什么、停在哪一帧，四句话就够。',
-      cta: '去写故事',
-      to: '/guide',
-      time: '约 3 分钟',
-    };
+    next = { title: '故事', cta: '去写故事', to: '/guide' };
   } else if (!settingDone) {
     next = {
       title: '角色与场景',
-      body: '每个角色至少锁两条不会变的外观，每个场景记下固定元素和光的方向。',
       cta: '去建设定',
       to: characters.length === 0 ? '/characters' : '/scenes',
-      time: '约 5 分钟',
     };
   } else if (shots.length === 0) {
-    next = {
-      title: '分镜',
-      body: '让模型先拆一版，再逐镜改。',
-      cta: '去生成分镜',
-      to: '/storyboard',
-      time: '约 2 分钟',
-    };
+    next = { title: '分镜', cta: '去生成分镜', to: '/storyboard' };
   } else if (errorCount > 0) {
-    next = {
-      title: '穿帮检查',
-      body: '这些问题会让角色或场景在镜头之间对不上。修完才能导出；其余建议可以稍后处理。',
-      cta: `去修这 ${errorCount} 条`,
-      to: '/checks',
-      time: '约 2 分钟',
-    };
+    next = { title: '穿帮检查', cta: `去修这 ${errorCount} 条`, to: '/checks' };
   } else if (durationOff) {
+    next = { title: '时长', cta: '去调分镜', to: '/storyboard' };
+  } else if (!coverage.loaded || !coverage.referencesReady) {
+    // 懒加载没完成时按「参考图未齐」保守处理：宁可多一步，也不能直接推荐导出
     next = {
-      title: '时长',
-      body: `现在 ${fmtSeconds(total)} 秒，目标 ${fmtSeconds(target)} 秒。先让总时长对上，再进导出。`,
-      cta: '去调分镜',
-      to: '/storyboard',
-      time: '约 5 分钟',
+      title: '参考图',
+      cta: '去出图',
+      to: coverage.charsReady < characters.length ? '/characters' : '/scenes',
     };
+  } else if (!framesAll) {
+    next = { title: '分镜三帧', cta: '去出帧', to: '/storyboard' };
   } else {
-    next = {
-      title: '导出',
-      body: '分镜和检查都过了。压缩包里有拍摄进度表、多平台提示词、一致性总览和检查单。',
-      cta: '去导出',
-      to: '/export',
-      time: '约 1 分钟',
-    };
+    next = { title: '导出', cta: '去导出', to: '/export' };
   }
 
   const tasks: TaskItem[] = [];
@@ -265,7 +247,6 @@ export function HomePage() {
         key: 'errors',
         tone: 'danger',
         title: `必改项 ${errorCount} 个`,
-        meta: '穿帮检查里最要紧的一档',
         to: '/checks',
         action: '去修',
       });
@@ -275,7 +256,6 @@ export function HomePage() {
         key: 'duration',
         tone: 'accent',
         title: diff > 0 ? `减 ${fmtSeconds(Math.abs(diff))} 秒镜头` : `再补 ${fmtSeconds(Math.abs(diff))} 秒`,
-        meta: `现在 ${fmtSeconds(total)} 秒，目标 ${fmtSeconds(target)} 秒`,
         to: '/storyboard',
         action: '去改',
       });
@@ -285,7 +265,6 @@ export function HomePage() {
         key: 'story',
         tone: 'accent',
         title: '故事',
-        meta: '先有故事，才能拆场次和镜头',
         to: '/guide',
         action: '去写',
       });
@@ -295,7 +274,6 @@ export function HomePage() {
         key: 'setting',
         tone: 'quiet',
         title: '角色与场景',
-        meta: `${characters.length} 个角色 · ${scenes.length} 个场景`,
         to: '/characters',
         action: '去定',
       });
@@ -305,7 +283,6 @@ export function HomePage() {
         key: 'shots',
         tone: 'quiet',
         title: '分镜',
-        meta: '模型起草，你再改',
         to: '/storyboard',
         action: '去拆',
       });
@@ -314,7 +291,6 @@ export function HomePage() {
       key: 'prompts',
       tone: 'quiet',
       title: '提示词',
-      meta: `${shots.length} 组 · 英文正文 + 中文对照`,
       to: '/prompts',
       action: '去看',
     });
@@ -322,7 +298,6 @@ export function HomePage() {
       key: 'export',
       tone: 'quiet',
       title: '导出',
-      meta: '分镜表、提示词、检查单一起带走',
       to: '/export',
       action: '去导出',
     });
@@ -405,7 +380,7 @@ export function HomePage() {
                 to: '/export',
                 done: deliveryDone,
                 prevDone: storyboardDone,
-                state: deliveryDone ? '可以导出' : '待完成',
+                state: deliveryState,
               },
             ].map((step) => (
               <Link
@@ -424,17 +399,12 @@ export function HomePage() {
             <section className="next-card">
               <div className="next-top">
                 <span className="next-label">下一步</span>
-                <span className="next-time">{next.time}</span>
               </div>
               <h2>{next.title}</h2>
-              <p>{next.body}</p>
               <div className="next-foot">
                 <Link className="btn btn-blue" to={next.to}>
                   {next.cta}
                 </Link>
-                {errorCount > 0 && warningCount > 0 ? (
-                  <span className="next-hint">还有 {warningCount} 条建议，可以稍后再看</span>
-                ) : null}
               </div>
             </section>
 
@@ -448,7 +418,6 @@ export function HomePage() {
                     <i className={`task-dot ${task.tone}`} aria-hidden="true" />
                     <div className="task-main">
                       <b>{task.title}</b>
-                      <span>{task.meta}</span>
                     </div>
                     <Link
                       to={task.to}
@@ -483,7 +452,6 @@ export function HomePage() {
                             <span>{shot.duration}s</span>
                           </div>
                           <p>{shot.action || shot.startState || '这一镜还没有写动作。'}</p>
-                          <div className="shot-tile-foot">文字分镜 · 关键帧未生成</div>
                         </div>
                         <div className="shot-tile-meta">
                           <b>{scene?.name ?? '未指定场景'}</b>
@@ -532,33 +500,16 @@ export function HomePage() {
                   </span>
                 </div>
               </div>
-
-              <p className="shots-foot">
-                <span>
-                  {story?.scenes.length ? `按 ${story.scenes.length} 个场次排的` : '还没有拆场次'}
-                </span>
-              </p>
             </section>
 
             <aside className="home-rail">
               <section className="panel">
                 <div className="panel-head">
                   <h3>穿帮检查</h3>
-                  <span>
-                    {report ? new Date(report.checkedAt).toLocaleTimeString('zh-CN') : '还没跑'}
-                  </span>
                 </div>
                 <div className="check-total">
                   <b className={errorCount > 0 ? 'bad' : ''}>{errorCount}</b>
                   <span>{errorCount > 0 ? '个必改项，修完才能导出' : '个必改项'}</span>
-                </div>
-                <div className="check-row">
-                  <span>建议项</span>
-                  <b>{warningCount} 条</b>
-                </div>
-                <div className="check-row">
-                  <span>参考项</span>
-                  <b>{infoCount} 条</b>
                 </div>
                 <Link className="task-go" to="/checks" aria-label="去检查" title="去检查">
                   <Icon name="arrow-right" size={14} />
@@ -572,27 +523,29 @@ export function HomePage() {
                 <div className="assets">
                   <div className="asset">
                     <b>
-                      {charWithArt} / {characters.length}
+                      {coverage.charsReady} / {characters.length}
                     </b>
                     <span>角色形象图</span>
                   </div>
                   <div className="asset">
                     <b>
-                      {sceneWithArt} / {scenes.length}
+                      {coverage.scenesReady} / {scenes.length}
                     </b>
                     <span>场景参考板</span>
                   </div>
                 </div>
-                <p className="asset-note">
-                  {characters.length === 0
-                    ? '先建角色。'
-                    : charWithArt < characters.length
-                      ? '还没出齐，先出角色多视图。'
-                      : '都齐了。'}
-                </p>
                 <div className="asset-links">
-                  <Link to="/characters">角色设定 →</Link>
-                  <Link to="/scenes">场景设定 →</Link>
+                  <Link
+                    className="task-go"
+                    to="/characters"
+                    aria-label="去角色设定"
+                    title="去角色设定"
+                  >
+                    <Icon name="arrow-right" size={14} />
+                  </Link>
+                  <Link className="task-go" to="/scenes" aria-label="去场景设定" title="去场景设定">
+                    <Icon name="arrow-right" size={14} />
+                  </Link>
                 </div>
               </section>
 
@@ -606,11 +559,7 @@ export function HomePage() {
                     {saveError ? '没存上' : dirty ? '保存中…' : '已保存'}
                   </b>
                 </div>
-                <p className="asset-note">
-                  {saveError
-                    ? saveError
-                    : '刷新或清缓存可能丢数据。'}
-                </p>
+                {saveError ? <p className="asset-note">{saveError}</p> : null}
                 <Link className="task-go" to="/export" aria-label="去导出备份" title="去导出备份">
                   <Icon name="arrow-right" size={14} />
                 </Link>

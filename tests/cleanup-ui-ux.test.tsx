@@ -15,7 +15,7 @@ import type { CheckReport } from '../src/types/model';
  * 批次 5b 的 UX 小修护栏
  *
  * 三条都是「看起来能跑、但边缘状态会露出破绽」的地方：
- *  1. 主页「还有 N 条建议」在 N=0 时不该出现
+ *  1. 主页精简后不再有「还有 N 条建议」这类解释提示
  *  2. 导入文件超过 20MB 时先拦下来，不把文件读进内存
  *  3. 「用模型生成」折叠入口改成图标，和分镜卡/角色卡的展开样式一致
  *
@@ -49,17 +49,11 @@ beforeEach(() => {
   useAppStore.setState({ project: structuredClone(sampleProject), report: null });
 });
 
-describe('主页建议文案', () => {
-  it('有必改项但没有建议项时，不显示「还有 0 条建议」', () => {
-    useAppStore.setState({ report: reportWith(2, 0) });
-    const el = render(<HomePage />);
-    expect(el.textContent ?? '').not.toContain('还有 0 条建议');
-  });
-
-  it('既有必改项也有建议项时，提示显示实际条数', () => {
+describe('主页建议提示', () => {
+  it('简版主页不再渲染「还有 N 条建议」', () => {
     useAppStore.setState({ report: reportWith(2, 3) });
     const el = render(<HomePage />);
-    expect(el.textContent ?? '').toContain('还有 3 条建议');
+    expect(el.textContent ?? '').not.toContain('条建议');
   });
 });
 
