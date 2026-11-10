@@ -204,7 +204,7 @@ export function ScenesPage() {
                 id={`scene-more-${scene.id}`}
                 style={{ marginTop: 16 }}
               >
-                <h4 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（这是哪里）</h4>
+                <h2 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（这是哪里）</h2>
                 <Field label="地点类型">
                   <input
                     type="text"
@@ -260,7 +260,7 @@ export function ScenesPage() {
                   />
                 </Field>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>② 固定元素（跨镜必须出现）</h4>
+                <h2 style={{ fontSize: 13, margin: '20px 0 8px' }}>② 固定元素（跨镜必须出现）</h2>
                 <Field
                   label="每行一条，用英文短语写"
                   hint="3–5 条就够。挑那些一眼能认出地方的标志物，不用把整个房间写一遍。"
@@ -281,7 +281,7 @@ export function ScenesPage() {
                   />
                 </Field>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>③ 光线与色调</h4>
+                <h2 style={{ fontSize: 13, margin: '20px 0 8px' }}>③ 光线与色调</h2>
                 <div className="grid-2">
                   <Field label="主光方向" hint="光从哪来、什么颜色、什么时候">
                     <input
@@ -317,7 +317,7 @@ export function ScenesPage() {
                   </Field>
                 </div>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>④ 连续性锁</h4>
+                <h2 style={{ fontSize: 13, margin: '20px 0 8px' }}>④ 连续性锁</h2>
                 <p className="hint" style={{ marginTop: 0 }}>
                   写成能原样贴进提示词的短语
                   <Info label="举个例">

@@ -82,6 +82,7 @@ export function GenerateBar({
 
       {feedback ? (
         <div
+          aria-live="polite"
           className={`issue ${feedback.kind === 'error' ? 'error' : feedback.kind === 'info' ? 'warning' : ''}`}
           style={{
             marginTop: 12,

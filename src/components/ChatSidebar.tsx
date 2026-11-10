@@ -68,7 +68,7 @@ export function ChatSidebar() {
   }
 
   return (
-    <aside className={`chat-panel${open ? '' : ' collapsed'}`}>
+    <aside id="chat-panel" className={`chat-panel${open ? '' : ' collapsed'}`}>
       {/*
         收起/展开按钮必须**一直在**，而且两种状态下都点得到。
 
@@ -86,6 +86,7 @@ export function ChatSidebar() {
         title={open ? '收起对话栏' : '展开对话栏'}
         aria-label={open ? '收起对话栏' : '展开对话栏'}
         aria-expanded={open}
+        aria-controls="chat-panel"
       >
         <span className="chat-toggle-icon">{open ? '›' : '‹'}</span>
         {!open ? <span className="chat-toggle-label">AI</span> : null}
@@ -353,16 +354,16 @@ function ApplyButton({ guardStyle }: { guardStyle: boolean }) {
           。换成新风格之后：
         </div>
         <ul>
-          {(impact?.risks ?? []).map((risk, i) => (
-            <li key={i}>
+          {(impact?.risks ?? []).map((risk) => (
+            <li key={risk}>
               <RichText>{risk}</RichText>
             </li>
           ))}
         </ul>
         <div style={{ marginTop: 12, color: 'var(--text)' }}>要改的话，按这个顺序：</div>
         <ol>
-          {(impact?.steps ?? []).map((step, i) => (
-            <li key={i}>
+          {(impact?.steps ?? []).map((step) => (
+            <li key={step}>
               <RichText>{step}</RichText>
             </li>
           ))}

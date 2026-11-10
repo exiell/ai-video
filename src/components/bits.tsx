@@ -36,12 +36,6 @@ export function RichText({ children }: { children: string | undefined | null }) 
   );
 }
 
-/** 把 `**重点**` 的标记去掉，只留文字。用于原生 title / aria-label 这类只收字符串的地方。 */
-export function stripRichMarks(text: string | undefined | null): string {
-  if (!text) return '';
-  return text.replace(/\*\*([^*]+)\*\*/g, '$1');
-}
-
 /**
  * 折叠说明。
  *
@@ -186,15 +180,45 @@ export function ConfirmDialog({
   children: ReactNode;
 }) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const restoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!open) return;
+    // 打开前记下焦点，关闭后还回去：触发弹窗的可能是侧栏按钮，也可能是卡片里的按钮
+    restoreRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Escape') {
+        onCancel();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      // 简易焦点陷阱：Tab / Shift+Tab 在弹窗内循环，不跑到背景页面上
+      const root = cardRef.current;
+      if (!root) return;
+      const focusables = [
+        ...root.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ];
+      if (focusables.length === 0) return;
+      const first = focusables[0]!;
+      const last = focusables[focusables.length - 1]!;
+      if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      restoreRef.current?.focus();
+    };
   }, [open, onCancel]);
 
   if (!open) return null;
@@ -220,7 +244,7 @@ export function ConfirmDialog({
       className="confirm-backdrop"
       onClick={onCancel}
     >
-      <div className="confirm-card" onClick={(e) => e.stopPropagation()}>
+      <div className="confirm-card" ref={cardRef} onClick={(e) => e.stopPropagation()}>
         <div className="confirm-title">{title}</div>
         <div className="confirm-body">{children}</div>
         <div className="confirm-actions">
@@ -229,6 +253,73 @@ export function ConfirmDialog({
           </button>
           <button type="button" className="btn btn-blue" onClick={onConfirm}>
             {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * 复制失败时的兜底弹层。
+ *
+ * 原来用 window.prompt 把整段提示词塞进原生输入框：上千字符会被截断，
+ * 也没法全选。改成只读 textarea 弹层，打开即全选，Ctrl/Cmd+C 就能拿走。
+ */
+export function CopyFallbackDialog({
+  text,
+  onClose,
+}: {
+  text: string | null;
+  onClose: () => void;
+}) {
+  const areaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (!text) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    // 弹层挂载后聚焦并全选，用户只需要按一次复制快捷键
+    const timer = window.setTimeout(() => {
+      areaRef.current?.focus();
+      areaRef.current?.select();
+    }, 30);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.clearTimeout(timer);
+    };
+  }, [text, onClose]);
+
+  if (!text) return null;
+
+  return createPortal(
+    <div className="confirm-backdrop" onClick={onClose}>
+      <div
+        className="confirm-card"
+        style={{ width: 'min(760px, 100%)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="confirm-title">复制失败，手动复制下面的内容</div>
+        <div className="confirm-body">
+          <p className="hint" style={{ marginTop: 0 }}>
+            浏览器拒绝了剪贴板权限。下面是完整内容，已经全选，按 Ctrl/Cmd+C 复制。
+          </p>
+          <textarea
+            ref={areaRef}
+            readOnly
+            value={text}
+            rows={10}
+            aria-label="要复制的内容"
+            style={{ width: '100%', minHeight: 160, fontFamily: 'var(--mono)', fontSize: 12 }}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+        </div>
+        <div className="confirm-actions">
+          <button type="button" className="btn btn-blue" onClick={onClose}>
+            关闭
           </button>
         </div>
       </div>

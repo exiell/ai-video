@@ -277,7 +277,7 @@ export function GuidePage() {
         <div className="guide-main">
           {step === 0 ? (
             <div className="card">
-              <h3 className="card-title">故事来源</h3>
+              <h2 className="card-title">故事来源</h2>
               <div className="choice-row">
                 <button
                   type="button"
@@ -333,7 +333,7 @@ export function GuidePage() {
 
       {step === 1 ? (
         <div className="card">
-          <h3 className="card-title">故事正文</h3>
+          <h2 className="card-title">故事正文</h2>
           <Field
             label="故事正文"
             hint="可以只写一段话，也可以粘贴整篇小说。写清楚：谁、在哪、发生了什么、最后怎么了。"
@@ -395,9 +395,9 @@ export function GuidePage() {
             </WhyDetails>
           </details>
 
-          <h3 className="card-title" style={{ marginTop: 22 }}>
+          <h2 className="card-title" style={{ marginTop: 22 }}>
             场次拆分
-          </h3>
+          </h2>
           {story.scenes.length === 0 ? (
             <div className="empty">还没有场次。可以先不分，等写完分镜再回来补。</div>
           ) : (
@@ -439,7 +439,7 @@ export function GuidePage() {
 
       {step === 2 ? (
         <div className="card">
-          <h3 className="card-title">风格与规格</h3>
+          <h2 className="card-title">风格与规格</h2>
 
           <Field
             label="片名"
@@ -541,16 +541,16 @@ export function GuidePage() {
                     。改风格不会自动更新它们：
                   </div>
                   <ul className="issue-line" style={{ paddingLeft: 20, margin: '4px 0 0' }}>
-                    {styleImpact.risks.map((risk, i) => (
-                      <li key={i}>
+                    {styleImpact.risks.map((risk) => (
+                      <li key={risk}>
                         <RichText>{risk}</RichText>
                       </li>
                     ))}
                   </ul>
                   <div style={{ marginTop: 8 }}>要改的话，按这个顺序做：</div>
                   <ol style={{ paddingLeft: 20, margin: 0 }}>
-                    {styleImpact.steps.map((step, i) => (
-                      <li key={i} style={{ marginBottom: 4 }}>
+                    {styleImpact.steps.map((step) => (
+                      <li key={step} style={{ marginBottom: 4 }}>
                         <RichText>{step}</RichText>
                       </li>
                     ))}
@@ -833,16 +833,16 @@ export function GuidePage() {
           。换成新风格之后：
         </div>
         <ul>
-          {styleImpact.risks.map((risk, i) => (
-            <li key={i}>
+          {styleImpact.risks.map((risk) => (
+            <li key={risk}>
               <RichText>{risk}</RichText>
             </li>
           ))}
         </ul>
         <div style={{ marginTop: 12, color: 'var(--text)' }}>要改的话，按这个顺序：</div>
         <ol>
-          {styleImpact.steps.map((step, i) => (
-            <li key={i}>
+          {styleImpact.steps.map((step) => (
+            <li key={step}>
               <RichText>{step}</RichText>
             </li>
           ))}

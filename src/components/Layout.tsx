@@ -37,6 +37,10 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className={`app${chatOpen ? ' chat-open' : ''}`}>
+      {/* 键盘用户不必把侧栏十几个导航项 Tab 一遍才能到正文 */}
+      <a className="skip-link" href="#main-content">
+        跳到主要内容
+      </a>
       <aside className="sidebar">
         <Link className="brand-lockup" to="/">
           <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
@@ -179,7 +183,9 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <main className="main">{children}</main>
+      <main className="main" id="main-content" tabIndex={-1}>
+        {children}
+      </main>
 
       {/*
         对话式改稿侧栏。

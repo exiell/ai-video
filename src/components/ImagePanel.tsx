@@ -166,6 +166,8 @@ export function ImagePanel({
       {feedbacks.map((feedback, index) => (
         <div
           key={index}
+          role="status"
+          aria-live="polite"
           className={`issue ${feedback.kind === 'error' ? 'error' : feedback.kind === 'info' ? 'warning' : ''}`}
           style={{
             marginTop: 12,

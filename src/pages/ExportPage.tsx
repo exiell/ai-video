@@ -31,6 +31,7 @@ export function ExportPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [importError, setImportError] = useState<string | null>(null);
   const [importOk, setImportOk] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!project) return;
@@ -83,6 +84,13 @@ export function ExportPage() {
     setImportError(null);
     setImportOk(null);
     try {
+      // 先看大小再读：几百 MB 的 JSON 一次性读进来会让页面假死
+      if (file.size > 20 * 1024 * 1024) {
+        setImportError(
+          '这个文件超过 20MB，不像是纯项目数据。确认选的是压缩包根目录的「项目数据.json」，而不是整个压缩包或图片。',
+        );
+        return;
+      }
       const text = await file.text();
       const result: ImportResult = parseImportedProject(text);
       if (!result.ok || !result.project) {
@@ -134,7 +142,7 @@ export function ExportPage() {
 
       {imageAssets.length === 0 ? (
         <div className="card">
-          <h3 className="card-title">图片包</h3>
+          <h2 className="card-title">图片包</h2>
           <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
             等你生成了角色形象图或关键帧，它们会一起进图包。
           </p>
@@ -145,7 +153,7 @@ export function ExportPage() {
       ) : null}
 
       <div className="card">
-        <h3 className="card-title">压缩包内容</h3>
+        <h2 className="card-title">压缩包内容</h2>
         <div className="scroll-x">
           <table className="simple">
             <thead>
@@ -179,9 +187,9 @@ export function ExportPage() {
 
         {imageEntries.length > 0 ? (
           <>
-            <h4 style={{ fontSize: 13, margin: '18px 0 8px' }}>
+            <h3 style={{ fontSize: 13, margin: '18px 0 8px' }}>
               图包（{imageEntries.length} 张，按类型分目录）
-            </h4>
+            </h3>
             <div className="scroll-x">
               <table className="simple">
                 <thead>
@@ -215,7 +223,7 @@ export function ExportPage() {
 
       {imageAssets.length > 0 ? (
         <div className="card">
-          <h3 className="card-title">已生成的图</h3>
+          <h2 className="card-title">已生成的图</h2>
           <div className="scroll-x">
             <table className="simple">
               <thead>
@@ -267,7 +275,7 @@ export function ExportPage() {
       </details>
 
       <div className="card">
-        <h3 className="card-title">项目导入</h3>
+        <h2 className="card-title">项目导入</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           选压缩包根目录的 <code>项目数据.json</code>。注意：<b>不含图片</b>，图片在「图包★」里。
         </p>
@@ -294,7 +302,7 @@ export function ExportPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">危险操作</h3>
+        <h2 className="card-title">危险操作</h2>
         <button
           type="button"
           className="btn"
@@ -304,13 +312,26 @@ export function ExportPage() {
                 `确定删除项目「${project.name}」吗？\n\n这会连同它的 ${imageAssets.length} 张图片一起删除，且无法撤销。\n建议先打包下载一份备份。`,
               )
             ) {
-              void deleteProject(project.id).then(() => setProject(null));
+              setDeleteError(null);
+              void deleteProject(project.id)
+                .then(() => setProject(null))
+                .catch(() => {
+                  setDeleteError(
+                    '项目没删掉。可能是浏览器本地存储正被别的标签页占用，刷新后再试一次。',
+                  );
+                });
             }
           }}
         >
           删除这个项目
         </button>
         <div className="hint">会连同项目下的全部图片一起删除，无法撤销。</div>
+        {deleteError ? (
+          <div className="issue error" style={{ marginTop: 12 }}>
+            <div className="issue-title">删除失败</div>
+            <div className="issue-line">{deleteError}</div>
+          </div>
+        ) : null}
       </div>
     </>
   );

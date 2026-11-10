@@ -111,6 +111,8 @@ export function ImageLightbox({
             <button
               type="button"
               className="btn btn-sm"
+              aria-label="上一张"
+              title="上一张（←）"
               onClick={() => onNavigate((state.index - 1 + total) % total)}
             >
               ←
@@ -118,6 +120,8 @@ export function ImageLightbox({
             <button
               type="button"
               className="btn btn-sm"
+              aria-label="下一张"
+              title="下一张（→）"
               onClick={() => onNavigate((state.index + 1) % total)}
             >
               →

@@ -84,7 +84,7 @@ export function AutoFixPanel({ report }: { report: CheckReport }) {
   return (
     <div className="card">
       <div className="row" style={{ justifyContent: 'space-between' }}>
-        <h3 className="card-title" style={{ margin: 0 }}>
+        <h2 className="card-title" style={{ margin: 0 }}>
           自动修复项
           {plan.proposals.length > 0 ? (
             <span className="tag tag-ok">可修 {plan.proposals.length} 处</span>
@@ -92,7 +92,7 @@ export function AutoFixPanel({ report }: { report: CheckReport }) {
           {plan.manualOnly > 0 ? (
             <span className="tag tag-warning">需你决定 {plan.manualOnly} 处</span>
           ) : null}
-        </h3>
+        </h2>
         {!open && plan.proposals.length > 0 ? (
           <button type="button" className="btn btn-primary" onClick={openPanel}>
             看看能自动改什么

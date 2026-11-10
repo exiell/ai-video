@@ -40,7 +40,7 @@ export function HelpPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">第一次使用</h3>
+        <h2 className="card-title">第一次使用</h2>
         <ol style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
           <li>
             <b>先打开示例项目</b>。不用配 Key，也能看到一份完整产出。
@@ -69,7 +69,7 @@ export function HelpPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">一致性机制</h3>
+        <h2 className="card-title">一致性机制</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           <RichText>
             {'一致性是**五道防线**叠起来的结果：角色锁、场景固定元素、首帧、尾帧、动作关键帧。缺一道，单张图能看，放一起就不像同一部片子。'}
@@ -162,7 +162,7 @@ export function HelpPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">实战经验</h3>
+        <h2 className="card-title">实战经验</h2>
         <ul style={{ fontSize: 13, color: 'var(--text-dim)', paddingLeft: 20, margin: 0 }}>
           <li>
             <b>一镜只做一件事。</b>这是新手最容易踩的坑，也是模型最容易崩的地方。
@@ -192,7 +192,7 @@ export function HelpPage() {
 
       <div className="page-head" style={{ marginTop: 26 }}>
         <div>
-          <h3 style={{ margin: 0, fontSize: 16 }}>术语速查（{TERMS.length} 条）</h3>
+          <h2 style={{ margin: 0, fontSize: 16 }}>术语速查（{TERMS.length} 条）</h2>
         </div>
       </div>
 

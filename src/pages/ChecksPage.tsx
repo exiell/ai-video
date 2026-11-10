@@ -108,12 +108,12 @@ export function ChecksPage() {
         if (group.length === 0) return null;
         return (
           <section key={severity} style={{ marginBottom: 26 }}>
-            <h3 className="card-title">
+            <h2 className="card-title">
               <span className={SEVERITY_TAG[severity]}>{SEVERITY_LABEL[severity]}</span>
               <span style={{ color: 'var(--text-faint)', fontWeight: 400, fontSize: 12 }}>
                 {group.length} 条
               </span>
-            </h3>
+            </h2>
             {group.map((issue) => (
               <div className={`issue issue-sev-${issue.severity}`} key={issue.id}>
                 {/*

@@ -245,12 +245,12 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       className="card"
       style={{ borderColor: 'var(--accent)', borderWidth: 1, borderStyle: 'solid' }}
     >
-      <h3 className="card-title">
+      <h2 className="card-title">
         大多数人走的路：让 AI 先生成，你再改
         <span className="tag tag-ok" style={{ marginLeft: 8 }}>
           已完成 {doneCount}/{steps.length}
         </span>
-      </h3>
+      </h2>
 
       {/*
         【v0.53 只留「去哪里、做什么」】

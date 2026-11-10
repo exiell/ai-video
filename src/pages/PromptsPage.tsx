@@ -1,4 +1,4 @@
-import { Info } from '../components/bits';
+import { CopyFallbackDialog, Info } from '../components/bits';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -23,6 +23,8 @@ export function PromptsPage() {
   const [platform, setPlatform] = useState<TargetPlatform | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [showNotes, setShowNotes] = useState(true);
+  /** 剪贴板不可用时，把整段内容放进只读弹层，而不是 window.prompt */
+  const [copyFallback, setCopyFallback] = useState<string | null>(null);
 
   const bundles = useMemo(() => (project ? buildAllPrompts(project) : []), [project]);
 
@@ -43,13 +45,17 @@ export function PromptsPage() {
       setCopied(key);
       window.setTimeout(() => setCopied(null), 1500);
     } catch {
-      // 剪贴板不可用（非 https 或权限被拒）时，退化为选中文本
-      window.prompt('复制失败，请手动复制下面的内容：', text);
+      // 剪贴板不可用（非 https 或权限被拒）时，弹只读文本框让用户手动复制
+      setCopyFallback(text);
     }
   }
 
   return (
     <>
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? '已复制到剪贴板' : ''}
+      </span>
+      <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />
       <div className="page-head">
         <div>
           <h1>提示词</h1>
@@ -91,7 +97,7 @@ export function PromptsPage() {
         <div className="card">
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <div>
-              <h3 className="prompt-subtitle">负向词（所有镜头共用）</h3>
+              <h2 className="prompt-subtitle">负向词（所有镜头共用）</h2>
               <div className="hint">
                 贴到平台的「负向词 / 不要出现」框里，<b>不要</b>混进正文。
               </div>
@@ -122,9 +128,9 @@ export function PromptsPage() {
             }
           >
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <h3 className="prompt-shot-title">
+              <h2 className="prompt-shot-title">
                 第 {shot.number} 镜 · {shot.duration} 秒
-              </h3>
+              </h2>
               <button
                 type="button"
                 className="btn btn-sm"

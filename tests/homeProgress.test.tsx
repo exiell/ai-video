@@ -75,6 +75,20 @@ describe('工作主页四步进度', () => {
     }
   });
 
+  it('故事完成、设定还没做时，后两步显示「待做」（is-todo）', () => {
+    const next = structuredClone(sampleProject);
+    next.characters = [];
+    next.scenes = [];
+    next.shots = [];
+    useAppStore.setState({ project: next, report: null });
+    const el = render(<HomePage />);
+    const todo = steps(el).filter((node) => node.classList.contains('is-todo'));
+    expect(todo.length).toBe(2);
+    expect(
+      todo.map((node) => (node.querySelector('.stage-step-name')?.textContent ?? '').trim()),
+    ).toEqual(['分镜', '交付']);
+  });
+
   it('没有项目时不渲染进度条（空状态优先）', () => {
     useAppStore.setState({ project: null, report: null });
     const el = render(<HomePage />);

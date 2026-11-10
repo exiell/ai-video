@@ -10,7 +10,7 @@ import {
 } from '../domain/image/prompts';
 import type { PanelTarget, GenerateOption } from './ImagePanel';
 import { SCENE_ANGLE_LABEL } from '../types/model';
-import { RichText } from './bits';
+import { CopyFallbackDialog, RichText } from './bits';
 
 /**
  * 看图出图的提示词（v0.43）
@@ -125,6 +125,7 @@ export function ImagePromptView({
   const keys = useSettings((s) => s.keys);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [copyFallback, setCopyFallback] = useState<string | null>(null);
 
   const entries = collectPromptEntries(project, refId, target, options);
 
@@ -134,8 +135,8 @@ export function ImagePromptView({
       setCopied(key);
       window.setTimeout(() => setCopied(null), 1600);
     } catch {
-      // 非 https 或权限被拒时退化为选中文本
-      window.prompt('复制失败，请手动复制下面的内容：', text);
+      // 非 https 或权限被拒时弹只读文本框，长提示词不会被 prompt 截断
+      setCopyFallback(text);
     }
   }
 
@@ -145,6 +146,10 @@ export function ImagePromptView({
 
   return (
     <>
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? '已复制到剪贴板' : ''}
+      </span>
+      <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />
       <button
         type="button"
         className="btn btn-ghost btn-sm"
@@ -230,8 +235,8 @@ export function ImagePromptView({
                     <details className="why">
                       <summary>这段是怎么拼出来的（{entry.input.notes.length} 项）</summary>
                       <div className="why-body">
-                        {entry.input.notes.map((note, i) => (
-                          <div key={i} style={{ marginBottom: 6 }}>
+                        {entry.input.notes.map((note) => (
+                          <div key={note.label} style={{ marginBottom: 6 }}>
                             <b>{note.label}</b>：<RichText>{note.reason}</RichText>
                             <div>
                               <code>{note.fragment}</code>

@@ -397,9 +397,7 @@ export function StoryboardPage() {
                 <button
                   type="button"
                   key={shot.id}
-                  className={`shot-strip-seg${expanded === shot.id ? ' is-open' : ''}${
-                    mustFix > 0 ? ' has-error' : ''
-                  }`}
+                  className={`shot-strip-seg${expanded === shot.id ? ' is-open' : ''}`}
                   style={{ flexGrow: Math.max(duration, 1) }}
                   onClick={() => openShot(shot.id)}
                   aria-label={`第 ${index + 1} 镜，${duration} 秒${
@@ -432,11 +430,11 @@ export function StoryboardPage() {
             <Icon name="sparkles" size={14} className="tools-icon" />
             用模型生成
           </span>
-          <span className="tools-drawer-toggle">展开</span>
+          <Icon name="chevron-right" size={15} className="expand-chevron tools-drawer-chevron" />
         </summary>
         <div className="tools-drawer-body">
           <div className="card">
-            <h3 className="card-title">分镜生成</h3>
+            <h2 className="card-title">分镜生成</h2>
             <GenerateBar
               task="assets"
               label="① 从故事里拆角色与场景"
@@ -547,7 +545,7 @@ export function StoryboardPage() {
                 <span style={{ color: 'var(--text-faint)', fontSize: 12 }}>秒</span>
 
                 <SelectMenu
-                  className={`shot-select shot-size-select${
+                  className={`shot-select${
                     isFlagged(shot.id, 'shotSize') ? ' field-flagged' : ''
                   }`}
                   value={shot.shotSize}
@@ -557,7 +555,7 @@ export function StoryboardPage() {
                 />
 
                 <SelectMenu
-                  className="shot-select shot-move-select"
+                  className="shot-select"
                   value={shot.cameraMove}
                   options={cameraMoveOptions}
                   ariaLabel={`第 ${shot.number} 镜的运镜`}
@@ -693,7 +691,7 @@ export function StoryboardPage() {
                         <span className="shot-section-icon">
                           <Icon name="photo" size={16} />
                         </span>
-                        <h4 className="shot-section-title">画面</h4>
+                        <h3 className="shot-section-title">画面</h3>
                       </div>
                       <div className="shot-section-body">
                         <div>
@@ -801,7 +799,7 @@ export function StoryboardPage() {
                         <span className="shot-section-icon">
                           <Icon name="volume" size={16} />
                         </span>
-                        <h4 className="shot-section-title">声音与情绪</h4>
+                        <h3 className="shot-section-title">声音与情绪</h3>
                         {soundSectionIssues > 0 ? (
                           <span className="shot-section-count">{soundSectionIssues} 处要改</span>
                         ) : null}
@@ -857,7 +855,7 @@ export function StoryboardPage() {
                         <span className="shot-section-icon">
                           <Icon name="scissors" size={16} />
                         </span>
-                        <h4 className="shot-section-title">剪辑与衔接</h4>
+                        <h3 className="shot-section-title">剪辑与衔接</h3>
                         {cutSectionIssues > 0 ? (
                           <span className="shot-section-count">{cutSectionIssues} 处要改</span>
                         ) : null}
@@ -914,7 +912,7 @@ export function StoryboardPage() {
                         <span className="shot-section-icon">
                           <Icon name="lock" size={16} />
                         </span>
-                        <h4 className="shot-section-title">连续性锁</h4>
+                        <h3 className="shot-section-title">连续性锁</h3>
                       </div>
                       <div className="shot-section-body">
                         {/*

@@ -189,7 +189,7 @@ export function CharactersPage() {
                 id={`character-more-${character.id}`}
                 style={{ marginTop: 16 }}
               >
-                <h4 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（跨集不变）</h4>
+                <h2 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（跨集不变）</h2>
                 <div className="grid-2">
                   <Field label="面部特征">
                     <input
@@ -270,14 +270,14 @@ export function CharactersPage() {
                   />
                 </Field>
 
-                <h4 style={{ fontSize: 13, margin: '20px 0 8px' }}>
+                <h2 style={{ fontSize: 13, margin: '20px 0 8px' }}>
                   ② 连续性锁（必须跨镜保持）
                   <Info label="怎么写、举个例">
                     写成能直接贴进提示词的短语。中文英文都可以，但英文通常更稳。例：
                     <code>pine-green lapel service jacket</code>、
                     <code>a long wooden spear with a tarnished steel head</code>
                   </Info>
-                </h4>
+                </h2>
                 {character.continuityLocks.map((lock) => (
                   <div className="row" key={lock.id} style={{ marginBottom: 8 }}>
                     <input

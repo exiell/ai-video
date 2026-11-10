@@ -188,7 +188,7 @@ export function SettingsPage() {
       {tab === 'connection' ? (<>
 
       <div className="card">
-        <h3 className="card-title">直连检测</h3>
+        <h2 className="card-title">直连检测</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           点开测一下能不能直连。通就不用管下面「代理」那一栏。
         </p>
@@ -235,7 +235,7 @@ export function SettingsPage() {
 
       {tab === 'connection' ? (<>
       <div className="card">
-        <h3 className="card-title">厂商 Key</h3>
+        <h2 className="card-title">厂商 Key</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           一个厂商一个 Key，只填你要用的那几家。
         </p>
@@ -419,10 +419,10 @@ export function SettingsPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">
+        <h2 className="card-title">
           代理
           {prefs.proxyBaseUrl.trim() ? <span className="tag tag-warning">已启用</span> : null}
-        </h3>
+        </h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           直连不通时才需要。填了之后所有模型请求都经过它转发。
         </p>
@@ -479,7 +479,7 @@ export function SettingsPage() {
 
       {tab === 'appearance' ? ( <>
       <div className="card">
-        <h3 className="card-title">界面外观</h3>
+        <h2 className="card-title">界面外观</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           只换配色、字体和底纹，不改功能，也不影响数据与导出。切换后会立刻应用，下次打开保持。
         </p>
@@ -530,8 +530,8 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="card appearance-note">
-        <h3 className="card-title">外观改动范围</h3>
+      <div className="card">
+        <h2 className="card-title">外观改动范围</h2>
         <div className="appearance-note-grid">
           <div>
             <b>不重写项目</b>
@@ -551,7 +551,7 @@ export function SettingsPage() {
 
       {tab === 'language' ? (<>
       <div className="card">
-        <h3 className="card-title">语言</h3>
+        <h2 className="card-title">语言</h2>
         <Field label="界面语言">
           <SelectMenu
             className="language-select"
@@ -568,9 +568,9 @@ export function SettingsPage() {
 
       {tab === 'data' ? (<>
       <div className="card">
-        <h3 className="card-title">
+        <h2 className="card-title">
           存储与备份
-        </h3>
+        </h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           图片只在这个浏览器里，清缓存就没了。
         </p>
@@ -587,9 +587,9 @@ export function SettingsPage() {
             </div>
           </div>
         ) : null}
-        <h3 className="card-title" style={{ marginTop: 20 }}>
+        <h2 className="card-title" style={{ marginTop: 20 }}>
           存储用量
-        </h3>
+        </h2>
         {usage ? (
           <>
             <div className="row" style={{ marginBottom: 8 }}>

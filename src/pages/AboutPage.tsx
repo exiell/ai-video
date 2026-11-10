@@ -17,7 +17,7 @@ export function AboutPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">项目简介</h3>
+        <h2 className="card-title">项目简介</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           你想做一部动漫视频，但还不清楚要准备什么。这个工具用问答带你写出故事、角色、场景、分镜和提示词，
           最后给一份能直接开拍的方案：动漫分镜表、角色与场景设定卡、多平台提示词，外加一份穿帮检查单。
@@ -29,7 +29,7 @@ export function AboutPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">数据位置</h3>
+        <h2 className="card-title">数据位置</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           全部在你浏览器的本地存储里。没有账号，没有云端。
           不配代理时，网络请求只发生在你的浏览器与厂商之间；填了代理，请求会经过你填的代理地址，
@@ -39,14 +39,14 @@ export function AboutPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">开源许可</h3>
+        <h2 className="card-title">开源许可</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           本项目采用 MIT License。
         </p>
       </div>
 
       <div className="card">
-        <h3 className="card-title">第三方资产署名</h3>
+        <h2 className="card-title">第三方资产署名</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           本项目在设计与内容上参考了以下开源项目：
         </p>
@@ -141,7 +141,7 @@ export function AboutPage() {
       </div>
 
       <div className="card">
-        <h3 className="card-title">免责说明</h3>
+        <h2 className="card-title">免责说明</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', margin: 0 }}>
           本工具的检查功能是<b>文本约束检查</b>。它检查的是该一致的地方有没有写下来，
           不是生成结果一定没问题；模型仍可能出错。

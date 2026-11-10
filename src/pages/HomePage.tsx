@@ -9,7 +9,7 @@ import {
   PLATFORM_LABEL,
   SHOT_SIZE_LABEL,
 } from '../types/model';
-import { deleteProject, listProjects, loadProject, type ProjectRecord } from '../services/storage';
+import { listProjects, loadProject, type ProjectRecord } from '../services/storage';
 
 /**
  * 作品主页（C 方向）
@@ -45,6 +45,7 @@ export function HomePage() {
   const report = useAppStore((s) => s.report);
   const setProject = useAppStore((s) => s.setProject);
   const createEmptyProject = useAppStore((s) => s.createEmptyProject);
+  const removeProject = useAppStore((s) => s.removeProject);
   const saveError = useAppStore((s) => s.saveError);
   const dirty = useAppStore((s) => s.dirty);
   const gallery = useImage((s) => s.gallery);
@@ -54,12 +55,20 @@ export function HomePage() {
   const [loaded, setLoaded] = useState(false);
   /** 打开存档失败时的提示。不能静默：点了没反应，用户会以为项目丢了。 */
   const [openError, setOpenError] = useState<string | null>(null);
+  /** 存档列表读取失败时保留已有列表，只在上方提示，不清空用户看到的数据。 */
+  const [listError, setListError] = useState<string | null>(null);
+  /** 删除项目失败时的提示。走 store 的 removeProject，异常已经翻成人话。 */
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function refresh() {
     try {
       setRecords(await listProjects());
+      setListError(null);
     } catch {
-      setRecords([]);
+      // 读不出来时不要把列表清空：已经显示的项目还在，只是这次没刷新成功
+      setListError(
+        '项目列表没读出来。可能是浏览器本地数据正被别的标签页占用，刷新一下再试；已经打开的项目不受影响。',
+      );
     }
     setLoaded(true);
   }
@@ -166,8 +175,20 @@ export function HomePage() {
     }
   }
 
+  /**
+   * 删除存档。
+   *
+   * 走 store 的 removeProject 而不是直接 deleteProject：store 会把
+   * IndexedDB 异常翻成 { ok, error }，页面才有机会告诉用户「没删掉、东西还在」。
+   * 直接 void 掉的结果是点了「确认删除」之后什么都不发生。
+   */
   async function remove(id: string) {
-    await deleteProject(id);
+    const result = await removeProject(id);
+    if (!result.ok) {
+      setDeleteError(result.error ?? '删除没成功，刷新页面后再试一次。项目和图片都还在。');
+      return;
+    }
+    setDeleteError(null);
     await refresh();
   }
 
@@ -411,7 +432,7 @@ export function HomePage() {
                 <Link className="btn btn-blue" to={next.to}>
                   {next.cta}
                 </Link>
-                {errorCount > 0 ? (
+                {errorCount > 0 && warningCount > 0 ? (
                   <span className="next-hint">还有 {warningCount} 条建议，可以稍后再看</span>
                 ) : null}
               </div>
@@ -690,10 +711,22 @@ export function HomePage() {
         <div className="panel-head">
           <h3>已有项目</h3>
         </div>
+        {listError ? (
+          <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
+            <div className="issue-title">项目列表没读出来</div>
+            <div className="issue-line">{listError}</div>
+          </div>
+        ) : null}
         {openError ? (
           <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
             <div className="issue-title">打不开这个项目</div>
             <div className="issue-line">{openError}</div>
+          </div>
+        ) : null}
+        {deleteError ? (
+          <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
+            <div className="issue-title">删除失败</div>
+            <div className="issue-line">{deleteError}</div>
           </div>
         ) : null}
         {!loaded ? (

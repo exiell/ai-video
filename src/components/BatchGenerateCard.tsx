@@ -125,7 +125,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
 
   return (
     <div className="card">
-      <h3 className="card-title">批量生成</h3>
+      <h2 className="card-title">批量生成</h2>
 
       {!hasImageKey ? (
         <div className="issue warning" style={{ marginBottom: 12 }}>
@@ -171,7 +171,12 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
 
       {batch ? (
         <div style={{ marginTop: 14 }}>
-          <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div
+            className="row"
+            style={{ justifyContent: 'space-between' }}
+            role="status"
+            aria-live="polite"
+          >
             <b style={{ fontSize: 13 }}>
               正在生成：{batch.done}/{batch.total}
             </b>
@@ -189,7 +194,6 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             ) : null}
           </div>
           <div
-            className="batch-progress"
             style={{
               height: 6,
               background: 'var(--bg)',
