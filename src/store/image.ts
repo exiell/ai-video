@@ -1066,14 +1066,3 @@ function succeeded(kind: ImageTaskKind, refId: string): boolean {
   return feedback?.kind === 'ok' || feedback?.kind === 'info';
 }
 
-/** 供界面判断「这个对象能不能出图」 */
-export function imageCapabilityHint(): { ready: boolean; reason?: string; level: string } {
-  const resolved = resolveImageProfile(true);
-  if (!resolved.ok || !resolved.profile) {
-    return { ready: false, reason: resolved.error ?? '出图模型还没配置好。', level: '—' };
-  }
-  const caps = resolved.profile.capabilities;
-  const level = caps.referenceImage ? 'L3' : caps.seed ? 'L2' : 'L1';
-  return { ready: true, level };
-}
-

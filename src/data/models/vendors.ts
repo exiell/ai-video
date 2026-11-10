@@ -121,8 +121,3 @@ export function vendorCors(vendorId: string): 'yes' | 'no' | 'unknown' {
   return 'no';
 }
 
-/** 厂商下所有模型的直连证据（用于在界面上说明「为什么说它能直连」） */
-export function vendorEvidence(vendorId: string): string | undefined {
-  return modelsOfVendor(vendorId)[0]?.notes;
-}
-

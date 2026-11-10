@@ -131,8 +131,13 @@ describe('Key 存储策略', () => {
 
     useSettings.getState().setPref('dontSaveKeys', true);
     expect(localStorage.getItem('aniguide:keys')).toBeNull();
-    // 但内存里还在，用户当前这次会话不用重填
-    expect(useSettings.getState().keys['deepseek']).toBe('sk-secret');
+    /*
+      v0.55 起内存也一起清（P3-15）。
+      原来只清存储：设置页输入框还显示 Key、当前会话也还能用，
+      用户会以为「不保存到本机」没生效；下一次 setKey 还会把整份 keys
+      写回会话存储。所以这里断言「磁盘和内存都干净」。
+    */
+    expect(useSettings.getState().keys['deepseek']).toBeUndefined();
   });
 
   it('清除某个厂商的 Key 不影响别的厂商', () => {

@@ -111,17 +111,4 @@ export function runChecks(project: Project): CheckReport {
   };
 }
 
-/** 一句话总结，用于界面顶部 */
-export function summarizeReport(report: CheckReport): string {
-  const { error, warning, info } = report.counts;
-  if (error === 0 && warning === 0 && info === 0) {
-    return '没有发现问题。可以开始生成画面了。';
-  }
-  const parts: string[] = [];
-  if (error > 0) parts.push(`${error} 个必须修的`);
-  if (warning > 0) parts.push(`${warning} 个建议修的`);
-  if (info > 0) parts.push(`${info} 个可以看一眼的`);
-  return `发现 ${parts.join('、')}。`;
-}
-
 export { checkCharacters, checkScenes, checkStoryboard, checkContinuity };

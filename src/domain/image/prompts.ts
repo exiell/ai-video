@@ -1,12 +1,10 @@
 import type {
   ModelCapabilities,
   PromptNote,
-  PromptLine,
   SceneAngle,
   ShotSize,
-  TargetPlatform,
 } from '../../types/model';
-import { PLATFORM_LABEL, SCENE_ANGLE_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
+import { SCENE_ANGLE_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
 import {
   buildCharacterSheetSpec,
   type CharacterSheetKind,
@@ -89,13 +87,8 @@ export function subjectHeightShare(shotSize: ShotSize): string {
  */
 
 // ---------------------------------------------------------------------------
-// 三种出图目标
+// 出图提示词的输入
 // ---------------------------------------------------------------------------
-
-export type ImageTarget =
-  | { kind: 'character-sheet'; characterId: string }
-  | { kind: 'scene-plate'; sceneId: string }
-  | { kind: 'keyframe'; shotId: string };
 
 export interface ImagePromptInput {
   /** 目标对象的中文名，用于说明文案 */
@@ -916,14 +909,4 @@ export function consistencyAdvice(
     summary: `当前模型（${providerName}）只能靠文字描述，一致性最弱。`,
     hint: '把连续性锁写得具体（颜色、材质、标志物），能改善多少算多少。',
   };
-}
-
-/** 平台标签，供提示词面板复用 */
-export function platformLabel(platform: TargetPlatform): string {
-  return PLATFORM_LABEL[platform];
-}
-
-/** 供界面复用：把 PromptLine 的说明拼成可复制的文本 */
-export function promptLineToText(line: PromptLine): string {
-  return [line.en, '', '--- 中文对照 ---', line.zh].join('\n');
 }

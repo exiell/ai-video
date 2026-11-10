@@ -19,8 +19,10 @@
   它做什么
   ===========================================================================
   换一台电脑要准备的东西有好几步，而每一步失败时的报错都不是人话
-  （ERR_PNPM_IGNORED_BUILDS、EBUSY、corepack 未启用……）。
+  （ERR_PNPM_IGNORED_BUILDS、EBUSY、权限不足……）。
   这个脚本把四种情况都处理掉，并且**失败时说清是哪一步、该怎么办**。
+pnpm 的安装策略与 start.sh 对齐：只装进项目内 .tools/，不写全局目录、不需要管理员权限，
+版本固定 10.34.9（与 package.json 的 packageManager 一致）。
 #>
 
 $ErrorActionPreference = 'Stop'
@@ -94,10 +96,17 @@ Step 1 "Node.js v$nodeVer"
 # ---------------------------------------------------------------------------
 # 第 2 步：找 pnpm
 # ---------------------------------------------------------------------------
-# 优先用 Node 自带的 corepack 启用（版本最稳），不行再退回 npm 全局安装。
+# 与 start.sh 对齐：优先用系统里已有的 pnpm；没有就**只装进项目内 .tools/**，
+# 不碰全局 npm 目录、不需要管理员权限（共享电脑/公司电脑上 `npm i -g` 常被拒）。
+# 版本固定 10.34.9，与 package.json 的 packageManager、pnpm-lock.yaml 的锁格式一致。
+$PinnedPnpmVersion = '10.34.9'
+
 function Resolve-Pnpm {
   $c = Get-Command pnpm -ErrorAction SilentlyContinue
   if ($c) { return $c.Source }
+  # 上次运行装到项目内的那份
+  $local = Join-Path $root '.tools\node_modules\.bin\pnpm.cmd'
+  if (Test-Path $local) { return $local }
   # pnpm 也可能装在 npm 的全局前缀里但没进 PATH
   foreach ($p in @("$env:APPDATA\npm\pnpm.cmd", "$env:LOCALAPPDATA\pnpm\pnpm.exe")) {
     if (Test-Path $p) { return $p }
@@ -108,33 +117,28 @@ function Resolve-Pnpm {
 $pnpm = Resolve-Pnpm
 
 if (-not $pnpm) {
-  Write-Host '  [2/4] 没有 pnpm，正在自动安装...' -ForegroundColor Yellow
+  Write-Host '  [2/4] 没有 pnpm，正在装到项目内 .tools/（不需要管理员权限）...' -ForegroundColor Yellow
 
   $nodeDir = Split-Path -Parent $nodeExe
-  $corepack = Join-Path $nodeDir 'corepack.cmd'
-  if (Test-Path $corepack) {
-    & $corepack enable 2>&1 | Out-Null
-    & $corepack prepare pnpm@latest --activate 2>&1 | Out-Null
-    # corepack 会把 shim 放到 Node 目录，刷新一下 PATH 再找
-    $env:PATH = "$nodeDir;$env:PATH"
+  $npm = Join-Path $nodeDir 'npm.cmd'
+  if (Test-Path $npm) {
+    $toolsDir = Join-Path $root '.tools'
+    $npmCache = Join-Path $toolsDir 'npm-cache'
+    # --prefix / --cache：pnpm 本体与 npm 缓存都留在项目内，避免写系统目录或用户目录
+    & $npm install --prefix $toolsDir --cache $npmCache `
+      --no-fund --no-audit --loglevel=error "pnpm@$PinnedPnpmVersion" 2>&1 | Out-Null
     $pnpm = Resolve-Pnpm
   }
 
   if (-not $pnpm) {
-    $npm = Join-Path $nodeDir 'npm.cmd'
-    if (Test-Path $npm) {
-      Write-Host '         改用 npm 安装...' -ForegroundColor Yellow
-      & $npm install -g pnpm 2>&1 | Out-Null
-      $pnpm = Resolve-Pnpm
-    }
-  }
-
-  if (-not $pnpm) {
     Fail 'pnpm 自动安装失败' @(
-      '请手动打开一个新的命令行窗口，执行：',
-      '  npm install -g pnpm',
+      '脚本只把 pnpm 装进当前项目的 .tools/，不写系统目录，也不需要管理员权限。',
       '',
-      '然后关掉这个窗口再双击一次 start.cmd。'
+      '请手动打开一个新的命令行窗口，在项目目录执行：',
+      "  npm install --prefix .tools --cache .tools/npm-cache pnpm@$PinnedPnpmVersion",
+      '  .\.tools\node_modules\.bin\pnpm install --store-dir .pnpm-store',
+      '',
+      '常见原因：网络不通（换一个 npm 镜像源）、项目目录不可写。'
     )
   }
 }
@@ -160,7 +164,9 @@ if ((Test-Path (Join-Path $root 'node_modules')) -and (Test-Path $stampFile)) {
 if ($needInstall) {
   Step 3 '正在安装依赖（第一次大约需要 1 分钟）...'
   Write-Host ''
-  & $pnpm install
+  # --store-dir：包仓库也放在项目内。默认仓库在用户目录，家目录只读/不可写时
+  # 会在安装到一半才报权限错误（与 start.sh 的处理一致）。
+  & $pnpm install --store-dir (Join-Path $root '.pnpm-store')
   if ($LASTEXITCODE -ne 0) {
     Fail '依赖安装失败' @(
       '常见原因与做法：',

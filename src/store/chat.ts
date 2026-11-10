@@ -285,5 +285,11 @@ export const useChat = create<ChatState>((set, get) => ({
 }));
 
 function newId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+  // 优先 crypto.randomUUID（浏览器原生、碰撞可忽略），测试桩/极老环境退回 Math.random
+  const cryptoObj = typeof globalThis.crypto === 'undefined' ? undefined : globalThis.crypto;
+  const suffix =
+    cryptoObj && typeof cryptoObj.randomUUID === 'function'
+      ? cryptoObj.randomUUID().replace(/-/g, '').slice(0, 10)
+      : Math.random().toString(36).slice(2, 12);
+  return `${prefix}-${Date.now().toString(36)}${suffix}`;
 }

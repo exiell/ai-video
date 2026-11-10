@@ -9,7 +9,7 @@ import type {
 } from '../types/model';
 import { runChecks } from '../domain/checks';
 import { SCHEMA_VERSION } from '../types/model';
-import { newId, saveProject } from '../services/storage';
+import { deleteProject, newId, requestPersistentStorage, saveProject } from '../services/storage';
 
 /**
  * 应用状态（方案.md v0.6 §5.2：Zustand）
@@ -72,6 +72,15 @@ interface AppState {
   refreshChecks: () => void;
   /** 写入本地存储 */
   persist: () => Promise<void>;
+  /**
+   * 删除一个已保存的项目，并把失败翻成人话（不抛异常）。
+   *
+   * 页面可以直接 `void deleteProject(id)`——但 IndexedDB 在多标签页占用、
+   * 隐私模式等情况下会抛异常，`void` 之后就是 unhandled rejection：
+   * 用户点了「确认删除」，然后什么都没发生。UI 接线归 ui-design，
+   * 这里先把可复用的兜底入口准备好。
+   */
+  removeProject: (id: string) => Promise<{ ok: boolean; error?: string }>;
   clearSaveError: () => void;
 
   createEmptyProject: (name?: string) => Project;
@@ -339,8 +348,28 @@ export const useAppStore = create<AppState>((set, get) => ({
      * 让自动保存的 effect 再挂一次计时器——否则那次改动会永远不落盘，
      * 而界面还显示「已保存到本机」。
      */
+    /*
+      首次成功保存后，尽力申请持久化存储（只试一次、失败静默）。
+      浏览器默认会在磁盘紧张时回收 IndexedDB；申请到「持久化」能降低这种概率。
+      放在保存成功之后：没写成功时申请没有意义，也会掩盖真正的保存错误。
+    */
+    void requestPersistentStorage();
+
     if (get().revision === snapshot) {
       set({ dirty: false, saveError: null });
+    }
+  },
+
+  removeProject: async (id) => {
+    try {
+      await deleteProject(id);
+      return { ok: true };
+    } catch {
+      return {
+        ok: false,
+        error:
+          '删除失败：本地存储可能被其他标签页占用或不可用。刷新页面后再试一次；项目和图片都还在。',
+      };
     }
   },
 

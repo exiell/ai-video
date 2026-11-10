@@ -258,9 +258,7 @@ interface SettingsState {
   setKey: (vendorId: string, apiKey: string) => void;
   clearKey: (vendorId: string) => void;
   getKey: (vendorId: string) => string;
-  /** 把当前会话里的 Key 落盘（Key 有变化时由 store 内部调用） */
-  persistKeys: () => void;
-  /** 从磁盘清除全部 Key */
+  /** 清除全部 Key（磁盘 + 内存） */
   forgetKeys: () => void;
 }
 
@@ -314,13 +312,16 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
   getKey: (profileId) => get().keys[profileId] ?? '',
 
-  persistKeys: () => {
-    writeKeys(get().keys, true);
-  },
-
   forgetKeys: () => {
     if (typeof localStorage !== 'undefined') localStorage.removeItem(LS_KEYS);
     if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(SS_KEYS);
+    /*
+      内存里的那份也要清。
+      原来只删存储：磁盘上没了，但当前会话的 state 还留着 Key，
+      设置页输入框继续显示、生成也还能用——用户会以为「不保存到本机」没生效
+      （下一次 setKey 还会把整份 keys 写回会话存储）。清掉才和这个开关的语义一致。
+    */
+    set({ keys: {} });
   },
 }));
 

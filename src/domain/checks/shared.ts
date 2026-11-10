@@ -31,11 +31,6 @@ export function makeIssue(input: IssueInput): CheckIssue {
   };
 }
 
-/** 供测试重置，保证问题 id 可预期 */
-export function resetIssueSeq(): void {
-  seq = 0;
-}
-
 /** 镜头在界面上的称呼：优先用镜号 */
 export function shotLabel(number: number): string {
   return `第 ${number} 镜`;

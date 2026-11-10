@@ -1,6 +1,5 @@
 import { strToU8, zipSync } from 'fflate';
 import type { Asset, CheckReport, Project } from '../../types/model';
-import { ASSET_KIND_LABEL } from '../../types/model';
 import { continuitySheetMarkdown } from '../checks/continuity';
 import {
   charactersToMarkdown,
@@ -371,9 +370,4 @@ export function summarizeBundle(entries: ZipEntry[]): {
     }
   }
   return { textCount, imageCount, imageBytes };
-}
-
-/** 素材类型的中文名，供界面复用 */
-export function assetKindLabel(kind: Asset['kind']): string {
-  return ASSET_KIND_LABEL[kind];
 }

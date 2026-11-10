@@ -564,7 +564,7 @@ export function planReferenceImages(args: {
     });
   });
 
-  orderSlots(slots, continuity.continuous);
+  orderSlots(slots);
 
   return {
     slots,
@@ -597,7 +597,7 @@ export function planReferenceImages(args: {
  * 注意这是**硬约束下无法两全的取舍**：尾帧与场景板在争同一个位置。
  * 所以界面上会显示「这一镜的画幅由谁决定」，让用户看得见这个取舍。
  */
-function orderSlots(slots: ReferenceSlot[], continuous: boolean): void {
+function orderSlots(slots: ReferenceSlot[]): void {
   const has = (role: ReferenceRole): boolean => slots.some((s) => s.role === role);
 
   /**
@@ -627,8 +627,6 @@ function orderSlots(slots: ReferenceSlot[], continuous: boolean): void {
     return 20;
   };
   slots.sort((a, b) => rank(a.role) - rank(b.role));
-  // 尾帧与场景板在争最后一张时，顺序即结论——把它记录下来给界面显示
-  void continuous;
 }
 
 function lastRoleOf(slots: ReferenceSlot[]): ReferenceRole | undefined {

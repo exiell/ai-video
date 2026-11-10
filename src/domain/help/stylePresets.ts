@@ -119,11 +119,6 @@ export const STYLE_PRESETS: StylePreset[] = [
   },
 ];
 
-/** 按 id 找预设 */
-export function findStylePreset(id: string): StylePreset | undefined {
-  return STYLE_PRESETS.find((p) => p.id === id);
-}
-
 /**
  * 判断当前风格词命中哪个预设（用于回显「你现在用的是哪一个」）。
  * 比对全部标签都命中才算，避免部分相似就归到某个预设。

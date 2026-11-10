@@ -23,16 +23,6 @@ import { makeIssue, shotLabel } from './shared';
  *  - 不自动改（衔接属于创作决定）
  */
 
-/** 与下一镜的矛盾类型 */
-export type ContinuityKind = 'missing-note' | 'location-jump' | 'time-jump' | 'state-conflict';
-
-export const CONTINUITY_KIND_LABEL: Record<ContinuityKind, string> = {
-  'missing-note': '没写衔接',
-  'location-jump': '地点跳了',
-  'time-jump': '时间跳了',
-  'state-conflict': '状态对不上',
-};
-
 /** 表示「时间在流逝」的词 */
 const TIME_SKIP_WORDS = [
   '第二天', '次日', '隔天', '几天后', '一周后', '多年后', '与此同时', '同一时间',

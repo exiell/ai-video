@@ -4,7 +4,6 @@ import type {
   Project,
   SceneCard,
   Shot,
-  Story,
 } from '../../types/model';
 
 /**
@@ -47,11 +46,6 @@ import type {
 // ---------------------------------------------------------------------------
 // 对话
 // ---------------------------------------------------------------------------
-
-export interface ChatTurn {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 export interface ChatEditProposal {
   /** 稳定 id，供界面勾选 */
@@ -602,7 +596,13 @@ export function applyChatEdits(project: Project, edits: ChatEditProposal[]): App
 // ---------------------------------------------------------------------------
 
 function newId(prefix: string): string {
-  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  // 优先 crypto.randomUUID（浏览器原生、碰撞可忽略），测试桩/极老环境退回 Math.random
+  const cryptoObj = typeof globalThis.crypto === 'undefined' ? undefined : globalThis.crypto;
+  const suffix =
+    cryptoObj && typeof cryptoObj.randomUUID === 'function'
+      ? cryptoObj.randomUUID().replace(/-/g, '').slice(0, 10)
+      : Math.random().toString(36).slice(2, 12);
+  return `${prefix}-${Date.now().toString(36)}${suffix}`;
 }
 
 const stamp = (): { schemaVersion: number; createdAt: string; updatedAt: string } => {
@@ -1017,9 +1017,4 @@ function refOptions(refKind: string | undefined, project?: Project | null): stri
 function truncate(text: string, max: number): string {
   const t = text.trim();
   return t.length <= max ? t : `${t.slice(0, max)}……（已截断）`;
-}
-
-/** 故事单独取用（聊天可能只谈故事） */
-export function storyOf(project: Project): Story {
-  return project.story;
 }

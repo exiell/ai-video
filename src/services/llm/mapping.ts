@@ -1,5 +1,5 @@
-import type { CharacterCard, Project, SceneCard, Shot, Story } from '../../types/model';
-import { CAMERA_MOVE_LABEL, SCHEMA_VERSION, SHOT_SIZE_LABEL } from '../../types/model';
+import type { CharacterCard, SceneCard, Shot, Story } from '../../types/model';
+import { SCHEMA_VERSION } from '../../types/model';
 import { newId } from '../storage';
 import type { GeneratedAssets, GeneratedShots, GeneratedStory } from './schemas';
 
@@ -382,28 +382,4 @@ export function resolveLockReference(
     }
   }
   return undefined;
-}
-
-/** 一次生成完，把三部分拼进项目 */
-export function applyGeneration(
-  project: Project,
-  parts: { story?: Story; assets?: AssetMapping; shots?: Shot[] },
-): Project {
-  const next: Project = { ...project, updatedAt: new Date().toISOString() };
-  if (parts.story) next.story = parts.story;
-  if (parts.assets) {
-    next.characters = parts.assets.characters;
-    next.scenes = parts.assets.scenes;
-  }
-  if (parts.shots) next.shots = parts.shots;
-  return next;
-}
-
-/** 给界面用：把枚举值翻成中文，便于在错误提示里说明 */
-export function describeShotSize(value: string): string {
-  return SHOT_SIZE_LABEL[value as keyof typeof SHOT_SIZE_LABEL] ?? value;
-}
-
-export function describeCameraMove(value: string): string {
-  return CAMERA_MOVE_LABEL[value as keyof typeof CAMERA_MOVE_LABEL] ?? value;
 }

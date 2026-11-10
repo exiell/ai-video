@@ -93,9 +93,9 @@ else
   if command -v npm >/dev/null 2>&1; then
     # --prefix：装到项目内，不写全局 npm 目录
     # --cache：npm 缓存也留在项目内，否则 $HOME 不可写时连解包都会失败
-    # pnpm@10：与 pnpm-lock.yaml 的 9.0 锁文件格式对应，要升级改这里
+    # pnpm@10.34.9：与 package.json 的 packageManager 固定版本、pnpm-lock.yaml 的 9.0 锁文件格式一致；升级时三处一起改
     npm install --prefix "$TOOLS_DIR" --cache "$NPM_CACHE" \
-      --no-fund --no-audit --loglevel=error pnpm@10 >/dev/null 2>&1 || true
+      --no-fund --no-audit --loglevel=error pnpm@10.34.9 >/dev/null 2>&1 || true
   fi
 
   if [ -x "$LOCAL_PNPM" ] && "$LOCAL_PNPM" --version >/dev/null 2>&1; then
@@ -112,7 +112,7 @@ if [ -z "$PNPM" ]; then
     "  · 项目目录不可写 —— 把项目放到你有写权限的目录再跑" \
     "" \
     "也可以手动执行（同样只装到当前目录）：" \
-    "  npm install --prefix .tools --cache .tools/npm-cache pnpm@10" \
+    "  npm install --prefix .tools --cache .tools/npm-cache pnpm@10.34.9" \
     "  ./.tools/node_modules/.bin/pnpm install"
 fi
 step 2 "pnpm $("$PNPM" --version)"

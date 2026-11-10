@@ -50,6 +50,32 @@ function imageTooLargeMessage(): string {
   return '这张图超过 30 MB，已跳过保存。它可能不是一张正常的图片，或者厂商返回了异常内容。';
 }
 
+/** 允许的图片地址协议：只接受网络地址与 data URI */
+const ALLOWED_IMAGE_URL_PROTOCOLS = new Set(['http:', 'https:', 'data:']);
+
+/** 只允许 http(s)/data：file:/ftp:/javascript: 之类的地址一律拒绝，避免把奇怪内容当图存下来 */
+function assertAllowedImageUrl(url: string): void {
+  let protocol: string;
+  try {
+    protocol = new URL(url).protocol;
+  } catch {
+    throw new Error('图片地址不是合法的 URL，已跳过保存。');
+  }
+  if (!ALLOWED_IMAGE_URL_PROTOCOLS.has(protocol)) {
+    throw new Error(
+      `图片地址的协议不被支持（${protocol}），只接受 http、https 或 data 开头的地址。已跳过保存。`,
+    );
+  }
+}
+
+/** Content-Type / Blob 类型必须是 image/*（空类型放行：少数存储不返回头，真实类型仍可由 dataUrl 渲染） */
+function assertImageContentType(contentType: string): void {
+  const type = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+  if (type.length > 0 && !type.startsWith('image/')) {
+    throw new Error(`下载到的内容不是图片（Content-Type: ${type}），已跳过保存。`);
+  }
+}
+
 export interface PrefetchOptions {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
@@ -72,6 +98,8 @@ export async function prefetchImage(
   options: PrefetchOptions = {},
 ): Promise<PrefetchedImage> {
   const { fetchImpl = fetch, timeoutMs = 120_000 } = options;
+  // 先校验地址协议再发请求：不支持的协议连请求都不该发出去
+  assertAllowedImageUrl(url);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -82,11 +110,14 @@ export async function prefetchImage(
     }
     // 先看响应头，能提前拒绝就不下载；没有 Content-Length 时下面还要按实际大小再查一次
     const headers = (response as { headers?: { get?: (name: string) => string | null } }).headers;
+    assertImageContentType(headers?.get?.('content-type') ?? '');
     const declared = Number(headers?.get?.('content-length') ?? '');
     if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) {
       throw new Error(imageTooLargeMessage());
     }
     const rawBlob = await response.blob();
+    // Blob 类型是浏览器按 Content-Type 推出来的；有些存储会把它标成 text/html
+    assertImageContentType(rawBlob.type);
     if (rawBlob.size > MAX_IMAGE_BYTES) {
       throw new Error(imageTooLargeMessage());
     }

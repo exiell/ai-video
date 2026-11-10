@@ -415,6 +415,37 @@ export async function readResponseTextLimited(
   return new TextDecoder().decode(merged);
 }
 
+// ---------------------------------------------------------------------------
+// 经代理时的错误原文脱敏（v0.54 · P3-12）
+// ---------------------------------------------------------------------------
+
+/**
+ * 代理是用户自己填的第三方地址；恶意或被篡改的代理可能在错误 body 里回显请求头。
+ * 设置页会把 `raw` 展开给用户看（最多 600 字），若里面带着 Key，等于在界面上再泄一次。
+ * 所以**经代理时统一脱敏**；直连厂商保持原文，方便排查（原文本来就是你自己的请求）。
+ *
+ * 脱敏只针对错误展示用的副本：真正发出去的请求、解析用的响应文本都不受影响。
+ */
+const PROXY_ECHO_REDACTIONS: { re: RegExp; replace: string }[] = [
+  { re: /(Bearer\s+)[A-Za-z0-9._~+/=-]{6,}/gi, replace: '$1[已脱敏]' },
+  { re: /\bsk-[A-Za-z0-9_-]{6,}/g, replace: '[已脱敏]' },
+  {
+    re: /((?:authorization|x-api-key|x-aniguide-proxy-token)["']?\s*[:=]\s*["']?)[^"',\s}]{4,}/gi,
+    replace: '$1[已脱敏]',
+  },
+  {
+    re: /((?:api[_-]?key|password|token)["']?\s*[:=]\s*["']?)[^"',\s}]{4,}/gi,
+    replace: '$1[已脱敏]',
+  },
+];
+
+/** 把错误原文里的凭据片段替换成 [已脱敏]（仅用于经代理的场景） */
+export function redactProxyErrorBody(text: string): string {
+  let out = text;
+  for (const { re, replace } of PROXY_ECHO_REDACTIONS) out = out.replace(re, replace);
+  return out;
+}
+
 /**
  * 发起一次模型请求。
  * 成功返回解析后的 JSON，失败抛 GatewayError（已带人话说明）。
@@ -483,8 +514,14 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       throw new GatewayError(classifyError(error));
     }
 
+    /*
+      错误/调试展示用的副本：经代理时先脱敏，避免代理回显的 Authorization
+      或 Key 片段再出现在界面上。解析本身仍用未脱敏的原文。
+    */
+    const errorText = useProxy ? redactProxyErrorBody(text) : text;
+
     if (!response.ok) {
-      throw new GatewayError(classifyError(undefined, response.status, text));
+      throw new GatewayError(classifyError(undefined, response.status, errorText));
     }
 
     try {
@@ -494,7 +531,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         kind: 'parse',
         title: '厂商返回的内容不是合法 JSON',
         advice: '通常是接口地址填错了（比如把页面地址当成了接口地址）。检查一下设置里的接口地址。',
-        raw: text.slice(0, 300),
+        raw: errorText.slice(0, 300),
       });
     }
   } finally {

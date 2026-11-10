@@ -588,13 +588,6 @@ export type ModelProfileGroup =
   | 't2i-verified'
   | 't2i-experimental';
 
-export const MODEL_PROFILE_GROUP_LABEL: Record<ModelProfileGroup, string> = {
-  'llm-verified': '对话模型 · 已确认浏览器可直连',
-  'llm-experimental': '对话模型 · 未实测确认（可能是网络原因）',
-  't2i-verified': '出图模型 · 已确认浏览器可直连',
-  't2i-experimental': '出图模型 · 未实测确认（可能是网络原因）',
-};
-
 /**
  * 厂商定义。
  *
@@ -703,20 +696,6 @@ export interface ModelProfile {
   notes?: string;
 }
 
-export interface PromptTemplate extends Versioned {
-  id: string;
-  /** 目标平台 */
-  platform: TargetPlatform;
-  /** 模板名 */
-  label: string;
-  /** 版本号，模板改动时递增 */
-  version: number;
-  /** 模板正文，用 {{占位符}} 填空 */
-  body: string;
-  /** 出处标注（合规用） */
-  source?: string;
-}
-
 // ---------------------------------------------------------------------------
 // 素材
 // ---------------------------------------------------------------------------
@@ -751,13 +730,6 @@ export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   'first-frame': '首帧',
   'action-peak': '动作关键帧',
   'end-frame': '尾帧',
-};
-
-/** 三种镜头帧的说明，供界面复用 */
-export const FRAME_KIND_HINT: Record<'first-frame' | 'action-peak' | 'end-frame', string> = {
-  'first-frame': '镜头开始那一格。**它是图生视频的输入图**，必须先有它。',
-  'action-peak': '动作最有张力的那一瞬间。它决定动作的力度与节奏。只给首尾帧，模型可能把动作演得软绵绵。',
-  'end-frame': '镜头结束那一格。**下一镜的首帧要接住它**，镜头之间的衔接靠这一对。',
 };
 
 export interface Asset extends Versioned {
@@ -813,32 +785,6 @@ export interface Asset extends Versioned {
 // ---------------------------------------------------------------------------
 // 工具类型
 // ---------------------------------------------------------------------------
-
-/** 一致性降级级别（方案.md §6.4） */
-export type ConsistencyLevel = 'L1' | 'L2' | 'L3';
-
-export const CONSISTENCY_LEVEL_LABEL: Record<ConsistencyLevel, string> = {
-  L1: 'L1 描述锁定',
-  L2: 'L2 种子锁定',
-  L3: 'L3 参考图锚定',
-};
-
-/**
- * 按模型能力推导当前能用到哪一级。
- *
- * 这是「如实告知能力边界」的落点：用户必须知道他的图能不能真正锁住角色，
- * 而不是以为填了角色卡就万事大吉。
- */
-export function resolveConsistencyLevel(capabilities: ModelCapabilities): ConsistencyLevel {
-  if (capabilities.referenceImage) return 'L3';
-  if (capabilities.seed) return 'L2';
-  return 'L1';
-}
-
-export interface ExportBundle {
-  project: Project;
-  exportedAt: string;
-}
 
 export interface PromptLine {
   /** 英文正文，可直接复制粘贴 */

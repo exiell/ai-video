@@ -78,11 +78,25 @@ export function getDb(): AniGuideDB {
   return dbInstance;
 }
 
+/**
+ * 随机 id 后缀。
+ *
+ * 优先用 `crypto.randomUUID()`：它是浏览器原生的加密随机源，碰撞概率可以忽略；
+ * 只在极老的环境/测试桩里才退回 `Math.random()`。Math.random 生成的 id
+ * 理论上可预测、也可能撞，虽然本项目里只是本地标识，但没有理由不用更好的。
+ */
+function randomIdSuffix(): string {
+  const cryptoObj = typeof globalThis.crypto === 'undefined' ? undefined : globalThis.crypto;
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    return cryptoObj.randomUUID().replace(/-/g, '').slice(0, 10);
+  }
+  return Math.random().toString(36).slice(2, 12);
+}
+
 /** 简单的 id 生成，避免引入额外依赖 */
 export function newId(prefix: string): string {
-  const rand = Math.random().toString(36).slice(2, 8);
   const ts = Date.now().toString(36);
-  return `${prefix}-${ts}${rand}`;
+  return `${prefix}-${ts}${randomIdSuffix()}`;
 }
 
 export async function saveProject(project: Project): Promise<void> {
@@ -184,6 +198,30 @@ export async function estimateUsage(): Promise<{ usage: number; quota: number } 
   if (typeof navigator === 'undefined' || !navigator.storage?.estimate) return null;
   const { usage = 0, quota = 0 } = await navigator.storage.estimate();
   return { usage, quota };
+}
+
+/** 是否已经申请过持久化存储（只试一次，避免每次自动保存都问浏览器） */
+let persistentStorageRequested = false;
+
+/**
+ * 尽力申请持久化存储（best-effort）。
+ *
+ * 浏览器默认的 IndexedDB 是「可被回收」的存储：磁盘紧张/长期不访问时可能被清掉。
+ * `navigator.storage.persist()` 申请的是「不自动回收」的许可（浏览器可能直接拒绝，
+ * 例如隐私模式或站点参与度不够），所以这里**只尝试一次、失败静默**，
+ * 不能因为申请不到就影响保存流程。返回 true/false 供界面以后展示（UI 归 ui-design）。
+ */
+export async function requestPersistentStorage(): Promise<boolean> {
+  if (persistentStorageRequested) return false;
+  persistentStorageRequested = true;
+  if (typeof navigator === 'undefined' || typeof navigator.storage?.persist !== 'function') {
+    return false;
+  }
+  try {
+    return await navigator.storage.persist();
+  } catch {
+    return false;
+  }
 }
 
 /**
