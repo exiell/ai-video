@@ -2425,14 +2425,27 @@ table.simple tbody tr:last-child td {
 
 .task-row {
   display: grid;
-  grid-template-columns: 7px minmax(0, 1fr) auto;
+  grid-template-columns: 7px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
-  padding: 9px 0;
+  margin: 0 -8px;
+  padding: 9px 8px;
   border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
 }
 
-.task-row:last-child {
+.task-row:hover {
+  background: var(--bg-hover);
+}
+
+.task-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.task-list > li:last-child .task-row {
   padding-bottom: 2px;
   border-bottom: 0;
 }
@@ -2465,16 +2478,6 @@ table.simple tbody tr:last-child td {
   line-height: 1.45;
 }
 
-.task-row > a {
-  padding-top: 2px;
-  color: var(--text-dim);
-  font-size: 12px;
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 2px;
-  white-space: nowrap;
-}
-
 .home-lower {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr);
@@ -2487,6 +2490,13 @@ table.simple tbody tr:last-child td {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-card);
+}
+
+/* 整块面板本身是链接（穿帮检查 / 存档）：点标题或数字就能跳 */
+.panel-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
 }
 
 .shots-panel {
@@ -2648,6 +2658,28 @@ table.simple tbody tr:last-child td {
   border-top: 1px solid var(--border);
 }
 
+/*
+  整块可点的右栏面板（穿帮检查 / 存档）。
+  必须放在 .home-rail .panel 之后并提高选择器特异性：那条规则把右栏面板的
+  背景写成 transparent、边框写成 0，同特异性且更晚，会把 hover 全部盖掉。
+  右栏视觉语言里没有卡片边框，所以用 inset box-shadow 当描边，不改变布局。
+*/
+.home-rail .panel.panel-link {
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.home-rail .panel.panel-link:hover {
+  background: var(--bg-hover);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.home-rail .panel.panel-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .check-total {
   display: flex;
   align-items: baseline;
@@ -2678,6 +2710,24 @@ table.simple tbody tr:last-child td {
   margin-top: 8px;
 }
 
+.asset {
+  display: block;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  text-decoration: none;
+}
+
+.asset:hover {
+  background: var(--bg-hover);
+}
+
+.asset:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .asset b {
   display: block;
   color: var(--text);
@@ -2697,20 +2747,6 @@ table.simple tbody tr:last-child td {
   color: var(--text-faint);
   font-size: 12px;
   line-height: 1.55;
-}
-
-.asset-links {
-  display: flex;
-  gap: 14px;
-  margin-top: 7px;
-}
-
-.asset-links a {
-  color: var(--text-dim);
-  font-size: 12px;
-  text-decoration: underline;
-  text-decoration-color: var(--border-strong);
-  text-underline-offset: 2px;
 }
 
 .save-row {
@@ -5481,32 +5517,6 @@ details.shot-section[open] > summary.shot-section-rail {
 }
 
 /* 任务行与右栏的动作：文字换成箭头，指向哪一行由行本身说明 */
-.task-go {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  flex: none;
-  border-radius: var(--radius-sm);
-  color: var(--text-faint);
-  text-decoration: none;
-}
-
-.task-go:hover {
-  background: var(--bg-hover);
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.task-go .icon {
-  transition: transform 0.15s ease;
-}
-
-.task-go:hover .icon {
-  transform: translateX(2px);
-}
-
 
 /* ==========================================================================
    可访问性工具类

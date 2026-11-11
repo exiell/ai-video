@@ -94,15 +94,19 @@ describe('纯图标按钮的可访问性', () => {
     expect(states.some((text) => (text ?? '').includes('完成'))).toBe(true);
   });
 
-  it('主页任务行的「去看 / 去改」换成了带名字的箭头链接', () => {
+  it('主页待办行整行是链接：点标题就跳对应页面，且不含嵌套锚点', () => {
     const el = render(<HomePage />);
-    const links = [...el.querySelectorAll('a.task-go')];
-    expect(links.length).toBeGreaterThan(0);
-    for (const link of links) {
-      const label = link.getAttribute('aria-label') ?? '';
-      expect(label.trim().length).toBeGreaterThan(0);
-      expect((link.textContent ?? '').trim()).toBe('');
+    const rows = [...el.querySelectorAll('.task-list > li')];
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      const link = row.querySelector('a[href]');
+      expect(link).toBeTruthy();
+      expect((link!.getAttribute('href') ?? '').startsWith('/')).toBe(true);
+      expect((link!.textContent ?? '').trim().length).toBeGreaterThan(0);
+      expect(link!.querySelector('a')).toBeNull();
     }
+    // 行尾箭头已移除
+    expect(el.querySelector('a.task-go')).toBeNull();
   });
 
   it('删除按钮带上是删哪个对象，而不是只有一个「删除」', () => {

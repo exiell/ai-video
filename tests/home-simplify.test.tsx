@@ -140,19 +140,19 @@ describe('主页说明字段精简', () => {
     expect(el.querySelector('.next-time')).toBeNull();
     expect(el.querySelector('.next-hint')).toBeNull();
 
-    // 待办：只留标题 + 箭头，没有 meta 行
+    // 待办：整行是标题链接，没有 meta 行
     expect(el.querySelectorAll('.task-row').length).toBeGreaterThan(0);
     expect(el.querySelectorAll('.task-main span').length).toBe(0);
 
     // 穿帮检查：删掉时间戳与建议/参考两行
     expect(el.querySelector('.check-row')).toBeNull();
 
-    // 参考图：删掉 note，两个跳转改成带 aria-label 的图标按钮
+    // 参考图：删掉 note，两条进度各自是链接
     expect(el.querySelector('.asset-note')).toBeNull();
-    const charLink = el.querySelector('a[aria-label="去角色设定"]');
-    const sceneLink = el.querySelector('a[aria-label="去场景设定"]');
-    expect(charLink?.getAttribute('title')).toBe('去角色设定');
-    expect(sceneLink?.getAttribute('title')).toBe('去场景设定');
+    const charLink = el.querySelector('a[aria-label^="角色设定：角色形象图"]');
+    const sceneLink = el.querySelector('a[aria-label^="场景设定：场景参考板"]');
+    expect(charLink?.getAttribute('href')).toBe('/characters');
+    expect(sceneLink?.getAttribute('href')).toBe('/scenes');
 
     // 存档：没有 saveError 时不显示常驻说明
     expect(el.querySelector('.save-panel .asset-note')).toBeNull();

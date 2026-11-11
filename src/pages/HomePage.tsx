@@ -414,18 +414,12 @@ export function HomePage() {
               </div>
               <ul className="task-list">
                 {visibleTasks.map((task) => (
-                  <li className="task-row" key={task.key}>
-                    <i className={`task-dot ${task.tone}`} aria-hidden="true" />
-                    <div className="task-main">
-                      <b>{task.title}</b>
-                    </div>
-                    <Link
-                      to={task.to}
-                      className="task-go"
-                      aria-label={`${task.action}：${task.title}`}
-                      title={task.action}
-                    >
-                      <Icon name="arrow-right" size={14} />
+                  <li key={task.key}>
+                    <Link className="task-row" to={task.to}>
+                      <i className={`task-dot ${task.tone}`} aria-hidden="true" />
+                      <div className="task-main">
+                        <b>{task.title}</b>
+                      </div>
                     </Link>
                   </li>
                 ))}
@@ -503,7 +497,7 @@ export function HomePage() {
             </section>
 
             <aside className="home-rail">
-              <section className="panel">
+              <Link className="panel panel-link" to="/checks">
                 <div className="panel-head">
                   <h3>穿帮检查</h3>
                 </div>
@@ -511,45 +505,37 @@ export function HomePage() {
                   <b className={errorCount > 0 ? 'bad' : ''}>{errorCount}</b>
                   <span>{errorCount > 0 ? '个必改项，修完才能导出' : '个必改项'}</span>
                 </div>
-                <Link className="task-go" to="/checks" aria-label="去检查" title="去检查">
-                  <Icon name="arrow-right" size={14} />
-                </Link>
-              </section>
+              </Link>
 
               <section className="panel">
                 <div className="panel-head">
                   <h3>参考图</h3>
                 </div>
                 <div className="assets">
-                  <div className="asset">
+                  <Link
+                    className="asset"
+                    to="/characters"
+                    aria-label={`角色设定：角色形象图 ${coverage.charsReady} / ${characters.length}`}
+                  >
                     <b>
                       {coverage.charsReady} / {characters.length}
                     </b>
                     <span>角色形象图</span>
-                  </div>
-                  <div className="asset">
+                  </Link>
+                  <Link
+                    className="asset"
+                    to="/scenes"
+                    aria-label={`场景设定：场景参考板 ${coverage.scenesReady} / ${scenes.length}`}
+                  >
                     <b>
                       {coverage.scenesReady} / {scenes.length}
                     </b>
                     <span>场景参考板</span>
-                  </div>
-                </div>
-                <div className="asset-links">
-                  <Link
-                    className="task-go"
-                    to="/characters"
-                    aria-label="去角色设定"
-                    title="去角色设定"
-                  >
-                    <Icon name="arrow-right" size={14} />
-                  </Link>
-                  <Link className="task-go" to="/scenes" aria-label="去场景设定" title="去场景设定">
-                    <Icon name="arrow-right" size={14} />
                   </Link>
                 </div>
               </section>
 
-              <section className="panel save-panel">
+              <Link className="panel panel-link save-panel" to="/export">
                 <div className="panel-head">
                   <h3>存档</h3>
                 </div>
@@ -560,10 +546,7 @@ export function HomePage() {
                   </b>
                 </div>
                 {saveError ? <p className="asset-note">{saveError}</p> : null}
-                <Link className="task-go" to="/export" aria-label="去导出备份" title="去导出备份">
-                  <Icon name="arrow-right" size={14} />
-                </Link>
-              </section>
+              </Link>
             </aside>
           </div>
         </>
