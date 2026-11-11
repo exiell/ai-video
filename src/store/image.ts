@@ -1,11 +1,11 @@
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { Asset, ModelProfile, SceneAngle } from '../types/model';
+import type { AnchorDimension, Asset, ModelProfile, SceneAngle } from '../types/model';
 import { ASSET_KIND_LABEL, SCENE_ANGLE_LABEL } from '../types/model';
 import {
   REFERENCE_ROLE_LABEL,
   describeDroppedReference,
-  planReferenceImages,
+  planReferenceImagesDetailed,
   previousShotOf,
   referenceRolesOf,
   sameStyle,
@@ -13,6 +13,12 @@ import {
   type ReferenceRole,
   type ReferenceSlot,
 } from '../domain/image/referencePlan';
+import {
+  buildDegradedTextCompensation,
+  capabilityNotice,
+  degradedWarnings,
+  type TextAnchorMaterials,
+} from '../domain/image/delivery';
 import { useAppStore } from './app';
 import { currentTransport, useSettings } from './settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
@@ -22,6 +28,7 @@ import {
   buildFramePrompt,
   type FrameKind,
   buildScenePlatePrompt,
+  withDeliveryCompensation,
   type ImagePromptInput,
 } from '../domain/image/prompts';
 import { deleteAsset, estimateUsage, listAssets, listAssetsFor, saveAssets } from '../services/storage';
@@ -574,6 +581,16 @@ export const useImage = create<ImageState>((set, get) => ({
     let droppedRefs: DroppedReference[] = [];
     /** 这一镜要反打板但没有，退回了主视角板（v0.46）。生成完要如实说 */
     let scenePlateFellBack = false;
+    /**
+     * P2-a：投递之后仍只能靠文字的维度，以及写进请求/feedback 的补偿与提示。
+     *
+     * 只有真的参考图编排过（useReference 且档案可用）才会赋值；
+     * 纯文生图（useReference=false）没有「降级」可言。
+     */
+    let degradedDimensions: AnchorDimension[] = [];
+    let textCompensation: string[] = [];
+    let capabilityWarnings: string[] = [];
+    let editMode = false;
     if (useReference) {
       const shot = project.shots.find((s) => s.id === shotId);
       const previous = previousShotOf(project, shotId);
@@ -606,7 +623,7 @@ export const useImage = create<ImageState>((set, get) => ({
         ? await listAssetsFor(project.id, shot.sceneId)
         : undefined;
 
-      const plan = planReferenceImages({
+      const detailed = planReferenceImagesDetailed({
         kind,
         capabilities: caps,
         previous,
@@ -623,6 +640,78 @@ export const useImage = create<ImageState>((set, get) => ({
           ...(scenePlates ? { scenePlates } : {}),
         },
       });
+      const plan = detailed.plan;
+
+      /*
+        P2-a：降级上报与文字补偿。
+
+        **只有真的投递了参考图才做**（plan.slots.length > 0）。0 槽/能力未知/
+        空项目时 runGeneration 会回退纯文生图（profile 变成 plain 档案），
+        此时一个额外句子都不能加——否则纯文生图会莫名出现「编辑任务」「空间由文字锁定」
+        这类只对参考图路径成立的指令。这是复验抓到的 blocker。
+      */
+      if (plan.slots.length > 0) {
+        degradedDimensions = detailed.degraded;
+        editMode = detailed.source === 'declared' && detailed.semantics === 'edit';
+        const notice = capabilityNotice(detailed.source);
+        const materials: TextAnchorMaterials = {};
+        if (degradedDimensions.includes('space') && shot?.sceneId) {
+          const scene = project.scenes.find((item) => item.id === shot.sceneId);
+          if (scene) {
+            materials.scene = {
+              spatialStructure: scene.identity.spatialStructure,
+              fixedElements: scene.fixedElements,
+              lightDirection: scene.lightDirection,
+            };
+          }
+        }
+        if (degradedDimensions.includes('identity')) {
+          const characters = (shot?.characterIds ?? [])
+            .map((id) => project.characters.find((character) => character.id === id))
+            .filter((character) => character !== undefined)
+            .map((character) => ({
+              name: character.name,
+              ...(character.identity.summary ? { summary: character.identity.summary } : {}),
+              ...(character.identity.summaryEn ? { summaryEn: character.identity.summaryEn } : {}),
+              locks: character.continuityLocks
+                .filter((lock) => shot?.activeLockIds.includes(lock.id))
+                .map((lock) => lock.phrase),
+            }));
+          if (characters.length > 0) materials.characters = characters;
+        }
+        textCompensation = buildDegradedTextCompensation(degradedDimensions, materials);
+
+        /**
+         * 哪些维度真的注入了原文（决定 warnings 能不能说「已写入」）。
+         *
+         * 判据必须是**实际注入的文本非空**，不能用「characters 数组非空」：
+         * 新建角色的 identity 摘要可能是空的、也没有生效的锁面，此时
+         * buildDegradedTextCompensation 不会产出身份补偿句；再说「已写进提示词」
+         * 就是在编一个不存在的动作（复验抓到的文案真实性问题）。
+         */
+        const compensated: AnchorDimension[] = [];
+        const sceneMaterial = materials.scene;
+        if (
+          sceneMaterial &&
+          ((sceneMaterial.spatialStructure ?? '').trim().length > 0 ||
+            (sceneMaterial.fixedElements ?? []).some((item) => item.trim().length > 0) ||
+            (sceneMaterial.lightDirection ?? '').trim().length > 0)
+        ) {
+          compensated.push('space');
+        }
+        const identityCompensated = (materials.characters ?? []).some(
+          (character) =>
+            (character.summary ?? '').trim().length > 0 ||
+            (character.summaryEn ?? '').trim().length > 0 ||
+            (character.locks ?? []).some((phrase) => phrase.trim().length > 0),
+        );
+        if (identityCompensated) compensated.push('identity');
+
+        capabilityWarnings = [
+          ...(notice ? [notice] : []),
+          ...degradedWarnings(detailed.degraded, detailed.source, compensated),
+        ];
+      }
 
       for (const slot of plan.slots) {
         referenceImages.push(slot.dataUrl);
@@ -653,6 +742,8 @@ export const useImage = create<ImageState>((set, get) => ({
       // 承接镜时用来明说「取景可以改、地方不能动」
       ...(prompt.shotSizeEn ? { shotSizeEn: prompt.shotSizeEn } : {}),
       ...(prompt.cameraPositionEn ? { cameraPositionEn: prompt.cameraPositionEn } : {}),
+      // P2-a：投递后仍缺的维度（可选字段，旧调用方不受影响）
+      ...(degradedDimensions.length > 0 ? { degradedDimensions } : {}),
     };
 
     /*
@@ -663,14 +754,25 @@ export const useImage = create<ImageState>((set, get) => ({
 
       实际策略只有一个：外观**始终**注入。原因记在 prompts.ts 的对应位置。
     */
+    /*
+      P2-a：投递不足的文字补偿 + 编辑保留句。
+      只改这一次请求的正向提示词；prompt 对象其余字段（negative/aspect/labels）不动。
+    */
+    const effectivePrompt: ImagePromptInput = {
+      ...prompt,
+      positive: withDeliveryCompensation(prompt.positive, {
+        editMode,
+        ...(textCompensation.length > 0 ? { compensation: textCompensation } : {}),
+      }),
+    };
     await runGeneration({
       key,
-      prompt,
+      prompt: effectivePrompt,
       draft: {
         projectId: project.id,
         kind,
         refId: shotId,
-        promptSnapshot: prompt.positive,
+        promptSnapshot: effectivePrompt.positive,
         lockPhrases: prompt.lockPhrases,
         styleTags: [...project.brief.styleTags],
         referenceCount: referenceImages.length,
@@ -682,6 +784,7 @@ export const useImage = create<ImageState>((set, get) => ({
       staleSkipped: staleRoles.map((role) => REFERENCE_ROLE_LABEL[role]),
       ...(droppedRefs.length > 0 ? { dropped: droppedRefs } : {}),
       ...(scenePlateFellBack ? { scenePlateFellBack: true } : {}),
+      ...(capabilityWarnings.length > 0 ? { extraWarnings: capabilityWarnings } : {}),
       set,
       get,
     });
@@ -714,6 +817,13 @@ interface RunArgs {
    * 少一张参考图，出来的图会「看着像但哪里不对」，不说就永远归不了因。
    */
   dropped?: DroppedReference[];
+  /**
+   * P2-a：能力来源/降级提示（「能力未核实」「哪一维只剩文字」）。
+   *
+   * 与 dropped/stale 同属「取舍必须可见」：投递不足时用户要知道，
+   * 否则会以为参考图机制坏了，去改提示词/换模型，全都改不到点上。
+   */
+  extraWarnings?: string[];
   set: StoreApi<ImageState>['setState'];
   get: StoreApi<ImageState>['getState'];
 }
@@ -791,6 +901,7 @@ async function runGeneration(args: RunArgs): Promise<void> {
   const { key, draft, prompt, preferReference, referenceImages, set, get } = args;
   const referenceLabels = args.referenceLabels ?? [];
   const staleSkipped = args.staleSkipped ?? [];
+  const extraWarnings = args.extraWarnings ?? [];
   // 非批量时才确认：批量出图是用户主动发起的，每张都弹窗会没法用
   if (
     !useImage.getState().batch &&
@@ -974,7 +1085,8 @@ async function runGeneration(args: RunArgs): Promise<void> {
                 quotaWarning !== null ||
                 staleWarnings.length > 0 ||
                 fallbackWarnings.length > 0 ||
-                droppedWarnings.length > 0
+                droppedWarnings.length > 0 ||
+                extraWarnings.length > 0
               ? 'info'
               : 'ok',
         message:
@@ -987,6 +1099,7 @@ async function runGeneration(args: RunArgs): Promise<void> {
           ...staleWarnings,
           ...fallbackWarnings,
           ...droppedWarnings,
+          ...extraWarnings,
         ],
       },
     },

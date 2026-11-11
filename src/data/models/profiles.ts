@@ -294,6 +294,8 @@ export const MODEL_PROFILES: ModelProfile[] = [
       referenceImage: false,
       maxReferenceImages: 0,
       maxOutputImages: 1,
+      // 官方文档：纯文生图接口，没有参考图输入（v0.58 P2-a 已核实）
+      reference: { semantics: 'none', maxImages: 0, acceptsDataUri: false, aspectFollows: 'param' },
     },
     imageUrlTtlHours: 24,
     notes:
@@ -377,6 +379,8 @@ export const MODEL_PROFILES: ModelProfile[] = [
       referenceImage: false,
       maxReferenceImages: 0,
       maxOutputImages: 1,
+      // 官方文档：纯文生图接口，没有参考图输入（v0.58 P2-a 已核实）
+      reference: { semantics: 'none', maxImages: 0, acceptsDataUri: false, aspectFollows: 'param' },
     },
     imageUrlTtlHours: 24,
     notes:
@@ -498,6 +502,21 @@ export const MODEL_PROFILES: ModelProfile[] = [
       referenceImage: true,
       maxReferenceImages: 3,
       maxOutputImages: 6,
+      /*
+        v0.58 P2-a：按官方文档**已核实**的能力声明。
+        依据：Qwen-Image Edit API（2026-11-11 核实）
+        - 输入图 1–3 张，`content` 数组顺序即语义；
+        - 输出画幅跟随**最后一张**输入图；
+        - URL 与 base64 data URI 都接受；
+        - 单图 ≤10 MB，建议边长 384–3072。
+      */
+      reference: {
+        semantics: 'edit',
+        maxImages: 3,
+        acceptsDataUri: true,
+        maxBytesPerImage: 10 * 1024 * 1024,
+        aspectFollows: 'last',
+      },
     },
     imageUrlTtlHours: 24,
     notes:
@@ -507,7 +526,8 @@ export const MODEL_PROFILES: ModelProfile[] = [
       '对「纯前端、数据不外传」的定位是决定性的。' +
       '官方示例的用法就是「保留输入图片中人物的面部特征，换装/换场景」，与本站 L3 参考图锚定的目标一致。' +
       '注意： 返回链接同样 24 小时后失效。' +
-      '浏览器直连已实测确认（与文生图同一端点：预检 200 + 回显 Origin）。',
+      '浏览器直连已实测确认（与文生图同一端点：预检 200 + 回显 Origin）。' +
+      'v0.58 已按官方文档确认多图能力：1–3 张、顺序即语义、最后一张定输出画幅、接受 base64。',
   },
 ];
 

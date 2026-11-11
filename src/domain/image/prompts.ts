@@ -910,3 +910,35 @@ export function consistencyAdvice(
     hint: '把连续性锁写得具体（颜色、材质、标志物），能改善多少算多少。',
   };
 }
+
+// ---------------------------------------------------------------------------
+// P2-a：投递不足的文字补偿 / 编辑保留句
+// ---------------------------------------------------------------------------
+
+/**
+ * 编辑模型的保留句（v0.58 · P2-a）。
+ *
+ * 画布编辑的语义是「没提到的内容默认保留」。不写这句，模型会把参考图当成
+ * 「外观参考」重画一张，背景与构图全变。
+ *
+ * **只有 source==='declared' && semantics==='edit' 时才用**；
+ * legacy/unknown 档案用了就是在说一件没核实过的事。
+ */
+export const EDIT_KEEP_INSTRUCTION =
+  'This is an image editing task. Keep everything in this image unchanged except the changes described below.';
+
+/**
+ * 把投递不足时的补偿句/编辑保留句拼进正向提示词（v0.58 · P2-a）。
+ *
+ * 补偿句由 `delivery.buildDegradedTextCompensation()` 用项目**已有字段原文**生成；
+ * 本函数只负责顺序（编辑语义 → 补偿 → 原提示词），不生成任何新描述。
+ */
+export function withDeliveryCompensation(
+  positive: string,
+  options: { editMode: boolean; compensation?: readonly string[] },
+): string {
+  const prefix: string[] = [];
+  if (options.editMode) prefix.push(EDIT_KEEP_INSTRUCTION);
+  if (options.compensation) prefix.push(...options.compensation);
+  return prefix.length > 0 ? `${prefix.join(' ')} ${positive}` : positive;
+}
