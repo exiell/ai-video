@@ -1,16 +1,30 @@
-import type { ModelCapabilities, Project, SceneAngle, Shot, ShotSize } from '../../types/model';
+import type {
+  AnchorDimension,
+  CapabilitySource,
+  ModelCapabilities,
+  Project,
+  ReferenceSemantics,
+  SceneAngle,
+  Shot,
+  ShotSize,
+} from '../../types/model';
 import { SCENE_ANGLE_LABEL } from '../../types/model';
+import { collectAnchors, type AnchorSet, type ReferenceRole, type ReferenceSource } from './anchors';
+import { planDelivery, referenceCapabilityOf, type DeliveryPlan } from './delivery';
 
 /**
- * 跨镜参考图编排（方案.md §7.6.10，【v0.21 新增】）
+ * 跨镜参考图编排（方案.md §7.6.10，【v0.21 新增】；v0.58 P1 拆分）
  *
  * ===========================================================================
- * 为什么需要单独一个模块
+ * 现在这里只是「兼容包装」
  * ===========================================================================
- * 参考图槽位是有限的（千问 3 张），所以「放哪几张、按什么顺序」就是取舍本身。
- * 原来这段取舍散在 store 里，看不出规则，也无法测试。抽出来之后：
- *  - 规则是可以读、可以测、可以在界面上解释的
- *  - 每张参考图的**角色**是显式声明的，提示词才能据此分角色写说明
+ * 锚点收集搬到了 `anchors.ts`（与模型能力无关），槽位/排序/降级搬到了
+ * `delivery.ts`（这里才看能力）。本文件保留对外的函数签名、类型、中文标签与
+ * `ReferencePlan` 形状——`store/image.ts` 与现有 123 条参考图测试**一行不改**，
+ * 作为「拆分行为等价」的证明。
+ *
+ * 新增的 `planReferenceImagesDetailed()` 只在 P2-a 使用：它额外返回
+ * 能力来源、语义与降级维度，供 store 写 feedback/提示词补偿。
  *
  * ===========================================================================
  * 关键判断：什么时候**不该**用上一镜的尾帧
@@ -21,22 +35,10 @@ import { SCENE_ANGLE_LABEL } from '../../types/model';
  * 如果这一镜是跳切（换了地方、跳了时间、有意断开），把上一镜尾帧当参考图
  * 是把两个不该相连的镜头强行焊在一起，会同时毁掉两边：
  *  - 本镜的构图被拉向上一镜
- *  - 上一镜的空间被搬到一个新场景里
+ *  - 上一镜的空间被搬进一个新场景里
  *
- * 所以判据必须保守：**只有明确读到「连续」的证据才用，读不准就不用。**
- * 不用只是少了一道保险；用错是主动引入错误。
+ * 判据在 `anchors.ts` 的 `isContinuousWithPrevious()` 里，保持完全不变。
  */
-
-/** 一张参考图在这张画面里的职责 */
-export type ReferenceRole =
-  /** 本镜首帧：锁本镜的构图、机位、景别、光线方向 */
-  | 'own-first-frame'
-  /** 上一镜尾帧：锁跨镜的空间、光线与主体位置 */
-  | 'previous-end-frame'
-  /** 角色形象图：锁外观（脸、体型、服装） */
-  | 'character-sheet'
-  /** 场景参考板：锁空间结构、固定元素、主光方向 */
-  | 'scene-plate';
 
 export const REFERENCE_ROLE_LABEL: Record<ReferenceRole, string> = {
   'own-first-frame': '本镜首帧（锁构图与机位）',
@@ -130,253 +132,7 @@ export interface ReferencePlan {
   scenePlateFellBack?: boolean;
 }
 
-/**
- * 判断这一镜与上一镜是否连续。
- *
- * 判据来自**上一镜的衔接说明**（它描述的是「怎么接到下一镜」，也就是接到当前这一镜）。
- * 没有说明时按「不连续」处理——见文件顶部的说明。
- */
-export function isContinuousWithPrevious(previous: Shot | undefined): {
-  continuous: boolean;
-  reason: string;
-} {
-  if (!previous) {
-    return { continuous: false, reason: '这是第一镜，没有上一镜可接。' };
-  }
-
-  // 优先看**显式字段**——它是用户（或模型建议、用户确认）明确声明的意图。
-  // 关键词推断只在字段缺失时兜底（老项目与手写镜头）。
-  if (previous.transitionType === 'continuation') {
-    return { continuous: true, reason: '上一镜的转场类型明确标为「承接」。' };
-  }
-  if (previous.transitionType === 'cut') {
-    return { continuous: false, reason: '上一镜的转场类型明确标为「跳切」，是一次有意的断开。' };
-  }
-
-  const note = (previous.continuityNote ?? '').trim();
-  if (note.length === 0) {
-    return {
-      continuous: false,
-      reason: '上一镜没有写衔接说明，无法确认是否连续，因此不拿它的尾帧当锚点（用错比不用更糟）。',
-    };
-  }
-
-  // 明确表示「断开」的词：跳切、换时间、换地点
-  const cutWords = [
-    '直接切', '切到', '切换到', '跳到', '画面一转', '镜头一转', '转场',
-    '第二天', '次日', '隔天', '几天后', '一周后', '稍后', '片刻后',
-    '与此同时', '另一边', '另一处', '回到', '闪回', '回忆',
-    'cut to', 'meanwhile', 'later', 'next day',
-  ];
-  const hitCut = cutWords.find((w) => note.includes(w));
-  if (hitCut) {
-    return { continuous: false, reason: `上一镜的衔接说明里写了「${hitCut}」，是一次有意的断开。` };
-  }
-
-  // 明确表示「连续」的词：接着、保持、同一机位、不停
-  const continuousWords = [
-    '接着', '保持', '继续', '同一机位', '同一个机位', '不停', '不断',
-    '紧接着', '随即', '顺势', '延续',
-    'continues', 'same camera', 'without cutting',
-  ];
-  const hitContinuous = continuousWords.find((w) => note.includes(w));
-  if (hitContinuous) {
-    return {
-      continuous: true,
-      reason: `上一镜的衔接说明里写了「${hitContinuous}」，是连续动作。`,
-    };
-  }
-
-  return {
-    continuous: false,
-    reason:
-      '上一镜的衔接说明里既没有「接着/保持」这类连续信号，也没有「切到/第二天」这类断开信号，' +
-      '判不准，因此不拿它的尾帧当锚点。想用上这个锚点，就在衔接说明里写明「接着」。',
-  };
-}
-
-/** 一张能做参考的素材。`styleTags` 是它**生成时**用的风格词。 */
-export interface RefAsset {
-  dataUrl?: string;
-  kind: string;
-  createdAt: string;
-  /** 生成这张图时项目的风格关键词。老素材没有这个字段，按「兼容」处理 */
-  styleTags?: string[];
-  /**
-   * 这是从哪个角度看这间屋子（v0.46，只有场景板用得上）。
-   *
-   * 老素材没有这个字段，一律按主视角处理——不能因为加了个字段
-   * 就把所有历史场景板作废。
-   */
-  angle?: SceneAngle;
-}
-
-export interface ReferenceSource {
-  /** 本镜已有的素材（用来找本镜首帧） */
-  ownFrames: RefAsset[];
-  /** 上一镜已有的素材（用来找它的尾帧） */
-  previousFrames?: RefAsset[] | undefined;
-  /** 出场角色的形象图，按出场顺序 */
-  characterSheets: RefAsset[][];
-  /** 场景板的素材 */
-  scenePlates?: RefAsset[] | undefined;
-}
-
-/**
- * 两组风格词是不是同一套。
- *
- * 顺序无关（用户可能只调换了两行），大小写无关。
- * 老素材没有记录 styleTags 时**一律算兼容**——否则升级之后
- * 所有历史图都会突然不能当参考图，那是更糟的破坏。
- */
-export function sameStyle(a: string[] | undefined, b: string[] | undefined): boolean {
-  if (!a || !b) return true;
-  const norm = (xs: string[]): string =>
-    xs
-      // 折叠内部连续空格：「Anime  Style」和「anime style」是同一套风格
-      .map((x) => x.trim().toLowerCase().replace(/\s+/g, ' '))
-      .filter(Boolean)
-      .sort()
-      .join('|');
-  return norm(a) === norm(b);
-}
-
-/** 从素材里挑最新一张指定类型 */
-function newestOf(
-  assets: RefAsset[] | undefined,
-  kind: string,
-  style?: string[],
-): string | undefined {
-  if (!assets || assets.length === 0) return undefined;
-  return assets
-    .filter((a) => a.kind === kind && a.dataUrl && sameStyle(a.styleTags, style))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.dataUrl;
-}
-
-/**
- * 角色参考图该用哪一张。
- *
- * ===========================================================================
- * 【v0.46 改】原来无条件优先头部特写，理由是「脸只能靠图，体型服装文字能说清」
- * ===========================================================================
- * 这句话在近景成立，在**远景不成立**。
- *
- * 头部特写那张图里**根本没有身体**——而它恰恰是「人物大小不合理」的源头：
- * 模型手上关于这个角色的视觉信息只有三个头，身高、肩宽、腿长只能自己猜，
- * 猜出来还要和场景里的桌椅门窗对齐，于是同一个人在 A 镜里到腰高、
- * 在 B 镜里到胸口高。
- *
- * 更浪费的是：每个角色都会出全身多视图（`generateAllCharacterSheets` 先出全身、
- * 再拿它当参考出头像），所以这张画了身体的图**一直存在**，只是从来没被选中过。
- *
- * 现在的规则按景别分档：
- *  - 全景及更远（`full` / `wide` / `extreme-wide`）：用全身多视图。这一档读的就是体型与轮廓。
- *  - 中景及更近：用头部特写。这一档读的是脸，身体已经被画幅裁掉大半。
- *
- * 哪一档缺图就退回另一档——缺图时退回，比干脆不给参考图强得多。
- */
-function pickCharacterSheet(
-  assets: RefAsset[],
-  style: string[] | undefined,
-  preferFullBody: boolean,
-): { url: string | undefined; detail: 'full-body' | 'face' } {
-  const full = newestOf(assets, 'character-sheet', style);
-  const face = newestOf(assets, 'character-sheet-face', style);
-  if (preferFullBody) {
-    return full ? { url: full, detail: 'full-body' } : { url: face, detail: 'face' };
-  }
-  return face ? { url: face, detail: 'face' } : { url: full, detail: 'full-body' };
-}
-
-/**
- * 哪些景别该用全身图。
- *
- * 判据是「这一档里观众能不能看出体型」。全景、远景、大远景里人是画面的一小部分，
- * 比例错了最刺眼；中景以下身体被裁掉大半，读的是脸。
- */
-const FULL_BODY_SHOT_SIZES: ReadonlySet<ShotSize> = new Set<ShotSize>([
-  'full',
-  'wide',
-  'extreme-wide',
-]);
-
-/**
- * 没传景别时按哪一档处理。
- *
- * 真实调用方（`store/image.ts`）**总是**会传景别，这个默认值只服务于
- * 测试与历史数据。选 `medium` 是为了保持改动前的行为（优先头像），
- * 避免老调用方在不知不觉中换了参考图。
- */
-const DEFAULT_SHOT_SIZE: ShotSize = 'medium';
-
-/**
- * 哪些景别里**场景参考板比角色形象图更该保住**（v0.48）。
- *
- * 成员与 `FULL_BODY_SHOT_SIZES` 相同，但**刻意分成两个常量**：
- * 一个是「用全身图还是头像」的判据，一个是「槽位不够时先丢谁」的判据。
- * 它们现在恰好同集合，理由却是两条——合用一个常量的话，
- * 以后有人只改了一边，另一边会跟着悄悄变。
- */
-const SCENE_PLATE_PRIORITY_SHOT_SIZES: ReadonlySet<ShotSize> = new Set<ShotSize>([
-  'full',
-  'wide',
-  'extreme-wide',
-]);
-
-/**
- * 挑这一镜该用哪张场景板（v0.46）。
- *
- * 【为什么要按朝向挑】原来场景板只有一张，而且是无条件取「最新一张」。
- * 一旦场景出了反打板，最新那张反而是反打视角——主视角的镜头会拿到
- * 一张看着反方向的参考图，比完全没有参考图更糟。
- *
- * 【为什么找不到要退回主视角】宁可给一张主视角的板，也不要让模型手上什么都没有。
- * 但**必须让调用方知道退回了**，好在界面上说清「这一镜要反打板，你还没出」。
- * 悄悄退回正是这一轮里反复出现的毛病：看起来在工作，其实少了一环。
- */
-function pickScenePlate(
-  assets: RefAsset[] | undefined,
-  style: string[] | undefined,
-  want: SceneAngle,
-): { url: string | undefined; angle: SceneAngle | undefined; fellBack: boolean } {
-  if (!assets || assets.length === 0) return { url: undefined, angle: undefined, fellBack: false };
-
-  const usable = assets
-    .filter((a) => a.kind === 'scene-plate' && a.dataUrl && sameStyle(a.styleTags, style))
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const isReverse = (a: RefAsset): boolean => a.angle === 'reverse';
-
-  if (want === 'reverse') {
-    const hit = usable.find(isReverse);
-    if (hit?.dataUrl) return { url: hit.dataUrl, angle: 'reverse', fellBack: false };
-    const master = usable.find((a) => !isReverse(a));
-    if (master?.dataUrl) return { url: master.dataUrl, angle: 'master', fellBack: true };
-    return { url: undefined, angle: undefined, fellBack: false };
-  }
-
-  // 主视角镜头：只认主视角板，**不**退到反打板。
-  // 反打板是在主视角板的基础上改出来的，拿它当主视角的参考图只会越改越偏。
-  const master = usable.find((a) => !isReverse(a));
-  return master?.dataUrl
-    ? { url: master.dataUrl, angle: 'master', fellBack: false }
-    : { url: undefined, angle: undefined, fellBack: false };
-}
-
-/**
- * 编排这一帧的参考图。
- *
- * 候选的优先级：
- *  1. **上一镜尾帧** —— 只在连续时放。跨镜接续最强的锚点
- *  2. **本镜首帧** —— 只在出后两帧时放。锁本镜构图
- *  3. **角色形象图** —— 锁外观
- *  4. **场景参考板** —— 锁空间与光线
- *
- * 为什么「上一镜尾帧」排在「本镜首帧」前面：
- * 出首帧时本镜首帧还不存在（它就是正在生成的这张），两者不会同时出现。
- * 真正需要取舍的是「角色形象图 vs 场景参考板」，而这一条**按景别分档**（v0.48）：
- * 远景里空间是主体，先丢形象图；中景以里脸是主体，先丢场景板。见下面的实现。
- */
-export function planReferenceImages(args: {
+export interface PlanReferenceImagesArgs {
   kind: 'first-frame' | 'action-peak' | 'end-frame';
   capabilities: ModelCapabilities;
   previous: Shot | undefined;
@@ -384,253 +140,90 @@ export function planReferenceImages(args: {
   /**
    * 这一镜的景别（v0.46）。
    *
-   * 只影响一件事：角色参考图用全身多视图还是头部特写。见 `pickCharacterSheet`。
+   * 只影响一件事：角色参考图用全身多视图还是头部特写。见 anchors.ts 的 pickCharacterSheet。
    */
   shotSize?: ShotSize;
-  /**
-   * 出场角色的名字，与 `sources.characterSheets` 一一对应（v0.46）。
-   *
-   * 用来把「这一张是谁的形象图」写进提示词。不传时退化成通用说法
-   * （「the character turnaround sheet」），比不写强，但多角色时还是会混。
-   */
+  /** 出场角色的名字，与 `sources.characterSheets` 一一对应（v0.46）。 */
   characterNames?: string[];
-  /**
-   * 当前项目的风格关键词（v0.41）。
-   *
-   * 【为什么要有这个参数】踩过一个很贵的坑：改完风格之后重出首尾帧，
-   * 图会「崩」——不是模型坏了，而是它收到了**互相矛盾的两个指令**：
-   *
-   *   文字说：「水墨写意、冷蓝色调」（新的 styleTags）
-   *   参考图是：一张暖色赛璐璐的旧图（旧的 styleTags 生成的）
-   *
-   * 参考图对画面的拉力比文字更强，所以出来的图介于两者之间，
-   * 看起来就是「风格崩坏」。而且它只在**改过风格又重出**的时候出现，
-   * 第一次生成永远是对的——所以很难归因。
-   *
-   * 传了它，就会**跳过风格不一致的旧素材**：宁可少一张参考图，
-   * 也不要给模型两个打架的指令。
-   */
+  /** 当前项目的风格关键词（v0.41）：风格不一致的旧素材会被跳过并上报。 */
   styleTags?: string[];
-  /**
-   * 这一镜看的是场景的哪一面（v0.46）。
-   *
-   * 只影响一件事：场景参考板用哪张。主视角镜头拿主视角板，
-   * 反打镜头拿反打板；没有反打板时退回主视角板并**上报退回了**。
-   * 不传按主视角处理（老数据）。
-   */
+  /** 这一镜看的是场景的哪一面（v0.46）。 */
   viewAngle?: SceneAngle;
-}): ReferencePlan {
-  const { kind, capabilities, previous, sources, styleTags, characterNames } = args;
-  const shotSize = args.shotSize ?? DEFAULT_SHOT_SIZE;
-  const viewAngle: SceneAngle = args.viewAngle ?? 'master';
-  const limit = capabilities.maxReferenceImages || 0;
+}
 
-  /** 这一批素材里有没有因为风格不符被跳过的，用于如实告知 */
-  const staleSkipped: ReferenceRole[] = [];
-  const pick = (assets: RefAsset[] | undefined, assetKind: string): string | undefined => {
-    const url = newestOf(assets, assetKind, styleTags);
-    if (!url && assets?.some((a) => a.kind === assetKind && a.dataUrl && !sameStyle(a.styleTags, styleTags))) {
-      staleSkipped.push(assetKind === 'scene-plate' ? 'scene-plate' : 'own-first-frame');
-    }
-    return url;
-  };
-
-  const continuity = isContinuousWithPrevious(previous);
-  const candidates: {
-    role: ReferenceRole;
-    dataUrl: string | undefined;
-    owner?: string;
-    detail?: 'full-body' | 'face';
-    angle?: SceneAngle;
-  }[] = [];
-
-  if (kind === 'first-frame') {
-    // 出首帧时，上一镜尾帧是唯一的构图锚点
-    if (continuity.continuous) {
-      const url = newestOf(sources.previousFrames, 'end-frame', styleTags);
-      if (
-        !url &&
-        sources.previousFrames?.some(
-          (a) => a.kind === 'end-frame' && a.dataUrl && !sameStyle(a.styleTags, styleTags),
-        )
-      ) {
-        staleSkipped.push('previous-end-frame');
-      }
-      candidates.push({ role: 'previous-end-frame', dataUrl: url });
-    }
-  } else {
-    // 出后两帧时，本镜首帧是构图锚点
-    candidates.push({ role: 'own-first-frame', dataUrl: pick(sources.ownFrames, 'first-frame') });
-  }
-
-  const preferFullBody = FULL_BODY_SHOT_SIZES.has(shotSize);
-  sources.characterSheets.forEach((sheet, index) => {
-    const picked = pickCharacterSheet(sheet, styleTags, preferFullBody);
-    if (!picked.url && sheet.some((a) => a.dataUrl && !sameStyle(a.styleTags, styleTags))) {
-      staleSkipped.push('character-sheet');
-    }
-    const owner = characterNames?.[index];
-    candidates.push({
-      role: 'character-sheet',
-      dataUrl: picked.url,
-      detail: picked.detail,
-      ...(owner ? { owner } : {}),
-    });
-  });
-  /**
-   * 场景板（v0.46 起按朝向挑）。
-   *
-   * `pick()` 原来在这里被调用，取「最新一张 scene-plate」。加了反打板之后
-   * 这个规则会把主视角的镜头指向反打板——所以改成按朝向挑。
-   */
-  const plate = pickScenePlate(sources.scenePlates, styleTags, viewAngle);
-  if (
-    !plate.url &&
-    sources.scenePlates?.some(
-      (a) => a.kind === 'scene-plate' && a.dataUrl && !sameStyle(a.styleTags, styleTags),
-    )
-  ) {
-    staleSkipped.push('scene-plate');
-  }
-  candidates.push({
-    role: 'scene-plate',
-    dataUrl: plate.url,
-    ...(plate.angle ? { angle: plate.angle } : {}),
-  });
-
-  /**
-   * 槽位不够时**先在候选里做减法**，而不是等到循环里「来一张丢一张」（v0.48）。
-   *
-   * 【为什么要改】槽位是固定的（千问 2.0/3.0 系列最多 3 张），而候选会随内容变多：
-   * 两个角色同框 + 承接镜 = 上一镜尾帧 + 两张形象图 + 场景参考板 = 4 张。
-   * 原来按候选顺序**从后往前**丢，而场景参考板永远排在最后，于是它**必然**先被丢——
-   * 偏偏人一多，空间在画面里的比重反而更大，正是最需要它的镜头。
-   *
-   * 现在的规则按景别分：
-   *  - **全景及更远**：空间才是这一镜的主体，先丢角色形象图，保住场景参考板。
-   *    远景里脸只占几十个像素，形象图能提供的信息本来就少；
-   *    而空间错了观众一眼就看出来（「这不是同一个地方」）。
-   *  - **中景及更近**：脸是主体，形象图一个都不能少，场景参考板照旧让位。
-   *    这一档背景只占画面一小块，空间靠固定元素与主光方向的文字描述够用。
-   *
-   * 两种情形都把「丢了谁」原样记进 `dropped`，生成完会在界面上说出来。
-   */
-  const skip = new Set<number>();
-  const present = candidates
-    .map((candidate, index) => (candidate.dataUrl ? index : -1))
-    .filter((index) => index >= 0);
-  const overflow = present.length - limit;
-  if (overflow > 0) {
-    const sacrificed: number[] = [];
-    if (plate.url !== undefined && SCENE_PLATE_PRIORITY_SHOT_SIZES.has(shotSize)) {
-      for (let i = present.length - 1; i >= 0 && sacrificed.length < overflow; i -= 1) {
-        const index = present[i]!;
-        if (candidates[index]!.role === 'character-sheet') sacrificed.push(index);
-      }
-    }
-    // 还差的（或者不在上面那一档）按原规则从末尾丢：
-    // 候选顺序就是优先级，场景板排最后，所以它最先被丢。
-    for (let i = present.length - 1; i >= 0 && sacrificed.length < overflow; i -= 1) {
-      const index = present[i]!;
-      if (!sacrificed.includes(index)) sacrificed.push(index);
-    }
-    for (const index of sacrificed) skip.add(index);
-  }
-
-  const slots: ReferenceSlot[] = [];
-  const dropped: DroppedReference[] = [];
-  candidates.forEach((candidate, index) => {
-    if (!candidate.dataUrl) return;
-    if (skip.has(index)) {
-      dropped.push({
-        role: candidate.role,
-        ...(candidate.owner ? { owner: candidate.owner } : {}),
-      });
-      return;
-    }
-    slots.push({
-      role: candidate.role,
-      dataUrl: candidate.dataUrl,
-      label:
-        candidate.role === 'character-sheet' && candidate.detail
-          ? `${candidate.owner ? `${candidate.owner} · ` : ''}${
-              candidate.detail === 'full-body' ? '全身多视图（锁体型）' : '头部特写（锁脸）'
-            }`
-          : candidate.role === 'scene-plate' && candidate.angle === 'reverse'
-            ? `${REFERENCE_ROLE_LABEL['scene-plate']}（${SCENE_ANGLE_LABEL.reverse}）`
-            : REFERENCE_ROLE_LABEL[candidate.role],
-      ...(candidate.owner ? { owner: candidate.owner } : {}),
-      ...(candidate.detail ? { detail: candidate.detail } : {}),
-    });
-  });
-
-  orderSlots(slots);
+/** 把锚点集合 + 投递计划还原成对外的 `ReferencePlan`（形状与文案保持 v0.48 行为不变） */
+function toReferencePlan(anchorSet: AnchorSet, delivery: DeliveryPlan): ReferencePlan {
+  const slots: ReferenceSlot[] = delivery.slots.map((anchor) => ({
+    role: anchor.role,
+    dataUrl: anchor.dataUrl!,
+    label:
+      anchor.role === 'character-sheet' && anchor.detail
+        ? `${anchor.owner ? `${anchor.owner} · ` : ''}${
+            anchor.detail === 'full-body' ? '全身多视图（锁体型）' : '头部特写（锁脸）'
+          }`
+        : anchor.role === 'scene-plate' && anchor.angle === 'reverse'
+          ? `${REFERENCE_ROLE_LABEL['scene-plate']}（${SCENE_ANGLE_LABEL.reverse}）`
+          : REFERENCE_ROLE_LABEL[anchor.role],
+    ...(anchor.owner ? { owner: anchor.owner } : {}),
+    ...(anchor.detail ? { detail: anchor.detail } : {}),
+  }));
 
   return {
     slots,
-    isContinuous: continuity.continuous,
-    reason: continuity.reason,
-    dropped,
-    staleSkipped: [...new Set(staleSkipped)],
-    aspectRatioOwner: lastRoleOf(slots),
-    ...(plate.fellBack ? { scenePlateFellBack: true } : {}),
+    isContinuous: anchorSet.isContinuous,
+    reason: anchorSet.reason,
+    dropped: delivery.dropped.map((anchor) => ({
+      role: anchor.role,
+      ...(anchor.owner ? { owner: anchor.owner } : {}),
+    })),
+    staleSkipped: [...new Set(anchorSet.staleSkipped)],
+    ...(delivery.aspectRatioOwner ? { aspectRatioOwner: delivery.aspectRatioOwner } : {}),
+    ...(anchorSet.scenePlateFellBack ? { scenePlateFellBack: true } : {}),
   };
 }
 
 /**
- * 排定参考图顺序。
+ * 编排这一帧的参考图（兼容入口）。
  *
- * ===========================================================================
- * 为什么顺序不只是「重要性排序」
- * ===========================================================================
- * 千问多图编辑有一条**硬约束：输出画幅以最后一张参考图为准**
- * （官方文档：多图输入按数组顺序定义图像顺序）。所以「谁放最后」
- * 实际上是在决定「这一镜的画面比例与构图由谁说了算」。
- *
- * 于是两种转场要排成不同的顺序：
- *
- *  - **承接镜（continuation）**：尾帧必须放最后。
- *    它同时要锁空间、光线与画幅——这正是「接得住」的全部含义。
- *  - **跳切（cut）**：尾帧不参与，场景板放最后。
- *    换了地方就该由新场景决定画幅，否则画面会被拉回上一处的取景。
- *
- * 注意这是**硬约束下无法两全的取舍**：尾帧与场景板在争同一个位置。
- * 所以界面上会显示「这一镜的画幅由谁决定」，让用户看得见这个取舍。
+ * 行为与 v0.57 完全一致：内部先 `collectAnchors()`（与能力无关），
+ * 再由 `planDelivery()` 按能力裁剪/排序。现有 123 条参考图测试一行不改。
  */
-function orderSlots(slots: ReferenceSlot[]): void {
-  const has = (role: ReferenceRole): boolean => slots.some((s) => s.role === role);
-
-  /**
-   * 排到最后的那张，实际上决定了输出画幅。
-   *
-   * 三种情形分开处理，而不是一律按转场类型——因为「谁来定画幅」这件事
-   * 只在真正有竞争时才需要取舍：
-   *
-   *  1. 有上一镜尾帧（承接镜）：尾帧放最后。它同时锁空间、光线与画幅，
-   *     这就是「接得住」的全部含义。
-   *  2. 有本镜首帧（出后两帧）：首帧放最后。本镜的取景必须由本镜首帧说了算，
-   *     三帧才是同一个镜头。
-   *  3. 两者都没有（本镜首帧尚未生成，或跳切）：场景板放最后，
-   *     由场景决定画幅与空间。角色形象图永远不放在最后——
-   *     把它放最后会让一张设定稿的画幅（常常是正方形或竖构图）绑住整部片子。
-   */
-  // 排序是**升序**，所以「决定画幅的那张」要拿最高 rank 才会落到最后。
-  const hasPrev = has('previous-end-frame');
-  const hasOwn = has('own-first-frame');
-
-  const rank = (role: ReferenceRole): number => {
-    if (role === 'previous-end-frame') return hasPrev ? 100 : 10;
-    if (role === 'own-first-frame') return hasPrev ? 60 : hasOwn ? 100 : 10;
-    if (role === 'scene-plate') return hasPrev || hasOwn ? 40 : 100;
-    // character-sheet：永远不当画幅决定者（设定稿常是方形或竖构图，
-    // 让它定画幅会把整部片子带偏）。三种情形下都排在靠前位置。
-    return 20;
-  };
-  slots.sort((a, b) => rank(a.role) - rank(b.role));
+export function planReferenceImages(args: PlanReferenceImagesArgs): ReferencePlan {
+  return planReferenceImagesDetailed(args).plan;
 }
 
-function lastRoleOf(slots: ReferenceSlot[]): ReferenceRole | undefined {
-  return slots.length > 0 ? slots[slots.length - 1]!.role : undefined;
+export interface DetailedReferencePlan {
+  plan: ReferencePlan;
+  source: CapabilitySource;
+  semantics: ReferenceSemantics;
+  /** 投递之后仍只能靠文字锁定的维度（P2-a 上报/补偿用） */
+  degraded: AnchorDimension[];
+}
+
+/**
+ * P2-a 入口：在兼容结果之外多返回能力来源/语义/降级维度。
+ *
+ * **只有 store/image.ts 消费**；不改变 `planReferenceImages` 的返回形状。
+ */
+export function planReferenceImagesDetailed(args: PlanReferenceImagesArgs): DetailedReferencePlan {
+  const { capabilities, previous, sources, shotSize, characterNames, styleTags, viewAngle } = args;
+  const anchorSet = collectAnchors({
+    kind: args.kind,
+    previous,
+    sources,
+    ...(shotSize !== undefined ? { shotSize } : {}),
+    ...(characterNames !== undefined ? { characterNames } : {}),
+    ...(styleTags !== undefined ? { styleTags } : {}),
+    ...(viewAngle !== undefined ? { viewAngle } : {}),
+  });
+  const context = referenceCapabilityOf(capabilities);
+  const delivery = planDelivery(anchorSet, context);
+  return {
+    plan: toReferencePlan(anchorSet, delivery),
+    source: context.source,
+    semantics: context.capability.semantics,
+    degraded: delivery.degraded,
+  };
 }
 
 /** 供界面与提示词使用：这一镜的参考图角色序列 */
@@ -654,3 +247,7 @@ export function previousShotOf(project: Project, shotId: string): Shot | undefin
   const index = project.shots.findIndex((s) => s.id === shotId);
   return index > 0 ? project.shots[index - 1] : undefined;
 }
+
+// ---- 兼容 re-export（`store/image.ts` 与测试仍从这里 import） ----
+export type { ReferenceRole, RefAsset, ReferenceSource } from './anchors';
+export { isContinuousWithPrevious, sameStyle } from './anchors';

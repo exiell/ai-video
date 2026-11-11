@@ -469,6 +469,58 @@ export interface CheckReport {
 /** 接口协议。OpenAI 兼容载荷与 DashScope 原生载荷完全不同，必须显式区分。 */
 export type ApiFlavor = 'openai' | 'dashscope-sync' | 'dashscope-async';
 
+// ---------------------------------------------------------------------------
+// 参考图能力声明（v0.58 · P1/P2-a）
+// ---------------------------------------------------------------------------
+
+/**
+ * 参考图的**语义**。
+ *
+ * 同样是「1 张参考图」，三种模型的理解完全不同：
+ *  - `edit`：这张图是画布，没提到的内容默认保留（qwen-image-edit、FLUX Kontext 类）
+ *  - `reference`：这张图是外观参考，照着它画一张新的（多数 OpenAI 兼容图生图）
+ *  - `subject`：这张图是主体身份，这个人出现在新画面里（MiniMax subject_reference）
+ *  - `none`：不支持参考图
+ *  - `unknown`：**没有核实过**。不得参与投递决策，也不得据此写提示词。
+ */
+export type ReferenceSemantics = 'none' | 'reference' | 'edit' | 'subject' | 'unknown';
+
+/** 三态：已核实 true/false，或没核实。不要把 unknown 当成 true。 */
+export type TriState = boolean | 'unknown';
+
+/** 输出画幅跟随谁。`last` = 最后一张参考图（千问编辑模型的已核实行为）。 */
+export type AspectFollows = 'last' | 'first' | 'input-image' | 'param' | 'unknown';
+
+/**
+ * 一张参考图锁住的维度（v0.58 · 锚点/投递分离）。
+ *
+ * 这是「锚点」与「投递」拆开的基础：锚点能锁哪些维度与模型无关，
+ * 槽位/语义只决定这些锚点还能不能送到模型面前。
+ */
+export type AnchorDimension = 'identity' | 'space' | 'composition' | 'continuity';
+
+/** 能力信息从哪来：declared=档案显式声明；legacy=旧字段推断（仅兼容）；unknown=没信息 */
+export type CapabilitySource = 'declared' | 'legacy' | 'unknown';
+
+/**
+ * 参考图能力的结构化声明（v0.58 · P1）。
+ *
+ * 全部为可选字段：旧档案不填，仍由 `referenceImage / maxReferenceImages` 走兼容路径；
+ * 但**兼容推断不写成能力事实**——`referenceCapabilityOf()` 会标记 source。
+ */
+export interface ReferenceCapability {
+  /** 语义；unknown 时不得投递、不得写 edit/空间提示词 */
+  semantics: ReferenceSemantics;
+  /** 已核实的槽位上限；`unknown` 时不投递 */
+  maxImages: number | 'unknown';
+  /** 输入图是否接受 data URI；'unknown' 时禁止 data URI 投递（走上传/URL 或报错） */
+  acceptsDataUri: TriState;
+  /** 单张图字节上限；没核实就不填，绝不猜 */
+  maxBytesPerImage?: number;
+  /** 画幅归属；'unknown' 时不把任何槽标为画幅决定者 */
+  aspectFollows?: AspectFollows;
+}
+
 /**
  * 模型能力声明。
  *
@@ -492,6 +544,13 @@ export interface ModelCapabilities {
   maxReferenceImages: number;
   /** 单次最多出几张图 */
   maxOutputImages: number;
+  /**
+   * P1 新增：结构化参考图能力。
+   *
+   * 缺省表示「档案没有声明」——由 `referenceCapabilityOf()` 按旧字段做**兼容推断**
+   * （source='legacy'），不是能力事实，也不参与 unknown 的「不投递」判断。
+   */
+  reference?: ReferenceCapability;
 }
 
 /** 出图请求：一份画面意图 + 可选的参考图 */
@@ -545,6 +604,13 @@ export interface ImageRequest {
     shotSizeEn?: string;
     /** 这一镜的机位 */
     cameraPositionEn?: string;
+    /**
+     * P2-a：投递后仍只能靠文字锁定的维度（可选，不破坏旧结构）。
+     *
+     * 由 delivery 计算，store 会把它写进 feedback warnings；
+     * 提示词侧据此注入「已有数据原文」的补偿文字（见 textCompensation）。
+     */
+    degradedDimensions?: AnchorDimension[];
   };
 }
 
