@@ -30,7 +30,9 @@ export type ReferenceRole =
   /** 角色形象图：锁外观（脸、体型、服装） */
   | 'character-sheet'
   /** 场景参考板：锁空间结构、固定元素、主光方向 */
-  | 'scene-plate';
+  | 'scene-plate'
+  /** 场景主帧：角色已经在景里，同时锁身份、空间与构图（v0.60 · P2-b） */
+  | 'staging-frame';
 
 /** 一张能做参考的素材。`styleTags` 是它**生成时**用的风格词。 */
 export interface RefAsset {
@@ -57,6 +59,12 @@ export interface ReferenceSource {
   characterSheets: RefAsset[][];
   /** 场景板的素材 */
   scenePlates?: RefAsset[] | undefined;
+  /**
+   * 该场景的主帧素材（v0.60 · P2-b）。
+   *
+   * 只用于「1 槽跳切首帧」的投递决策；不参与其它帧/承接镜，避免改变既有行为。
+   */
+  stagingFrames?: RefAsset[] | undefined;
 }
 
 /**
@@ -90,6 +98,11 @@ export interface AnchorSet {
   staleSkipped: ReferenceRole[];
   /** 这一镜要反打板但没有，退回了主视角板 */
   scenePlateFellBack?: true;
+  /**
+   * 该场景的可用主帧（v0.60 · P2-b）。不塞进 anchors 候选，
+   * 由 delivery 在「1 槽 + 跳切首帧」时决定是否用它替代角色图/场景板。
+   */
+  stagingFrame?: Anchor;
 }
 
 /**
@@ -103,6 +116,8 @@ const ANCHOR_COVERS: Record<ReferenceRole, AnchorDimension[]> = {
   'own-first-frame': ['identity', 'space', 'composition'],
   'character-sheet': ['identity'],
   'scene-plate': ['space'],
+  // 主帧是唯一同时含「人 + 景」的锚点：身份、空间、构图一次给全，但不锁跨镜连续
+  'staging-frame': ['identity', 'space', 'composition'],
 };
 
 /**
@@ -256,6 +271,22 @@ const DEFAULT_SHOT_SIZE: ShotSize = 'medium';
  * 挑这一镜该用哪张场景板（v0.46）：反打镜头优先反打板，没有则退回主视角板并标记；
  * 主视角镜头只认主视角板（不退到反打板）。
  */
+/**
+ * 挑该场景最新一张可用的主帧（v0.60 · P2-b）。
+ *
+ * 主帧不参与候选排序/预算裁剪：它只在「1 槽 + 跳切首帧」时由 delivery
+ * 作为替代方案使用（见 delivery.planDelivery）。
+ */
+function pickStagingFrame(
+  assets: RefAsset[] | undefined,
+  style: string[] | undefined,
+): string | undefined {
+  if (!assets || assets.length === 0) return undefined;
+  return assets
+    .filter((a) => a.kind === 'staging-frame' && a.dataUrl && sameStyle(a.styleTags, style))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]?.dataUrl;
+}
+
 function pickScenePlate(
   assets: RefAsset[] | undefined,
   style: string[] | undefined,
@@ -389,6 +420,8 @@ export function collectAnchors(args: {
     ...(plate.angle ? { angle: plate.angle } : {}),
   });
 
+  const stagingUrl = pickStagingFrame(sources.stagingFrames, styleTags);
+
   return {
     kind,
     shotSize,
@@ -397,5 +430,14 @@ export function collectAnchors(args: {
     reason: continuity.reason,
     staleSkipped,
     ...(plate.fellBack ? { scenePlateFellBack: true as const } : {}),
+    ...(stagingUrl
+      ? {
+          stagingFrame: {
+            role: 'staging-frame' as const,
+            dataUrl: stagingUrl,
+            covers: ANCHOR_COVERS['staging-frame'],
+          },
+        }
+      : {}),
   };
 }

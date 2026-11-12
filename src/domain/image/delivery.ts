@@ -110,6 +110,13 @@ export interface DeliveryPlan {
   aspectRatioOwner?: ReferenceRole;
   /** 投递之后仍只能靠文字描述的维度 */
   degraded: AnchorDimension[];
+  /**
+   * P2-b 主帧（MVP）的投递状态：
+   *  - 'used'：这一镜已经用场景主帧替代了角色图/场景板；
+   *  - 'missing'：条件满足（1 槽 + 跳切首帧）但该场景还没有主帧，已退回原行为；
+   *  - undefined：不适用（承接镜/动作帧/多槽模型）。
+   */
+  staging?: 'used' | 'missing';
 }
 
 /**
@@ -154,6 +161,36 @@ export function planDelivery(anchorSet: AnchorSet, context: CapabilityContext): 
     };
   }
 
+  const required = requiredDimensions(anchorSet.kind, anchorSet.isContinuous);
+  const coverageDegraded = (slots: Anchor[]): AnchorDimension[] => {
+    const covered = new Set<AnchorDimension>();
+    for (const slot of slots) for (const dim of slot.covers) covered.add(dim);
+    return REQUIRED_ORDER.filter((dim) => required.includes(dim) && !covered.has(dim));
+  };
+
+  /*
+    P2-b 主帧（MVP，v0.60）：
+    「能力已知 maxImages===1」+「首帧」+「跳切」时，优先用该场景主帧同时锁身份与空间，
+    替代原来的角色形象图/场景板。承接镜仍优先上一镜尾帧，动作帧/尾帧仍优先本镜首帧，
+    多槽行为完全不变——这些都靠下面这个条件挡住。
+  */
+  const stagingEligible =
+    anchorSet.kind === 'first-frame' &&
+    !anchorSet.isContinuous &&
+    capability.maxImages === 1;
+  if (stagingEligible && anchorSet.stagingFrame) {
+    const slot = anchorSet.stagingFrame;
+    return {
+      mode: 'direct',
+      slots: [slot],
+      dropped: [],
+      ...(capability.aspectFollows === 'param' ? {} : { aspectRatioOwner: slot.role }),
+      degraded: coverageDegraded([slot]),
+      staging: 'used',
+    };
+  }
+  const stagingHint: 'missing' | undefined = stagingEligible ? 'missing' : undefined;
+
   const limit =
     capability.maxImages === 'unknown' ? 0 : Math.max(0, Math.floor(capability.maxImages));
 
@@ -193,11 +230,6 @@ export function planDelivery(anchorSet: AnchorSet, context: CapabilityContext): 
   orderSlots(slots);
   const aspectFollows: AspectFollows = capability.aspectFollows ?? 'unknown';
 
-  const covered = new Set<AnchorDimension>();
-  for (const slot of slots) for (const dim of slot.covers) covered.add(dim);
-  const required = requiredDimensions(anchorSet.kind, anchorSet.isContinuous);
-  const degraded = REQUIRED_ORDER.filter((dim) => required.includes(dim) && !covered.has(dim));
-
   return {
     mode: slots.length > 0 ? 'direct' : 'text-only',
     slots,
@@ -207,7 +239,8 @@ export function planDelivery(anchorSet: AnchorSet, context: CapabilityContext): 
       : slots.length > 0
         ? { aspectRatioOwner: slots[slots.length - 1]!.role }
         : {}),
-    degraded,
+    degraded: coverageDegraded(slots),
+    ...(stagingHint ? { staging: stagingHint } : {}),
   };
 }
 
@@ -230,6 +263,8 @@ function orderSlots(slots: Anchor[]): void {
     if (role === 'previous-end-frame') return hasPrev ? 100 : 10;
     if (role === 'own-first-frame') return hasPrev ? 60 : hasOwn ? 100 : 10;
     if (role === 'scene-plate') return hasPrev || hasOwn ? 40 : 100;
+    // 主帧本身就是「人已在景里」的基准图，排最后决定画幅没有副作用
+    if (role === 'staging-frame') return 100;
     return 20;
   };
   slots.sort((a, b) => rank(a.role) - rank(b.role));
