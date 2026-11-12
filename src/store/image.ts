@@ -23,6 +23,7 @@ import { useAppStore } from './app';
 import { currentTransport, useSettings } from './settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { generateImages, toAssets, type GenerateImagesOutcome } from '../services/image/generate';
+import { prepareReference, type PreparePurpose } from '../services/image/prepare';
 import {
   buildCharacterSheetPrompt,
   buildFramePrompt,
@@ -713,12 +714,50 @@ export const useImage = create<ImageState>((set, get) => ({
         ];
       }
 
-      for (const slot of plan.slots) {
-        referenceImages.push(slot.dataUrl);
+      /*
+        P2-c：参考图投递前做确定性预处理（只处理**这一次请求的副本**）：
+        - 帧类锚点用 aspect：按项目画幅中心裁切 + 长边缩放，保证与输出同比例；
+        - 角色形象图/场景参考板用 passthrough（或档案声明了已核实字节上限时 fit-bytes），
+          绝不为统一比例去裁角色多视图（会裁掉视图）。
+        0 槽时 plan.slots 为空，整段不执行（纯文生图不经过预处理）。
+      */
+      const preprocessWarnings: string[] = [];
+      const maxBytesPerImage = caps.reference?.maxBytesPerImage;
+      for (let index = 0; index < plan.slots.length; index += 1) {
+        const slot = plan.slots[index]!;
+        const isFrameAnchor =
+          slot.role === 'own-first-frame' || slot.role === 'previous-end-frame';
+        const purpose: PreparePurpose = isFrameAnchor
+          ? 'aspect'
+          : maxBytesPerImage !== undefined
+            ? 'fit-bytes'
+            : 'passthrough';
+        const prepared = await prepareReference(
+          { dataUrl: slot.dataUrl, role: slot.role },
+          purpose,
+          {
+            ...(isFrameAnchor ? { targetAspect: project.brief.aspectRatio } : {}),
+            ...(maxBytesPerImage !== undefined ? { maxBytesPerImage } : {}),
+          },
+        );
+        referenceImages.push(prepared.dataUrl);
         referenceLabels.push(slot.label);
         referencePhrases.push(referenceRolePhrase(slot));
         if (slot.role === 'character-sheet' && slot.detail) sheetDetails.push(slot.detail);
+
+        // 只在真的有变化/失败时提示，避免每次出图都刷屏
+        if (prepared.transformed) {
+          preprocessWarnings.push(
+            `第 ${index + 1} 张参考图（${slot.label}）已自动${
+              purpose === 'aspect' ? '按画幅裁切/压缩' : '压缩'
+            }：${prepared.width}×${prepared.height}，${Math.max(1, Math.round(prepared.byteSize / 1024))} KB。`,
+          );
+        }
+        if (prepared.reason) {
+          preprocessWarnings.push(`第 ${index + 1} 张参考图：${prepared.reason}`);
+        }
       }
+      if (preprocessWarnings.length > 0) capabilityWarnings.push(...preprocessWarnings);
       referenceRoles = referenceRolesOf(plan);
       staleRoles = plan.staleSkipped;
       droppedRefs = plan.dropped;
