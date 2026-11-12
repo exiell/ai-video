@@ -5518,6 +5518,54 @@ details.shot-section[open] > summary.shot-section-rail {
 
 /* 任务行与右栏的动作：文字换成箭头，指向哪一行由行本身说明 */
 
+/* 场景主帧区块（v0.60 · P2-b） */
+.staging-frame {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.staging-frame-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.staging-frame-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.staging-frame-thumb {
+  flex: none;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  cursor: zoom-in;
+  line-height: 0;
+}
+
+.staging-frame-thumb img {
+  display: block;
+  width: 132px;
+  height: auto;
+  border-radius: calc(var(--radius-sm) - 1px);
+}
+
+/* 图库里的图片级操作（设为主帧等），放在删除按钮前面 */
+.asset-actions {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* ==========================================================================
    可访问性工具类
    ========================================================================== */

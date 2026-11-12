@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useImage } from '../store/image';
+import { useImage, type ImageTaskFeedback } from '../store/image';
 import { useSettings } from '../store/settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
 import { consistencyAdvice } from '../domain/image/prompts';
@@ -82,7 +82,7 @@ export function ImagePanel({
 
   // 反馈可能挂在几个不同的任务键上（全身图与头部特写是两条），合并显示
   const feedbacks = Object.entries(feedbackMap)
-    .filter(([key]) => key.endsWith(`:${refId}`))
+    .filter(([key]) => key.endsWith(`:${refId}`) && !key.startsWith('staging:'))
     .map(([, value]) => value)
     .filter((v): v is NonNullable<typeof v> => Boolean(v));
 
@@ -164,38 +164,49 @@ export function ImagePanel({
       ) : null}
 
       {feedbacks.map((feedback, index) => (
-        <div
-          key={index}
-          role="status"
-          aria-live="polite"
-          className={`issue ${feedback.kind === 'error' ? 'error' : feedback.kind === 'info' ? 'warning' : ''}`}
-          style={{
-            marginTop: 12,
-            marginBottom: 0,
-            borderLeftColor: feedback.kind === 'ok' ? 'var(--ok)' : undefined,
-          }}
-        >
-          <div className="issue-title">
-            {feedback.kind === 'ok'
-              ? '已生成并保存'
-              : feedback.kind === 'info'
-                ? '生成完成，但有事要看一下'
-                : '生成失败'}
-          </div>
-          <div className="issue-line" style={{ whiteSpace: 'pre-wrap' }}>
-            {feedback.message}
-          </div>
-          {feedback.warnings.length > 0 ? (
-            <ul className="issue-line" style={{ paddingLeft: 20, margin: '6px 0 0' }}>
-              {feedback.warnings.map((warning, i) => (
-                <li key={i}>{warning}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
+        <ImageFeedback key={index} feedback={feedback} />
       ))}
 
       {footer}
+    </div>
+  );
+}
+
+/**
+ * 出图/主帧任务的结果反馈。
+ *
+ * 同一份样式在 ImagePanel 和「场景主帧」区块里都要用：store 已经给了
+ * message/warnings，这里只负责把 kind 翻成标题，不另写一套文案。
+ */
+export function ImageFeedback({ feedback }: { feedback: ImageTaskFeedback }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className={`issue ${feedback.kind === 'error' ? 'error' : feedback.kind === 'info' ? 'warning' : ''}`}
+      style={{
+        marginTop: 12,
+        marginBottom: 0,
+        borderLeftColor: feedback.kind === 'ok' ? 'var(--ok)' : undefined,
+      }}
+    >
+      <div className="issue-title">
+        {feedback.kind === 'ok'
+          ? '已生成并保存'
+          : feedback.kind === 'info'
+            ? '生成完成，但有事要看一下'
+            : '生成失败'}
+      </div>
+      <div className="issue-line" style={{ whiteSpace: 'pre-wrap' }}>
+        {feedback.message}
+      </div>
+      {feedback.warnings.length > 0 ? (
+        <ul className="issue-line" style={{ paddingLeft: 20, margin: '6px 0 0' }}>
+          {feedback.warnings.map((warning, i) => (
+            <li key={i}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 }
@@ -204,9 +215,12 @@ export function ImagePanel({
 export function AssetGallery({
   assets,
   emptyHint,
+  assetActions,
 }: {
   assets: Asset[];
   emptyHint?: string;
+  /** 可选的图片级操作（如「设为主帧」）；放在删除按钮前面 */
+  assetActions?: (asset: Asset) => React.ReactNode;
 }) {
   const removeAsset = useImage((s) => s.removeAsset);
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
@@ -272,6 +286,9 @@ export function AssetGallery({
               {new Date(asset.createdAt).toLocaleString('zh-CN')}
               {asset.model ? ` · ${asset.model}` : ''}
               {asset.referenceCount ? ` · ${asset.referenceCount} 张参考图` : ''}
+              {assetActions ? (
+                <span className="asset-actions">{assetActions(asset)}</span>
+              ) : null}
               <button
                 type="button"
                 className="btn btn-ghost btn-icon is-danger"

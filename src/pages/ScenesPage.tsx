@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { Field, Info } from '../components/bits';
-import { SCHEMA_VERSION, type SceneCard } from '../types/model';
+import { SCHEMA_VERSION, type Project, type SceneCard } from '../types/model';
 import { newId } from '../services/storage';
-import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
+import { AssetGallery, AssetPeek, ImageFeedback, ImagePanel } from '../components/ImagePanel';
+import { ImageLightbox, type LightboxState } from '../components/ImageLightbox';
+import { computeImageCoverage } from '../components/imageCoverage';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { useImage } from '../store/image';
@@ -59,13 +61,18 @@ export function ScenesPage() {
     // 一张图几 MB base64，20 个对象就是几十 MB 的反序列化，表现为打字卡顿。
     //
     // 依赖收成 project.id 之后：换项目时才重载；出图完成后由出图流程刷新。
+    // 镜头图库也一并拉：主帧的 sourceAssetIds 存的是首帧 asset id，
+    // 要反查「来自第 X 镜首帧」就得能按 asset.refId 找到镜头。
     for (const scene of project?.scenes ?? []) void loadGallery(scene.id);
+    for (const shot of project?.shots ?? []) void loadGallery(shot.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
   if (!project) {
     return <div className="empty">还没有打开任何项目。先去「作品主页」新建或打开一个。</div>;
   }
+
+  const coverage = computeImageCoverage(project, gallery);
 
   function add() {
     const scene = makeScene(`场景 ${project!.scenes.length + 1}`);
@@ -89,6 +96,12 @@ export function ScenesPage() {
 
       {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
       <AiFlowGuide variant="compact" />
+
+      {project.scenes.length > 0 ? (
+        <div className="hint" style={{ margin: '0 0 10px' }}>
+          主帧 {coverage.scenesWithStaging} / {project.scenes.length}
+        </div>
+      ) : null}
 
       <details className="why scene-consistency">
         <summary>场景一致性靠什么保证？</summary>
@@ -196,7 +209,9 @@ export function ScenesPage() {
             </div>
 
             {/* 折叠时也能看图：先看一眼是不是同一个地方，再决定要不要展开改 */}
-            <AssetPeek assets={galleryFor(scene.id)} />
+            <AssetPeek
+              assets={galleryFor(scene.id).filter((asset) => asset.kind !== 'staging-frame')}
+            />
 
             <Reveal open={open}>
               <div
@@ -407,11 +422,15 @@ export function ScenesPage() {
                   ]}
                   footer={
                     <AssetGallery
-                      assets={galleryFor(scene.id)}
+                      assets={galleryFor(scene.id).filter(
+                        (asset) => asset.kind !== 'staging-frame',
+                      )}
                       emptyHint="还没有生成过场景板。"
                     />
                   }
                 />
+
+                <StagingFrameBlock scene={scene} project={project} />
 
                 <details className="card-fold">
                   <summary>
@@ -499,5 +518,123 @@ export function ScenesPage() {
         );
       })}
     </>
+  );
+}
+
+
+/**
+ * 场景主帧区块（v0.60 · P2-b）
+ *
+ * 主帧是「这个场景在后续所有镜头里长什么样」的基准画面。它存在场景图库
+ * （refId = scene.id）里，kind 是 staging-frame；所以场景参考板的分组要把它
+ * 过滤掉，否则同一张图会在两个地方出现两次。
+ *
+ * 数据/投递逻辑全在 store，这里只做三件事：显示、触发、把 store 的
+ * feedback 原样展示出来（不另写一套错误文案）。
+ */
+function StagingFrameBlock({ scene, project }: { scene: SceneCard; project: Project }) {
+  const gallery = useImage((s) => s.gallery);
+  const pending = useImage((s) => s.pending);
+  const feedbackMap = useImage((s) => s.feedback);
+  const generateStagingFrame = useImage((s) => s.generateStagingFrame);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+
+  const key = `staging:${scene.id}`;
+  const frames = (gallery[scene.id] ?? [])
+    .filter((asset) => asset.kind === 'staging-frame' && asset.dataUrl)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const latest = frames[0];
+  const feedback = feedbackMap[key];
+  const busyForScene = pending === key;
+
+  /*
+    追溯来源：promote 存的是首帧 asset id；先在全项目已加载的图库里找到它，
+    再用 asset.refId 反查镜头号。镜头图库在页面挂载时已一并拉取。
+    找不到时退回「来自镜头首帧」，不假装知道镜号。
+  */
+  const sourceAssetId = latest?.sourceAssetIds?.[0];
+  const sourceAsset = sourceAssetId
+    ? Object.values(gallery)
+        .flatMap((list) => list ?? [])
+        .find((asset) => asset.id === sourceAssetId)
+    : undefined;
+  const sourceShot = sourceAsset
+    ? project.shots.find((shot) => shot.id === sourceAsset.refId)
+    : undefined;
+  const sourceText = sourceShot
+    ? `来自第 ${sourceShot.number} 镜首帧`
+    : latest?.sourceAssetIds?.length
+      ? '来自镜头首帧'
+      : 'AI 生成';
+
+  async function generate() {
+    if (latest) {
+      const ok = window.confirm(
+        `生成主帧会替换「${scene.name}」现在的这张，并消耗一次出图费用。继续吗？`,
+      );
+      if (!ok) return;
+    }
+    await generateStagingFrame(scene.id);
+  }
+
+  return (
+    <div className="staging-frame">
+      <div className="staging-frame-head">
+        <h2 style={{ fontSize: 13, margin: 0 }}>主帧</h2>
+        <button
+          type="button"
+          className={`btn btn-sm ${latest ? '' : 'btn-blue'}`}
+          disabled={busyForScene}
+          aria-label={
+            latest ? `重新生成场景「${scene.name}」的主帧` : `为场景「${scene.name}」生成主帧`
+          }
+          title={
+            latest
+              ? '会替换现有主帧，并消耗一次出图费用'
+              : '会调用当前参考图模型，消耗一次出图费用'
+          }
+          onClick={() => void generate()}
+        >
+          {busyForScene ? '生成中…' : latest ? '重新生成主帧' : '生成主帧'}
+        </button>
+      </div>
+
+      {latest ? (
+        <div className="staging-frame-body">
+          <button
+            type="button"
+            className="staging-frame-thumb"
+            title="点击放大查看主帧"
+            aria-label={`查看场景「${scene.name}」的主帧大图`}
+            onClick={() => setLightbox({ assets: frames, index: 0 })}
+          >
+            <img src={latest.dataUrl} alt={`${scene.name}的主帧`} />
+          </button>
+          <div>
+            <div className="hint" style={{ marginTop: 0 }}>
+              来源：{sourceText}
+            </div>
+            <div className="hint" style={{ marginTop: 2 }}>
+              {new Date(latest.createdAt).toLocaleString('zh-CN')}
+            </div>
+            <div className="hint" style={{ marginTop: 2 }}>
+              重新生成会替换现在这张，并消耗一次出图费用。
+            </div>
+          </div>
+        </div>
+      ) : (
+        <p className="hint" style={{ margin: '6px 0 0' }}>
+          还没有主帧。生成会调用当前参考图模型，消耗一次出图费用。
+        </p>
+      )}
+
+      {feedback ? <ImageFeedback feedback={feedback} /> : null}
+
+      <ImageLightbox
+        state={lightbox}
+        onClose={() => setLightbox(null)}
+        onNavigate={(index) => setLightbox((current) => (current ? { ...current, index } : current))}
+      />
+    </div>
   );
 }
