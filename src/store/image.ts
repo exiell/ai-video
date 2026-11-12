@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { AnchorDimension, Asset, ModelProfile, SceneAngle } from '../types/model';
-import { ASSET_KIND_LABEL, SCENE_ANGLE_LABEL, SCHEMA_VERSION } from '../types/model';
+import { ASSET_KIND_LABEL, SCENE_ANGLE_LABEL } from '../types/model';
 import {
   REFERENCE_ROLE_LABEL,
   describeDroppedReference,
@@ -17,7 +17,6 @@ import {
   buildDegradedTextCompensation,
   capabilityNotice,
   degradedWarnings,
-  referenceCapabilityOf,
   type TextAnchorMaterials,
 } from '../domain/image/delivery';
 import { useAppStore } from './app';
@@ -30,11 +29,10 @@ import {
   buildFramePrompt,
   type FrameKind,
   buildScenePlatePrompt,
-  buildStagingFramePrompt,
   withDeliveryCompensation,
   type ImagePromptInput,
 } from '../domain/image/prompts';
-import { deleteAsset, estimateUsage, listAssets, listAssetsFor, newId, saveAssets } from '../services/storage';
+import { deleteAsset, estimateUsage, listAssets, listAssetsFor, saveAssets } from '../services/storage';
 import {
   missingBeforeFrames,
   framePrereqMessage,
@@ -154,21 +152,6 @@ interface ImageState {
   generateForScene: (sceneId: string, angle?: SceneAngle) => Promise<void>;
   /** 生成镜头的某一帧（首帧 / 动作关键帧 / 尾帧） */
   generateForFrame: (shotId: string, kind: FrameKind, useReference?: boolean) => Promise<void>;
-  /**
-   * 生成场景主帧（v0.60 · P2-b）。
-   *
-   * 用「场景板 + 该场景出场角色的形象图」生成一张「角色已经在景里」的基准画面，
-   * 存为 kind='staging-frame'、refId=sceneId；成功后会删除该场景旧的主帧。
-   * 当前档案不能带参考图、缺场景板/角色形象图、槽位不够时只写人话 feedback，不强行生成。
-   */
-  generateStagingFrame: (sceneId: string) => Promise<void>;
-  /**
-   * 把一张已有首帧复制成场景主帧（v0.60 · P2-b）。
-   *
-   * 只接受 kind='first-frame' 且属于该场景的素材；保留 promptSnapshot/lockPhrases/
-   * referenceCount 等元数据，写 `sourceAssetIds:[assetId]`；替换该场景旧主帧。
-   */
-  promoteStagingFrame: (sceneId: string, assetId: string) => Promise<void>;
 }
 
 /**
@@ -182,9 +165,6 @@ const REFERENCE_ROLE_PHRASE: Record<ReferenceRole, string> = {
   'previous-end-frame': 'the last frame of the immediately preceding shot, defining the space and lighting you continue from',
   'character-sheet': 'the character design sheet, defining face, hairstyle, body proportions and outfit',
   'scene-plate': 'the empty scene reference plate, defining the location layout, fixed objects and light direction',
-  // P2-b：主帧同时锁身份、空间与构图；它是一张静止基准图，不定义任何动作
-  'staging-frame':
-    'the staging reference frame for this scene: the characters are already in the location, so keep their identity and the room layout, scale and lighting exactly as shown; do not invent a new pose or action',
 };
 
 /**
@@ -658,7 +638,7 @@ export const useImage = create<ImageState>((set, get) => ({
           ownFrames,
           ...(previousFrames ? { previousFrames } : {}),
           characterSheets,
-          ...(scenePlates ? { scenePlates, stagingFrames: scenePlates } : {}),
+          ...(scenePlates ? { scenePlates } : {}),
         },
       });
       const plan = detailed.plan;
@@ -732,19 +712,6 @@ export const useImage = create<ImageState>((set, get) => ({
           ...(notice ? [notice] : []),
           ...degradedWarnings(detailed.degraded, detailed.source, compensated),
         ];
-        /*
-          P2-b MVP：没有合适 checks 上下文（检查引擎只有 project、拿不到资产），
-          所以「这个场景还没有主帧」先作为 info 写在生成 1 槽模型首帧的 feedback 里。
-        */
-        if (detailed.staging === 'missing') {
-          const sceneName = shot?.sceneId
-            ? project.scenes.find((item) => item.id === shot.sceneId)?.name
-            : undefined;
-          capabilityWarnings.push(
-            `这个场景（${sceneName ?? '当前场景'}）还没有主帧。1 张参考图的模型在跳切首帧里会少一维锚点；` +
-              '设一张场景主帧会更稳（可在场景页生成主帧，或用已有首帧设为主帧）。',
-          );
-        }
       }
 
       /*
@@ -760,16 +727,11 @@ export const useImage = create<ImageState>((set, get) => ({
         const slot = plan.slots[index]!;
         const isFrameAnchor =
           slot.role === 'own-first-frame' || slot.role === 'previous-end-frame';
-        const purpose: PreparePurpose =
-          slot.role === 'staging-frame'
-            ? // 主帧就是按项目画幅生成的「人已在景里」基准图：重编码只会掉画质，
-              // 而且它通常由同一个参考档案产出，保持原样即可（P2-c 的明确选择）
-              'passthrough'
-            : isFrameAnchor
-              ? 'aspect'
-              : maxBytesPerImage !== undefined
-                ? 'fit-bytes'
-                : 'passthrough';
+        const purpose: PreparePurpose = isFrameAnchor
+          ? 'aspect'
+          : maxBytesPerImage !== undefined
+            ? 'fit-bytes'
+            : 'passthrough';
         const prepared = await prepareReference(
           { dataUrl: slot.dataUrl, role: slot.role },
           purpose,
@@ -866,349 +828,6 @@ export const useImage = create<ImageState>((set, get) => ({
       get,
     });
   },
-  /*
-    P2-b：生成场景主帧。
-
-    参考图 = 该场景出场角色的形象图（去重）+ 场景主视角板（放最后，保证输出画幅）；
-    提示词要求「角色已经在景里、中性姿势、无动作、全身可见」。
-    任何前置条件不满足都只写人话 feedback，不强行生成（否则会浪费一次出图费用）。
-  */
-  generateStagingFrame: async (sceneId) => {
-    const project = useAppStore.getState().project;
-    if (!project) return;
-    const key = `staging:${sceneId}`;
-    if (get().pending) return;
-    const scene = project.scenes.find((item) => item.id === sceneId);
-    const writeFeedback = (feedback: ImageTaskFeedback): void => {
-      set((state) => ({ feedback: { ...state.feedback, [key]: feedback } }));
-    };
-    if (!scene) {
-      writeFeedback({ kind: 'error', message: '这个场景不存在，可能刚被删掉了。', warnings: [] });
-      return;
-    }
-
-    const resolved = resolveImageProfile(true);
-    if (!resolved.ok || !resolved.profile || !resolved.apiKey) {
-      writeFeedback({
-        kind: 'error',
-        message: resolved.error ?? '出图模型还没配置好。',
-        warnings: [],
-      });
-      return;
-    }
-    const profile = resolved.profile;
-    const capability = referenceCapabilityOf(profile.capabilities);
-    const maxImages = capability.capability.maxImages;
-    if (
-      capability.source === 'unknown' ||
-      maxImages === 'unknown' ||
-      maxImages === 0 ||
-      profile.capabilities.referenceImage === false
-    ) {
-      writeFeedback({
-        kind: 'error',
-        message: '当前模型不能带参考图，做不了主帧。',
-        warnings: [
-          '主帧要靠「场景板 + 角色形象图」把人放进景里；换一个支持参考图的模型再试。',
-        ],
-      });
-      return;
-    }
-
-    const characterIds = [
-      ...new Set(
-        project.shots
-          .filter((shot) => shot.sceneId === sceneId)
-          .flatMap((shot) => shot.characterIds),
-      ),
-    ];
-    if (characterIds.length === 0) {
-      writeFeedback({
-        kind: 'error',
-        message: `场景「${scene.name}」还没有挂角色的镜头，主帧不知道该放谁。`,
-        warnings: ['先到分镜页把这个场景的镜头挂上角色，再回来生成主帧。'],
-      });
-      return;
-    }
-
-    const sceneAssets = await listAssetsFor(project.id, sceneId);
-    const plate = sceneAssets
-      .filter(
-        (asset) =>
-          asset.kind === 'scene-plate' &&
-          asset.dataUrl &&
-          asset.angle !== 'reverse' &&
-          sameStyle(asset.styleTags, project.brief.styleTags),
-      )
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-    const plateDataUrl = plate?.dataUrl;
-    if (!plateDataUrl) {
-      writeFeedback({
-        kind: 'error',
-        message: `场景「${scene.name}」还没有主视角参考板，做不了主帧。`,
-        warnings: ['先给这个场景出一张主视角场景板，再生成主帧。'],
-      });
-      return;
-    }
-
-    const sheets: { name: string; dataUrl: string; detail: 'full-body' | 'face' }[] = [];
-    for (const characterId of characterIds) {
-      const character = project.characters.find((item) => item.id === characterId);
-      if (!character) continue;
-      const assets = await listAssetsFor(project.id, characterId);
-      const full = assets
-        .filter(
-          (asset) =>
-            asset.kind === 'character-sheet' &&
-            asset.dataUrl &&
-            sameStyle(asset.styleTags, project.brief.styleTags),
-        )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      const face = assets
-        .filter(
-          (asset) =>
-            asset.kind === 'character-sheet-face' &&
-            asset.dataUrl &&
-            sameStyle(asset.styleTags, project.brief.styleTags),
-        )
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
-      const picked = full ?? face;
-      if (!picked?.dataUrl) {
-        writeFeedback({
-          kind: 'error',
-          message: `角色「${character.name}」还没有角色形象图，做不了主帧。`,
-          warnings: ['先到角色页给它出全身多视图（或头部特写），再回来生成主帧。'],
-        });
-        return;
-      }
-      sheets.push({
-        name: character.name,
-        dataUrl: picked.dataUrl,
-        detail: full ? 'full-body' : 'face',
-      });
-    }
-
-    const needed = sheets.length + 1;
-    if (typeof maxImages === 'number' && needed > maxImages) {
-      writeFeedback({
-        kind: 'error',
-        message: `当前模型最多接受 ${maxImages} 张参考图，但这个场景需要 ${needed} 张。`,
-        warnings: [
-          `需要 ${sheets.length} 张角色形象图 + 1 张场景参考板；换多槽模型，或减少这个场景的出场角色再试。`,
-        ],
-      });
-      return;
-    }
-
-    const prompt = buildStagingFramePrompt(project, sceneId);
-    if (!prompt) {
-      writeFeedback({ kind: 'error', message: '主帧提示词生成失败。', warnings: [] });
-      return;
-    }
-
-    const referenceImages = [...sheets.map((sheet) => sheet.dataUrl), plateDataUrl];
-    const referencePhrases = [
-      ...sheets.map((sheet) =>
-        sheet.detail === 'full-body'
-          ? `${sheet.name}'s character turnaround sheet, defining face, hairstyle, build and outfit`
-          : `${sheet.name}'s head reference, defining facial features and hairstyle`,
-      ),
-      'the empty scene reference plate, defining the location layout, fixed objects and light direction',
-    ];
-    const sheetDetails = sheets.map((sheet) => sheet.detail);
-
-    set((state) => ({
-      pending: key,
-      feedback: { ...state.feedback, [key]: undefined },
-    }));
-    try {
-      const transport = currentTransport();
-      const outcome = await generateImages({
-        profile,
-        apiKey: resolved.apiKey,
-        req: {
-          prompt: prompt.positive,
-          ...(prompt.negative ? { negativePrompt: prompt.negative } : {}),
-          aspectRatio: prompt.aspectRatio,
-          count: 1,
-          referenceImages,
-          frameRole: {
-            hasFirstFrameAnchor: false,
-            roles: referencePhrases,
-            sheetDetails,
-            characterCount: sheets.length,
-          },
-        },
-        ...(transport ? { transport } : {}),
-      });
-      if (!outcome.ok) {
-        writeFeedback({
-          kind: 'error',
-          message: outcome.error ?? '主帧生成失败。',
-          warnings: outcome.warnings,
-        });
-        return;
-      }
-
-      const built = toAssets(outcome, {
-        projectId: project.id,
-        kind: 'staging-frame',
-        refId: sceneId,
-        promptSnapshot: prompt.positive,
-        lockPhrases: prompt.lockPhrases,
-        styleTags: [...project.brief.styleTags],
-        referenceCount: referenceImages.length,
-        model: profile.model ?? profile.name,
-      });
-      if (built.assets.length === 0) {
-        writeFeedback({
-          kind: 'error',
-          message: '主帧生成出来了，但没能下载到本地。请稍后重试。',
-          warnings: built.warnings,
-        });
-        return;
-      }
-      try {
-        await saveAssets(built.assets);
-      } catch {
-        writeFeedback({
-          kind: 'error',
-          message: '主帧生成出来了，但没能存进本机：本地存储可能满了或不可用。',
-          warnings: ['先去「导出」页备份并清理旧图，再重试。'],
-        });
-        return;
-      }
-
-      // 替换旧主帧：先保存新的，再删旧的（保存失败时旧主帧还在）
-      const savedIds = new Set(built.assets.map((asset) => asset.id));
-      const fresh = await listAssetsFor(project.id, sceneId);
-      const oldFrames = fresh.filter(
-        (asset) => asset.kind === 'staging-frame' && !savedIds.has(asset.id),
-      );
-      for (const asset of oldFrames) await deleteAsset(asset.id);
-      await get().loadGallery(sceneId);
-      await get().refreshAssetCount();
-
-      const notes = [...built.warnings];
-      if (oldFrames.length > 0) notes.push('这个场景原来的主帧已被替换，旧图已删除。');
-      writeFeedback({
-        kind: notes.length > 0 ? 'info' : 'ok',
-        message: `场景「${scene.name}」的主帧已生成并保存。`,
-        warnings: notes,
-      });
-    } finally {
-      set({ pending: null });
-    }
-  },
-
-  /*
-    P2-b：把已有首帧设为主帧。
-
-    只允许 first-frame：动作帧/尾帧绑着具体动作，不满足「中性可复用基准图」的语义。
-    复制而不是移动，原首帧继续留在镜头图库里。
-  */
-  promoteStagingFrame: async (sceneId, assetId) => {
-    const project = useAppStore.getState().project;
-    if (!project) return;
-    const key = `staging:${sceneId}`;
-    if (get().pending) return;
-    const scene = project.scenes.find((item) => item.id === sceneId);
-    const writeFeedback = (feedback: ImageTaskFeedback): void => {
-      set((state) => ({ feedback: { ...state.feedback, [key]: feedback } }));
-    };
-    if (!scene) {
-      writeFeedback({ kind: 'error', message: '这个场景不存在，可能刚被删掉了。', warnings: [] });
-      return;
-    }
-
-    const allAssets = await listAssets(project.id);
-    const source = allAssets.find((asset) => asset.id === assetId);
-    if (!source) {
-      writeFeedback({ kind: 'error', message: '找不到这张图，它可能刚被删掉了。', warnings: [] });
-      return;
-    }
-    if (source.kind !== 'first-frame') {
-      writeFeedback({
-        kind: 'error',
-        message: '只能把某一镜的首帧设为主帧。',
-        warnings: ['动作关键帧/尾帧绑着具体动作，不适合当跨镜复用的基准画面。'],
-      });
-      return;
-    }
-    if (!source.dataUrl) {
-      writeFeedback({ kind: 'error', message: '这张首帧没有可用的图片数据。', warnings: [] });
-      return;
-    }
-    const shot = project.shots.find((item) => item.id === source.refId);
-    if (!shot || shot.sceneId !== sceneId) {
-      writeFeedback({
-        kind: 'error',
-        message: '这张首帧不属于这个场景，设成主帧会指向错误的空间。',
-        warnings: ['请到它所属场景的页面上设主帧。'],
-      });
-      return;
-    }
-
-    set((state) => ({
-      pending: key,
-      feedback: { ...state.feedback, [key]: undefined },
-    }));
-    try {
-      const now = new Date().toISOString();
-      const staging: Asset = {
-        schemaVersion: SCHEMA_VERSION,
-        createdAt: now,
-        updatedAt: now,
-        id: newId('asset'),
-        projectId: project.id,
-        kind: 'staging-frame',
-        refId: sceneId,
-        dataUrl: source.dataUrl,
-        ...(source.sourceUrl !== undefined ? { sourceUrl: source.sourceUrl } : {}),
-        mimeType: source.mimeType,
-        ...(source.width !== undefined ? { width: source.width } : {}),
-        ...(source.height !== undefined ? { height: source.height } : {}),
-        ...(source.seed !== undefined ? { seed: source.seed } : {}),
-        promptSnapshot: source.promptSnapshot,
-        ...(source.model !== undefined ? { model: source.model } : {}),
-        ...(source.lockPhrases !== undefined ? { lockPhrases: source.lockPhrases } : {}),
-        ...(source.styleTags !== undefined ? { styleTags: source.styleTags } : {}),
-        ...(source.referenceCount !== undefined
-          ? { referenceCount: source.referenceCount }
-          : {}),
-        ...(source.byteSize !== undefined ? { byteSize: source.byteSize } : {}),
-        sourceAssetIds: [source.id],
-      };
-      try {
-        await saveAssets([staging]);
-      } catch {
-        writeFeedback({
-          kind: 'error',
-          message: '没能把这张首帧存成主帧：本地存储可能满了或不可用。',
-          warnings: ['先去「导出」页备份并清理旧图，再重试。'],
-        });
-        return;
-      }
-
-      const sceneAssets = await listAssetsFor(project.id, sceneId);
-      const oldFrames = sceneAssets.filter(
-        (asset) => asset.kind === 'staging-frame' && asset.id !== staging.id,
-      );
-      for (const asset of oldFrames) await deleteAsset(asset.id);
-      await get().loadGallery(sceneId);
-      await get().refreshAssetCount();
-
-      writeFeedback({
-        kind: 'ok',
-        message: `已把第 ${shot.number} 镜的首帧设为场景「${scene.name}」的主帧。`,
-        warnings:
-          oldFrames.length > 0 ? ['这个场景原来的主帧已被替换，旧图已删除。'] : [],
-      });
-    } finally {
-      set({ pending: null });
-    }
-  },
-
 }));
 
 interface RunArgs {

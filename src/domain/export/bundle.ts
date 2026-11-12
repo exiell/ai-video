@@ -72,7 +72,6 @@ const ASSET_DIR: Record<Asset['kind'], string> = {
   'first-frame': '图包★/镜头/首帧',
   'action-peak': '图包★/镜头/动作关键帧',
   'end-frame': '图包★/镜头/尾帧',
-  'staging-frame': '图包★/场景/主帧',
 };
 
 /**
@@ -89,10 +88,6 @@ function describeAssetTarget(project: Project, asset: Asset): string {
     return character ? character.name : '未知角色';
   }
   if (asset.kind === 'scene-plate') {
-    const scene = project.scenes.find((s) => s.id === asset.refId);
-    return scene ? scene.name : '未知场景';
-  }
-  if (asset.kind === 'staging-frame') {
     const scene = project.scenes.find((s) => s.id === asset.refId);
     return scene ? scene.name : '未知场景';
   }
@@ -249,9 +244,6 @@ function bundleReadme(hasImages: boolean, skippedImages: number): string {
   ];
   if (hasImages) {
     lines.push('  图包★/         已经生成好的角色图、场景板、每镜三帧');
-    lines.push(
-      '  图包★/场景/主帧/ 是场景主帧：角色已经站在这个场景里的基准画面，单参考图模型会优先用它。',
-    );
   }
   lines.push(
     '',

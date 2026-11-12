@@ -1,6 +1,5 @@
 import type {
   ModelCapabilities,
-  Project,
   PromptNote,
   SceneAngle,
   ShotSize,
@@ -942,97 +941,4 @@ export function withDeliveryCompensation(
   if (options.editMode) prefix.push(EDIT_KEEP_INSTRUCTION);
   if (options.compensation) prefix.push(...options.compensation);
   return prefix.length > 0 ? `${prefix.join(' ')} ${positive}` : positive;
-}
-
-
-// ---------------------------------------------------------------------------
-// 场景主帧（v0.60 · P2-b）
-// ---------------------------------------------------------------------------
-
-/**
- * 主帧的固定指令。
- *
- * 主帧不是「第几帧」，也不是场景板：它是**角色已经站在这个场景里**的基准画面。
- * 所以要求中性姿势、无动作、全身可见、比例与光线稳定；画面里要有人，
- * 而且不能重复画人/画分格（角色参考图是多格设定稿，容易被照抄排版）。
- */
-export const STAGING_FRAME_INSTRUCTION =
-  'calm staging reference image: the named characters are already in this location, standing in neutral relaxed poses with no action or motion, full body visible at a consistent scale; a clean reference for the scene layout and the characters appearance, not a dramatic shot; no text, no watermark';
-
-/**
- * 场景主帧的提示词（v0.60 · P2-b）。
- *
- * 角色范围由「该场景下镜头的 characterIds 并集」决定，调用方用同一份集合挑参考图，
- * 保证提示词里提到的人与参考图里的形象图严格一致。
- */
-export function buildStagingFramePrompt(project: Project, sceneId: string): ImagePromptInput | null {
-  const scene = project.scenes.find((item) => item.id === sceneId);
-  if (!scene) return null;
-
-  const characterIds = [
-    ...new Set(
-      project.shots
-        .filter((shot) => shot.sceneId === sceneId)
-        .flatMap((shot) => shot.characterIds),
-    ),
-  ];
-  const characters = characterIds
-    .map((id) => project.characters.find((character) => character.id === id))
-    .filter((character): character is NonNullable<typeof character> => character !== undefined);
-
-  const locks = [
-    ...new Set([
-      ...scene.continuityLocks.map((lock) => lock.phrase),
-      ...characters.flatMap((character) =>
-        character.continuityLocks.map((lock) => lock.phrase),
-      ),
-    ]),
-  ];
-  const spatial = spatialLayoutLine(scene.identity.spatialStructure ?? '');
-  const light = lightSourceLine(scene.lightDirection);
-  const summary = scene.identity.summaryEn || scene.name;
-  const extraElements = scene.fixedElements.filter(
-    (element) => !summary.toLowerCase().includes(element.toLowerCase()),
-  );
-  const cast = characters
-    .map(
-      (character) =>
-        `${character.name}: keep the face, hairstyle, body proportions and outfit from that character reference exactly`,
-    )
-    .join('; ');
-
-  const positive = dedupePhrases([
-    summary,
-    spatial,
-    ...extraElements,
-    ...locks,
-    scene.mainColor ? `${scene.mainColor} color palette` : '',
-    light,
-    cast,
-    STAGING_FRAME_INSTRUCTION,
-    ...project.brief.styleTags,
-    QUALITY_TAIL,
-  ]).join(', ');
-
-  const negativeParts = [
-    project.brief.negativePrompt,
-    characters.length > 0 ? 'multiple panels, duplicate character, cropped head' : 'no people',
-  ];
-
-  return {
-    subjectLabel: `场景「${scene.name}」主帧`,
-    positive,
-    negative: negativeParts.filter((part) => part.trim()).join(', '),
-    aspectRatio: project.brief.aspectRatio,
-    lockPhrases: locks,
-    notes: [
-      {
-        fragment: STAGING_FRAME_INSTRUCTION,
-        label: '场景主帧',
-        reason:
-          '主帧是「角色已经在景里」的基准画面，后面 1 张参考图的模型会优先用它。' +
-          '这里固定中性姿势、无动作、全身可见，是为了让它能被跨镜复用。',
-      },
-    ],
-  };
 }

@@ -787,14 +787,7 @@ export type AssetKind =
   | 'scene-plate'
   | 'first-frame'
   | 'action-peak'
-  | 'end-frame'
-  /**
-   * 场景主帧（v0.60 · P2-b）：「角色已经在这个场景里」的基准画面。
-   *
-   * 与场景参考板的区别：板是空镜，主帧有人。
-   * 与镜头首帧/尾帧的区别：它不绑某一个镜头的动作与构图，可以跨镜复用。
-   */
-  | 'staging-frame';
+  | 'end-frame';
 
 export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   'character-sheet': '全身多视图',
@@ -803,7 +796,6 @@ export const ASSET_KIND_LABEL: Record<AssetKind, string> = {
   'first-frame': '首帧',
   'action-peak': '动作关键帧',
   'end-frame': '尾帧',
-  'staging-frame': '场景主帧',
 };
 
 export interface Asset extends Versioned {
@@ -829,13 +821,6 @@ export interface Asset extends Versioned {
   model?: string;
   /** 生成时注入的连续性锁锁面，用于事后核对「锁到底生效了没」 */
   lockPhrases?: string[];
-  /**
-   * 主帧来自哪张已有素材（v0.60 · P2-b）。
-   *
-   * 「把已有首帧设为主帧」时记下源资产 id，方便追溯/回退；
-   * AI 生成的主帧没有单一来源时留空。
-   */
-  sourceAssetIds?: string[];
   /**
    * 生成这张图时项目的风格关键词（v0.41）。
    *

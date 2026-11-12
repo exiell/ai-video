@@ -45,7 +45,6 @@ export const REFERENCE_ROLE_LABEL: Record<ReferenceRole, string> = {
   'previous-end-frame': '上一镜尾帧（锁跨镜连续）',
   'character-sheet': '角色形象图（锁外观）',
   'scene-plate': '场景参考板（锁空间与光线）',
-  'staging-frame': '场景主帧（角色已在景里，锁身份、空间与构图）',
 };
 
 export interface ReferenceSlot {
@@ -90,7 +89,6 @@ const DROPPED_ROLE_LABEL: Record<ReferenceRole, string> = {
   'previous-end-frame': '上一镜尾帧',
   'character-sheet': '角色形象图',
   'scene-plate': '场景参考板',
-  'staging-frame': '场景主帧',
 };
 
 export function describeDroppedReference(dropped: DroppedReference): string {
@@ -200,8 +198,6 @@ export interface DetailedReferencePlan {
   semantics: ReferenceSemantics;
   /** 投递之后仍只能靠文字锁定的维度（P2-a 上报/补偿用） */
   degraded: AnchorDimension[];
-  /** P2-b：主帧投递状态（仅 1 槽 + 跳切首帧时有值） */
-  staging?: 'used' | 'missing';
 }
 
 /**
@@ -227,7 +223,6 @@ export function planReferenceImagesDetailed(args: PlanReferenceImagesArgs): Deta
     source: context.source,
     semantics: context.capability.semantics,
     degraded: delivery.degraded,
-    ...(delivery.staging ? { staging: delivery.staging } : {}),
   };
 }
 

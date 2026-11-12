@@ -27,10 +27,6 @@ export interface ImageCoverage {
   charsReady: number;
   /** 有场景参考板的场景数 */
   scenesReady: number;
-  /** 有场景主帧的场景数（v0.60 · P2-b） */
-  scenesWithStaging: number;
-  /** 每个场景都有一张主帧（场景为空时不算 ready，避免「空项目全绿」） */
-  stagingReady: boolean;
   firstReady: number;
   peakReady: number;
   endReady: number;
@@ -65,9 +61,6 @@ export function computeImageCoverage(project: Project | null, gallery: Gallery):
       hasKind(gallery[c.id], 'character-sheet-face'),
   ).length;
   const scenesReady = scenes.filter((s) => hasKind(gallery[s.id], 'scene-plate')).length;
-  const scenesWithStaging = scenes.filter((s) =>
-    hasKind(gallery[s.id], 'staging-frame'),
-  ).length;
 
   const firstReady = shots.filter((s) => hasKind(gallery[s.id], 'first-frame')).length;
   const peakReady = shots.filter((s) => hasKind(gallery[s.id], 'action-peak')).length;
@@ -95,8 +88,6 @@ export function computeImageCoverage(project: Project | null, gallery: Gallery):
     charsWithFace,
     charsReady,
     scenesReady,
-    scenesWithStaging,
-    stagingReady: scenes.length > 0 && scenesWithStaging === scenes.length,
     firstReady,
     peakReady,
     endReady,

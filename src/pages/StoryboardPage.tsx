@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { ConfirmDialog, SummaryBar } from '../components/bits';
+import { SummaryBar } from '../components/bits';
 import { RichText } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { Icon } from '../components/Icon';
 import { SelectMenu } from '../components/SelectMenu';
 import { useGeneration } from '../store/generation';
-import { AssetGallery, AssetPeek, ImageFeedback, ImagePanel } from '../components/ImagePanel';
+import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { useImage } from '../store/image';
 import { CameraMoveHint, ShotSizeHint } from '../components/TermHint';
@@ -197,22 +197,12 @@ export function StoryboardPage() {
   const generatingShots = useGeneration((s) => s.pending === 'shots');
   const gallery = useImage((s) => s.gallery);
   const loadGallery = useImage((s) => s.loadGallery);
-  const stagingFeedbackMap = useImage((s) => s.feedback);
-  const imagePending = useImage((s) => s.pending);
-  const promoteStagingFrame = useImage((s) => s.promoteStagingFrame);
 
   function galleryFor(refId: string) {
     return gallery[refId] ?? [];
   }
   const [expanded, setExpanded] = useState<string | null>(params.get('shot'));
   const [located, setLocated] = useState<string | null>(params.get('shot'));
-  /** 「设为主帧」的确认框：先确认，再调 store。 */
-  const [promoteTarget, setPromoteTarget] = useState<{
-    sceneId: string;
-    assetId: string;
-    shotNumber: number;
-    sceneName: string;
-  } | null>(null);
 
   /** 「用模型生成」抽屉：空状态里的按钮要能直接把它打开。 */
   const toolsRef = useRef<HTMLDetailsElement>(null);
@@ -501,9 +491,6 @@ export function StoryboardPage() {
             c.continuityLocks.filter((l) => shot.activeLockIds.includes(l.id)),
           );
           const open = expanded === shot.id;
-          const stagingFeedback = shot.sceneId
-            ? stagingFeedbackMap[`staging:${shot.sceneId}`]
-            : undefined;
 
           const shotIssues = issuesByShot.get(shot.id) ?? [];
           const byField = new Map<string, CheckIssue[]>();
@@ -1069,36 +1056,7 @@ export function StoryboardPage() {
                           <AssetGallery
                             assets={galleryFor(shot.id)}
                             emptyHint="还没有生成过这一镜的帧。"
-                            assetActions={(asset) => {
-                              // 只有首帧能当主帧：动作帧/尾帧绑着具体动作，不适合跨镜复用
-                              if (asset.kind !== 'first-frame' || !shot.sceneId) return null;
-                              const targetScene = project.scenes.find(
-                                (item) => item.id === shot.sceneId,
-                              );
-                              const sceneName = targetScene?.name ?? '未命名场景';
-                              const scenePending = imagePending === `staging:${shot.sceneId}`;
-                              return (
-                                <button
-                                  type="button"
-                                  className="btn btn-sm"
-                                  disabled={scenePending}
-                                  aria-label={`把第 ${shot.number} 镜的首帧设为场景「${sceneName}」的主帧`}
-                                  title="设为主帧：替换该场景现有主帧，不额外花钱"
-                                  onClick={() =>
-                                    setPromoteTarget({
-                                      sceneId: shot.sceneId!,
-                                      assetId: asset.id,
-                                      shotNumber: shot.number,
-                                      sceneName,
-                                    })
-                                  }
-                                >
-                                  {scenePending ? '设置中…' : '设为主帧'}
-                                </button>
-                              );
-                            }}
                           />
-                          {stagingFeedback ? <ImageFeedback feedback={stagingFeedback} /> : null}
                         </>
                       }
                     />
@@ -1119,29 +1077,6 @@ export function StoryboardPage() {
           );
         })}
       </div>
-      <ConfirmDialog
-        open={promoteTarget !== null}
-        title="设为主帧"
-        confirmLabel="设为主帧"
-        cancelLabel="取消"
-        onCancel={() => setPromoteTarget(null)}
-        onConfirm={() => {
-          const target = promoteTarget;
-          setPromoteTarget(null);
-          if (target) void promoteStagingFrame(target.sceneId, target.assetId);
-        }}
-      >
-        {promoteTarget ? (
-          <>
-            <p style={{ marginTop: 0 }}>
-              会把第 {promoteTarget.shotNumber} 镜的首帧设为场景「
-              {promoteTarget.sceneName}」的主帧。
-            </p>
-            <p>这个场景已有主帧的话会被替换。这个操作不额外花钱。</p>
-          </>
-        ) : null}
-      </ConfirmDialog>
-
     </>
   );
 }
