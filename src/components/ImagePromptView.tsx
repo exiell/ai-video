@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAppStore } from '../store/app';
 import { useSettings } from '../store/settings';
+import { imageReadiness } from './imageReadiness';
 import {
   buildCharacterSheetPrompt,
   buildFramePrompt,
@@ -123,6 +124,7 @@ export function ImagePromptView({
 }) {
   const project = useAppStore((s) => s.project);
   const keys = useSettings((s) => s.keys);
+  const prefs = useSettings((s) => s.prefs);
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [copyFallback, setCopyFallback] = useState<string | null>(null);
@@ -142,7 +144,8 @@ export function ImagePromptView({
 
   if (entries.length === 0) return null;
 
-  const anyKey = Object.values(keys).some((k) => k?.trim());
+  // 本地档案不需要 Key；只有真的缺可用档案时才提示「可以先复制去别处」
+  const readiness = imageReadiness(prefs, keys);
 
   return (
     <>
@@ -190,9 +193,9 @@ export function ImagePromptView({
               <div className="hint" style={{ marginTop: 0 }}>
                 出图时用的就是下面这些英文。<b>复制到任何模型里都能用。</b>
                 本工具没接的模型也一样。
-                {anyKey
+                {readiness.ready
                   ? ''
-                  : '（你现在还没填出图 Key，直接复制去别处出图完全可行。）'}
+                  : '（现在还没有可用的出图模型 Key，直接复制去别处出图完全可行。）'}
               </div>
 
               {entries.map((entry) => (

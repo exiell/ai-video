@@ -2,7 +2,7 @@ import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useSettings } from '../store/settings';
-import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
+import { imageReadiness, missingProfileNames } from './imageReadiness';
 import { consistencyAdvice } from '../domain/image/prompts';
 import { ASSET_KIND_LABEL } from '../types/model';
 import type { Asset, SceneAngle } from '../types/model';
@@ -62,14 +62,12 @@ export function ImagePanel({
   const prefs = useSettings((s) => s.prefs);
   const keys = useSettings((s) => s.keys);
 
-  const referenceProfile =
-    findProfile(prefs.defaultReferenceProfileId || DEFAULT_REFERENCE_PROFILE_ID) ?? null;
-  const plainProfile = findProfile(prefs.defaultT2iProfileId || DEFAULT_T2I_PROFILE_ID) ?? null;
-  const canReference = Boolean(referenceProfile?.capabilities.referenceImage);
-  const hasKey = Boolean(
-    (referenceProfile && keys[referenceProfile.vendorId ?? '']?.trim()) ||
-      (plainProfile && keys[plainProfile.vendorId ?? '']?.trim()),
-  );
+  // 本地档案 authType 为 none，不需要 Key——判定统一走 imageReadiness
+  const readiness = imageReadiness(prefs, keys);
+  const referenceProfile = readiness.referenceProfile;
+  const plainProfile = readiness.t2iProfile;
+  const canReference = readiness.usesReference;
+  const missingNames = missingProfileNames(readiness);
 
   const advice =
     canReference && referenceProfile
@@ -114,13 +112,22 @@ export function ImagePanel({
     <div style={{ marginTop: 14 }}>
       <div className="field-label">{label}</div>
 
-      {!hasKey ? (
+      {!readiness.ready ? (
         <div className="issue warning" style={{ marginBottom: 10 }}>
           <div className="issue-title">还不能出图</div>
           <div className="issue-line">
-            需要先填出图模型的 API Key。去
-            <Link to="/settings"> 设置 </Link>
-            页填上「通义千问」那一栏，点「测试连接」确认能通。
+            {missingNames.length > 0 ? (
+              <>
+                还没有填「{missingNames}」的 API Key。去
+                <Link to="/settings"> 设置 </Link>
+                页填上，点「测试连接」确认能通。
+              </>
+            ) : (
+              <>
+                出图模型还没配置好。去<Link to="/settings"> 设置 </Link>
+                页检查默认模型。
+              </>
+            )}
           </div>
         </div>
       ) : null}
@@ -135,7 +142,7 @@ export function ImagePanel({
             key={option.label}
             type="button"
             className={`btn ${index === 0 ? 'btn-blue' : 'btn-ai'}`}
-            disabled={busy || !hasKey}
+            disabled={busy || !readiness.ready}
             onClick={() => run(option)}
           >
             {busy ? '生成中…' : option.label}

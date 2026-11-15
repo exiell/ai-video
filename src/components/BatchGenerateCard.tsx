@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useAppStore } from '../store/app';
-import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
+import { imageReadiness, missingProfileNames } from './imageReadiness';
 import { useSettings } from '../store/settings';
 import { RichText, WhyDetails } from './bits';
 
@@ -60,10 +60,9 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
   const prefs = useSettings((s) => s.prefs);
   const keys = useSettings((s) => s.keys);
 
-  const imageProfile =
-    findProfile(prefs.defaultReferenceProfileId || DEFAULT_REFERENCE_PROFILE_ID) ??
-    findProfile(prefs.defaultT2iProfileId || DEFAULT_T2I_PROFILE_ID);
-  const hasImageKey = Boolean(imageProfile && keys[imageProfile.vendorId ?? '']?.trim());
+  // 本地档案不需要 Key；判定统一走 imageReadiness（参考图 + 文生图两个档案）
+  const readiness = imageReadiness(prefs, keys);
+  const missingNames = missingProfileNames(readiness);
 
   const counts: Record<BatchTask, number> = {
     characters: project?.characters.length ?? 0,
@@ -127,13 +126,22 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
     <div className="card">
       <h2 className="card-title">批量生成</h2>
 
-      {!hasImageKey ? (
+      {!readiness.ready ? (
         <div className="issue warning" style={{ marginBottom: 12 }}>
           <div className="issue-title">还不能出图</div>
           <div className="issue-line">
-            需要先填出图模型的 API Key。去
-            <Link to="/settings"> 设置 </Link>
-            页填上「通义千问」那一栏，点「测试连接」确认能通。
+            {missingNames.length > 0 ? (
+              <>
+                还没有填「{missingNames}」的 API Key。去
+                <Link to="/settings"> 设置 </Link>
+                页填上，点「测试连接」确认能通。
+              </>
+            ) : (
+              <>
+                出图模型还没配置好。去<Link to="/settings"> 设置 </Link>
+                页检查默认模型。
+              </>
+            )}
           </div>
         </div>
       ) : null}
@@ -148,7 +156,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             key={task}
             type="button"
             className={`btn ${index === 0 ? 'btn-blue' : 'btn-ai'}`}
-            disabled={batch !== null || !hasImageKey || counts[task] === 0}
+            disabled={batch !== null || !readiness.ready || counts[task] === 0}
             onClick={() => void run(task)}
           >
             {TASK_LABEL[task]}（{counts[task]}）
