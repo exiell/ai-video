@@ -495,6 +495,11 @@ async function generateWithRetry<T>(
   let lastRaw = '';
 
   const conversation: ChatMessage[] = [...messages];
+  // 自定义文字模型可以声明更小的输出上限；内置档案没填时行为完全不变
+  const effectiveMaxTokens =
+    ctx.profile.maxOutputTokens !== undefined
+      ? Math.min(maxTokens, ctx.profile.maxOutputTokens)
+      : maxTokens;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     let raw = '';
@@ -507,7 +512,7 @@ async function generateWithRetry<T>(
           messages: conversation,
           jsonMode: true,
           temperature: 0.7,
-          maxTokens,
+          maxTokens: effectiveMaxTokens,
         }),
         ...(ctx.transport ? { transport: ctx.transport } : {}),
         ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),

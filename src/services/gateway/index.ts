@@ -464,7 +464,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     body,
     transport,
     // 出图是同步接口里最慢的一类，官方给出的耗时量级是几十秒，默认给足 3 分钟
-    timeoutMs = profile.type === 't2i' ? 180_000 : 60_000,
+    timeoutMs = profile.timeoutMs ?? (profile.type === 't2i' ? 180_000 : 60_000),
     fetchImpl = fetch,
     signal,
   } = options;

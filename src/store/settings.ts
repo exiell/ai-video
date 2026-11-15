@@ -1,6 +1,18 @@
 import { create } from 'zustand';
 import { DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID, MODEL_PROFILES } from '../data/models/profiles';
 import {
+  countCustomModels,
+  customProfileId,
+  customVendorId,
+  isCustomProfileId,
+  MAX_CUSTOM_MODELS_PER_MODALITY,
+  readCustomModelConfigs,
+  validateCustomModel,
+  writeCustomModelConfigs,
+} from '../data/customModels';
+import type { CustomModelConfig, CustomModelDraft, CustomModelValidation } from '../types/customModel';
+import { DEFAULT_LLM_PROFILE_ID } from '../types/customModel';
+import {
   probeLocalModel,
   type LocalModelCheckOptions,
   type LocalModelCheckResult,
@@ -69,7 +81,7 @@ const DEFAULT_PREFS: Prefs = {
   dontSaveKeys: false,
   // 默认用 flash：生成分镜会反复重来，速度和成本比一次成型的质量更重要。
   // 需要更强的写作能力时，在设置页切回标准版。
-  defaultLlmProfileId: 'deepseek-flash',
+  defaultLlmProfileId: DEFAULT_LLM_PROFILE_ID,
   defaultT2iProfileId: DEFAULT_T2I_PROFILE_ID,
   defaultReferenceProfileId: DEFAULT_REFERENCE_PROFILE_ID,
   proxyBaseUrl: '',
@@ -253,6 +265,45 @@ function persistMigratedKeys(): void {
   if (migrated > 0) localStorage.setItem(LS_KEYS, JSON.stringify(keys));
 }
 
+export interface CustomModelMutationResult {
+  ok: boolean;
+  config?: CustomModelConfig;
+  errors?: CustomModelValidation['errors'];
+  message?: string;
+}
+
+function newCustomId(): string {
+  const cryptoObj = typeof globalThis.crypto !== 'undefined' ? globalThis.crypto : undefined;
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') return cryptoObj.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** 默认档案指向已删除/不存在的自定义配置时，回退到内置默认 */
+function fallbackMissingCustomDefaults(
+  prefs: Prefs,
+  configs: CustomModelConfig[],
+): { prefs: Prefs; changed: boolean } {
+  const ids = new Set(configs.map((config) => customProfileId(config.modality, config.id)));
+  let changed = false;
+  const next: Prefs = { ...prefs };
+  if (isCustomProfileId(prefs.defaultLlmProfileId) && !ids.has(prefs.defaultLlmProfileId)) {
+    next.defaultLlmProfileId = DEFAULT_LLM_PROFILE_ID;
+    changed = true;
+  }
+  if (isCustomProfileId(prefs.defaultT2iProfileId) && !ids.has(prefs.defaultT2iProfileId)) {
+    next.defaultT2iProfileId = DEFAULT_T2I_PROFILE_ID;
+    changed = true;
+  }
+  if (
+    isCustomProfileId(prefs.defaultReferenceProfileId) &&
+    !ids.has(prefs.defaultReferenceProfileId)
+  ) {
+    next.defaultReferenceProfileId = DEFAULT_REFERENCE_PROFILE_ID;
+    changed = true;
+  }
+  return { prefs: next, changed };
+}
+
 interface SettingsState {
   prefs: Prefs;
   /** **vendorId** -> apiKey。一个厂商一个 Key（对话与出图共用）。 */
@@ -267,9 +318,20 @@ interface SettingsState {
    */
   modelOverrides: Record<string, string>;
 
+  /**
+   * 自定义接入配置列表（v0.63 第三批）。
+   * 只存配置，不存 Key；Key 复用 keys 存储（vendorId = custom:<configId>）。
+   */
+  customModels: CustomModelConfig[];
+  addCustomModel: (draft: CustomModelDraft) => CustomModelMutationResult;
+  updateCustomModel: (id: string, draft: CustomModelDraft) => CustomModelMutationResult;
+  removeCustomModel: (id: string) => CustomModelMutationResult;
+  setCustomModelKey: (id: string, apiKey: string) => CustomModelMutationResult;
+  getCustomModelKey: (id: string) => string;
+
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;
   setModelOverride: (profileId: string, model: string) => void;
-  setKey: (vendorId: string, apiKey: string) => void;
+  setKey: (vendorId: string, apiKey: string) => boolean;
   clearKey: (vendorId: string) => void;
   getKey: (vendorId: string) => string;
   /** 清除全部 Key（磁盘 + 内存） */
@@ -280,10 +342,136 @@ interface SettingsState {
 // 是为了保证任何读取 Key 的地方看到的都已经是新格式。
 persistMigratedKeys();
 
+const initialCustomModels = readCustomModelConfigs();
+const initialFallback = fallbackMissingCustomDefaults(readPrefs(), initialCustomModels);
+if (initialFallback.changed) persistPrefs(initialFallback.prefs);
+
 export const useSettings = create<SettingsState>((set, get) => ({
-  prefs: readPrefs(),
+  prefs: initialFallback.prefs,
   keys: readKeys(),
   modelOverrides: readOverrides(),
+  customModels: initialCustomModels,
+
+  addCustomModel: (draft) => {
+    const validation = validateCustomModel(draft);
+    if (!validation.ok || !validation.normalized) {
+      return { ok: false, errors: validation.errors };
+    }
+    const current = get().customModels;
+    if (countCustomModels(current, validation.normalized.modality) >= MAX_CUSTOM_MODELS_PER_MODALITY) {
+      return {
+        ok: false,
+        errors: { modality: `每个模态最多 ${MAX_CUSTOM_MODELS_PER_MODALITY} 条自定义配置。` },
+      };
+    }
+    const config: CustomModelConfig = {
+      ...validation.normalized,
+      requiresKey: validation.normalized.requiresKey !== false,
+      capabilities: validation.normalized.capabilities ?? {},
+      id: newCustomId(),
+      createdAt: new Date().toISOString(),
+    };
+    const next = [...current, config];
+    if (!writeCustomModelConfigs(next)) {
+      return {
+        ok: false,
+        message: '配置没能保存到本机（localStorage 不可用或已满）。请清理存储后重试。',
+      };
+    }
+    set({ customModels: next });
+    return { ok: true, config };
+  },
+
+  updateCustomModel: (id, draft) => {
+    const current = get().customModels;
+    const existing = current.find((config) => config.id === id);
+    if (!existing) return { ok: false, message: '这条自定义配置不存在，可能刚被删除。' };
+    const validation = validateCustomModel(draft);
+    if (!validation.ok || !validation.normalized) {
+      return { ok: false, errors: validation.errors };
+    }
+    if (
+      validation.normalized.modality !== existing.modality &&
+      countCustomModels(current, validation.normalized.modality) >= MAX_CUSTOM_MODELS_PER_MODALITY
+    ) {
+      return {
+        ok: false,
+        errors: { modality: `每个模态最多 ${MAX_CUSTOM_MODELS_PER_MODALITY} 条自定义配置。` },
+      };
+    }
+    const updated: CustomModelConfig = {
+      ...validation.normalized,
+      requiresKey: validation.normalized.requiresKey !== false,
+      capabilities: validation.normalized.capabilities ?? {},
+      id: existing.id,
+      createdAt: existing.createdAt,
+    };
+    const next = current.map((config) => (config.id === id ? updated : config));
+    if (!writeCustomModelConfigs(next)) {
+      return {
+        ok: false,
+        message: '修改没能保存到本机（localStorage 不可用或已满）。请清理存储后重试。',
+      };
+    }
+    set({ customModels: next });
+
+    // 改 modality 会让档案 id 从 custom:旧模态:<id> 变成 custom:新模态:<id>；
+    // 如果默认档案还指着旧 id，它已经解析不到，必须回退到内置默认。
+    const oldProfileId = customProfileId(existing.modality, id);
+    const newProfileId = customProfileId(updated.modality, id);
+    if (oldProfileId !== newProfileId) {
+      const prefs = get().prefs;
+      if (prefs.defaultLlmProfileId === oldProfileId) {
+        get().setPref('defaultLlmProfileId', DEFAULT_LLM_PROFILE_ID);
+      }
+      if (prefs.defaultT2iProfileId === oldProfileId) {
+        get().setPref('defaultT2iProfileId', DEFAULT_T2I_PROFILE_ID);
+      }
+      if (prefs.defaultReferenceProfileId === oldProfileId) {
+        get().setPref('defaultReferenceProfileId', DEFAULT_REFERENCE_PROFILE_ID);
+      }
+    }
+    return { ok: true, config: updated };
+  },
+
+  removeCustomModel: (id) => {
+    const current = get().customModels;
+    const target = current.find((config) => config.id === id);
+    if (!target) return { ok: false, message: '这条自定义配置不存在，可能刚被删除。' };
+    const next = current.filter((config) => config.id !== id);
+    if (!writeCustomModelConfigs(next)) {
+      return {
+        ok: false,
+        message: '删除没能保存到本机（localStorage 不可用或已满）。请清理存储后重试。',
+      };
+    }
+    set({ customModels: next });
+    get().clearKey(customVendorId(id));
+
+    const profileId = customProfileId(target.modality, id);
+    const prefs = get().prefs;
+    if (target.modality === 'text' && prefs.defaultLlmProfileId === profileId) {
+      get().setPref('defaultLlmProfileId', DEFAULT_LLM_PROFILE_ID);
+    }
+    if (target.modality === 'image') {
+      if (prefs.defaultT2iProfileId === profileId) get().setPref('defaultT2iProfileId', DEFAULT_T2I_PROFILE_ID);
+      if (prefs.defaultReferenceProfileId === profileId) {
+        get().setPref('defaultReferenceProfileId', DEFAULT_REFERENCE_PROFILE_ID);
+      }
+    }
+    return { ok: true };
+  },
+
+  setCustomModelKey: (id, apiKey) => {
+    const ok = get().setKey(customVendorId(id), apiKey);
+    return ok
+      ? { ok: true }
+      : {
+          ok: false,
+          message: 'Key 没能保存到本机（localStorage 不可用或已满）。请清理存储后重试。',
+        };
+  },
+  getCustomModelKey: (id) => get().getKey(customVendorId(id)),
 
   setPref: (key, value) => {
     const prefs = { ...get().prefs, [key]: value };
@@ -313,8 +501,10 @@ export const useSettings = create<SettingsState>((set, get) => ({
 
   setKey: (profileId, apiKey) => {
     const keys = { ...get().keys, [profileId]: apiKey };
+    const ok = writeKeys(keys, !get().prefs.dontSaveKeys);
+    if (!ok) return false;
     set({ keys });
-    writeKeys(keys, !get().prefs.dontSaveKeys);
+    return true;
   },
 
   clearKey: (profileId) => {
@@ -339,16 +529,23 @@ export const useSettings = create<SettingsState>((set, get) => ({
   },
 }));
 
-function writeKeys(keys: Record<string, string>, remember: boolean): void {
+function writeKeys(keys: Record<string, string>, remember: boolean): boolean {
+  let ok = true;
   if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.setItem(SS_KEYS, JSON.stringify(keys));
+    try {
+      sessionStorage.setItem(SS_KEYS, JSON.stringify(keys));
+    } catch {
+      ok = false;
+    }
   }
-  if (typeof localStorage === 'undefined') return;
-  if (remember) {
-    localStorage.setItem(LS_KEYS, JSON.stringify(keys));
-  } else {
-    localStorage.removeItem(LS_KEYS);
+  if (typeof localStorage === 'undefined') return ok;
+  try {
+    if (remember) localStorage.setItem(LS_KEYS, JSON.stringify(keys));
+    else localStorage.removeItem(LS_KEYS);
+  } catch {
+    ok = false;
   }
+  return ok;
 }
 
 /**

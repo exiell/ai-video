@@ -774,6 +774,11 @@ export interface ModelProfile {
    * 本地模型（FLUX3）默认 600s；设置页可覆盖（见 Prefs.localModelTimeoutMs）。
    */
   timeoutMs?: number;
+  /**
+   * 自定义文字模型的最大输出 token（v0.63 第三批）。
+   * 内置档案不填；填了以后文本生成取 min(任务默认上限, 该值)。
+   */
+  maxOutputTokens?: number;
   /** 浏览器直连是否可行。必须实测确认，不得凭推测填写。 */
   corsDirect: 'yes' | 'no' | 'unknown';
   /** 能力声明。三级降级策略靠它决定给用户哪一级。 */

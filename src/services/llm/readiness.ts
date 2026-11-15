@@ -29,7 +29,8 @@ export function checkLlmReadiness(): GenerationReadiness {
   }
 
   const apiKey = keys[profile.vendorId ?? '']?.trim() ?? '';
-  if (!apiKey) {
+  // 自定义/本地档案可以是 authType:'none'（requiresKey=false），不能按「缺 Key」处理
+  if (profile.authType !== 'none' && !apiKey) {
     return {
       ready: false,
       profile,

@@ -1,4 +1,5 @@
 ﻿import type { ModelProfile } from '../../types/model';
+import { readCustomProfiles } from '../customModels';
 
 /**
  * 模型档案配置（方案.md §5.4）
@@ -594,10 +595,26 @@ export const DEFAULT_T2I_PROFILE_ID = 'qwen-image';
 /** 当前默认的「带参考图」档案 id —— L3 锚定用它 */
 export const DEFAULT_REFERENCE_PROFILE_ID = 'qwen-image-edit';
 
+/**
+ * 解析档案：先内置，再本地，最后自定义（localStorage）。
+ *
+ * 自定义配置的读取放在 data/customModels.ts（只依赖 types，不 import 本文件），
+ * 所以这里反向 import 不会形成循环。内置行为完全不变；旧调用点无需改。
+ */
 export function findProfile(id: string): ModelProfile | undefined {
   return (
-    MODEL_PROFILES.find((p) => p.id === id) ?? LOCAL_MODEL_PROFILES.find((p) => p.id === id)
+    MODEL_PROFILES.find((p) => p.id === id) ??
+    LOCAL_MODEL_PROFILES.find((p) => p.id === id) ??
+    readCustomProfiles().find((p) => p.id === id)
   );
+}
+
+/**
+ * 动态全量档案（内置 + 本地 + 自定义）——UI 下一批展示模型下拉时用这个。
+ * 内置 `ALL_MODEL_PROFILES` 保持静态，不包含自定义，避免旧测试/旧页面行为变化。
+ */
+export function resolveAllProfiles(): ModelProfile[] {
+  return [...MODEL_PROFILES, ...LOCAL_MODEL_PROFILES, ...readCustomProfiles()];
 }
 
 
