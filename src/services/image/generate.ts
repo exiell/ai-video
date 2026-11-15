@@ -1,18 +1,13 @@
 import type { Asset, ImageRequest, ImageResult, ModelProfile } from '../../types/model';
 import { SCHEMA_VERSION } from '../../types/model';
-import {
-  request,
-  buildImagePayloadFor,
-  extractImageUrlsFor,
-  readResponseTextLimited,
-  type TransportConfig,
-} from '../gateway';
+import { readResponseTextLimited, type TransportConfig } from '../gateway';
 import {
   extractDashScopeTaskId,
   parseDashScopeTaskStatus,
   withReferenceInstruction,
 } from '../gateway/dashscope';
-import { executeImageGeneration, getImageAdapter } from '../gateway/imageAdapters';
+import { executeImageGeneration } from '../gateway/imageAdapters';
+import type { ImageGenerationRequest } from '../gateway/types';
 import { newId } from '../storage';
 
 /**
@@ -75,6 +70,26 @@ function assertImageContentType(contentType: string): void {
   if (type.length > 0 && !type.startsWith('image/')) {
     throw new Error(`下载到的内容不是图片（Content-Type: ${type}），已跳过保存。`);
   }
+}
+
+/**
+ * data URI 直通：不发起网络请求，但仍做与 prefetchImage 相同的安全校验
+ * （只接受 image/*、30MB 上限）。v0.62 迁移后，云端/本地响应里都可能直接带 data URI。
+ */
+function prefetchedFromDataUrl(dataUrl: string): PrefetchedImage {
+  const comma = dataUrl.indexOf(',');
+  if (comma < 0) throw new Error('图片 data URI 格式不合法，已跳过保存。');
+  const meta = dataUrl.slice(0, comma);
+  const mimeType = meta.slice('data:'.length).split(';')[0] ?? '';
+  assertImageContentType(mimeType);
+  const payload = dataUrl.slice(comma + 1);
+  if (!/;base64/i.test(meta)) {
+    throw new Error('图片 data URI 不是 base64 编码，已跳过保存。');
+  }
+  const padding = payload.endsWith('==') ? 2 : payload.endsWith('=') ? 1 : 0;
+  const byteSize = Math.max(0, Math.floor((payload.length * 3) / 4) - padding);
+  if (byteSize > MAX_IMAGE_BYTES) throw new Error(imageTooLargeMessage());
+  return { dataUrl, byteSize, mimeType: mimeType || 'image/png' };
 }
 
 export interface PrefetchOptions {
@@ -270,95 +285,43 @@ export async function generateImages(
    * 现在只有一处构造：网关。档案声明字段名，网关照着拼。
    */
   /*
-    v0.61：本地 FLUX3 走统一的 chat-completions 适配器。
-    云端档案（openai/dashscope）继续走下面原有链路，保证既有行为字节级不变。
+    v0.62：云端与本地统一走执行器。
+    generate.ts 只做编排：统一请求 → 执行器 → prefetch/安全校验 → outcome。
+    请求体构造与响应解析由适配器负责，保证 7 个云端档案与本地 FLUX3 一致。
   */
-  if (flavor === 'chat-completions-image') {
-    const adapter = getImageAdapter(profile);
-    try {
-      const executed = await executeImageGeneration({
-        profile,
-        apiKey,
-        request: {
-          prompt: effectivePrompt,
-          ...(req.negativePrompt !== undefined ? { negativePrompt: req.negativePrompt } : {}),
-          ...(req.aspectRatio !== undefined ? { aspectRatio: req.aspectRatio } : {}),
-          ...(req.size !== undefined ? { size: req.size } : {}),
-          count: Math.min(req.count ?? 1, profile.capabilities.maxOutputImages || 1),
-          ...(req.seed !== undefined ? { seed: req.seed } : {}),
-          referenceImages,
-          timeoutMs: profile.timeoutMs,
-        },
-        ...(transport ? { transport } : {}),
-        ...(fetchImpl ? { fetchImpl } : {}),
-        ...(signal ? { signal } : {}),
-      });
-      if (executed.images.length === 0) {
-        return {
-          ok: false,
-          images: [],
-          warnings,
-          error:
-            '接口调用成功了，但没有返回图片。可能是提示词被安全策略拦下，或者返回结构不在预期内。',
-        };
-      }
-      const requestId = extractRequestId(executed.response);
-      return {
-        ok: true,
-        images: executed.images.map((image) => ({
-          // 本地响应本来就是 data URI；url 与 dataUrl 同值，兼容既有素材结构
-          url: image.dataUrl,
-          dataUrl: image.dataUrl,
-          ...(image.width !== undefined ? { width: image.width } : {}),
-          ...(image.height !== undefined ? { height: image.height } : {}),
-        })),
-        warnings,
-        ...(requestId !== undefined ? { requestId } : {}),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        images: [],
-        warnings,
-        error: adapter.normalizeError(error),
-      };
-    }
-  }
-
-  const payload = buildImagePayloadFor(profile, {
-    model: profile.model ?? profile.name,
+  const unifiedRequest: ImageGenerationRequest = {
     prompt: effectivePrompt,
     ...(req.negativePrompt !== undefined ? { negativePrompt: req.negativePrompt } : {}),
     ...(req.aspectRatio !== undefined ? { aspectRatio: req.aspectRatio } : {}),
+    ...(req.size !== undefined ? { size: req.size } : {}),
     ...(req.count !== undefined
-      ? { batchSize: Math.min(req.count, profile.capabilities.maxOutputImages || 1) }
+      ? { count: Math.min(req.count, profile.capabilities.maxOutputImages || 1) }
       : {}),
     ...(req.seed !== undefined ? { seed: req.seed } : {}),
-    ...(referenceImages.length > 0 ? { referenceImages } : {}),
-  });
+    referenceImages,
+    // 本地档案有 600s 默认；云端档案通常没有这个字段，保持网关原有的 180s 默认
+    ...(profile.timeoutMs !== undefined ? { timeoutMs: profile.timeoutMs } : {}),
+  };
 
   try {
-    const response = await request({
+    const executed = await executeImageGeneration({
       profile,
       apiKey,
-      body: payload,
+      request: unifiedRequest,
       ...(transport ? { transport } : {}),
       ...(fetchImpl ? { fetchImpl } : {}),
+      ...(signal ? { signal } : {}),
     });
 
-    /**
-     * 响应解析同样交给网关。
-     *
-     * 【v0.28 修】原来非异步的情况一律用 `extractDashScopeSyncImages`，
-     * 它只认千问那套嵌套三层（`output.choices[0].message.content[0].image`）。
-     * 换成 OpenAI 形状的提供方（智谱 / MiniMax / 硅基流动）时，
-     * 响应里明明有图，这里却解析出 0 张，然后报「接口通了但没返回图片地址」——
-     * 一个会把用户引向错误方向的报错。
-     */
+    /*
+      dashscope-async 当前没有图片档案在用（7 个档案全是 openai / dashscope-sync）。
+      适配器 parseResponse 为空是占位；真出现异步图片档案时，仍由这里调用既有的
+      pollDashScopeTask，轮询间隔/请求超时/错误映射保持旧语义。
+    */
     const urls =
       flavor === 'dashscope-async'
-        ? await pollDashScopeTask(profile, apiKey, response, { transport, fetchImpl })
-        : extractImageUrlsFor(profile, response);
+        ? await pollDashScopeTask(profile, apiKey, executed.response, { transport, fetchImpl })
+        : executed.imageRefs;
 
     if (urls.length === 0) {
       return {
@@ -375,9 +338,11 @@ export async function generateImages(
       const entry: ImageResult['images'][number] = { url };
       if (prefetch) {
         try {
-          const fetched = prefetchImpl
-            ? await prefetchImpl(url)
-            : await prefetchImage(url, fetchImpl ? { fetchImpl } : {});
+          const fetched = url.startsWith('data:')
+            ? prefetchedFromDataUrl(url)
+            : prefetchImpl
+              ? await prefetchImpl(url)
+              : await prefetchImage(url, fetchImpl ? { fetchImpl } : {});
           entry.dataUrl = fetched.dataUrl;
         } catch (error) {
           // 单张下载失败不能葬送整批——但必须如实告诉用户
@@ -394,8 +359,8 @@ export async function generateImages(
       ok: true,
       images,
       warnings,
-      ...(extractRequestId(response) !== undefined
-        ? { requestId: extractRequestId(response)! }
+      ...(extractRequestId(executed.response) !== undefined
+        ? { requestId: extractRequestId(executed.response)! }
         : {}),
     };
   } catch (error) {

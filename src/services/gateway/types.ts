@@ -18,8 +18,8 @@ export interface ImageGenerationRequest {
   aspectRatio?: string;
   /** 明确尺寸，例：1024x1024。有的协议只认 size。 */
   size?: string;
-  /** 期望出图张数（适配器会按档案能力截断） */
-  count: number;
+  /** 期望出图张数（适配器会按档案能力截断）；不传则不往请求体里加张数字段 */
+  count?: number;
   seed?: number;
   /** 有序的参考图 data URI；没有参考图时为空数组。 */
   referenceImages: OrderedReferenceImages;
