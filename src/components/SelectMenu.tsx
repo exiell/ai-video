@@ -1,10 +1,19 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { Icon } from './Icon';
 
 export interface SelectOption {
   value: string;
   label: string;
   hint?: string;
+  /** 可选分组标题：同一组连续选项前会渲染一个不可选的小标题 */
+  group?: string;
 }
 
 /**
@@ -113,29 +122,40 @@ export function SelectMenu({
         role="listbox"
         aria-label={ariaLabel}
       >
-        {options.map((option, index) => (
-          <button
-            key={option.value}
-            type="button"
-            id={`${listId}-${index}`}
-            role="option"
-            aria-selected={option.value === value}
-            tabIndex={-1}
-            className={`select-option${index === active ? ' is-active' : ''}${
-              option.value === value ? ' is-selected' : ''
-            }`}
-            onMouseEnter={() => setActive(index)}
-            onClick={() => choose(option)}
-          >
-            <span className="select-option-text">
-              <span>{option.label}</span>
-              {option.hint ? <small>{option.hint}</small> : null}
-            </span>
-            {option.value === value ? (
-              <Icon name="circle-check" size={14} className="select-check" />
-            ) : null}
-          </button>
-        ))}
+        {options.map((option, index) => {
+          // 分组标题只在组内第一项前渲染；键盘的 active 索引仍只数可选项
+          const showGroup =
+            option.group !== undefined && options[index - 1]?.group !== option.group;
+          return (
+            <Fragment key={option.value}>
+              {showGroup ? (
+                <div className="select-group" role="presentation">
+                  {option.group}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                id={`${listId}-${index}`}
+                role="option"
+                aria-selected={option.value === value}
+                tabIndex={-1}
+                className={`select-option${index === active ? ' is-active' : ''}${
+                  option.value === value ? ' is-selected' : ''
+                }`}
+                onMouseEnter={() => setActive(index)}
+                onClick={() => choose(option)}
+              >
+                <span className="select-option-text">
+                  <span>{option.label}</span>
+                  {option.hint ? <small>{option.hint}</small> : null}
+                </span>
+                {option.value === value ? (
+                  <Icon name="circle-check" size={14} className="select-check" />
+                ) : null}
+              </button>
+            </Fragment>
+          );
+        })}
       </div>
     </div>
   );

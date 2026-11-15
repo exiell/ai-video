@@ -4112,6 +4112,20 @@ table.simple tbody tr:last-child td {
   transform: translateY(0) scale(1);
 }
 
+/* 下拉里的分组标题（例如「本地（需自己启动服务）」） */
+.select-group {
+  margin-top: 4px;
+  padding: 8px 10px 4px;
+  border-top: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.select-group:first-child {
+  margin-top: 0;
+  border-top: 0;
+}
+
 .select-option {
   display: flex;
   align-items: center;

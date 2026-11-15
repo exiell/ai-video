@@ -7,9 +7,15 @@ import { THEMES, useTheme } from '../store/theme';
 import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
 import { Link, NavLink, useParams } from 'react-router-dom';
-import { MODEL_PROFILES } from '../data/models/profiles';
+import { LOCAL_MODEL_PROFILES, MODEL_PROFILES } from '../data/models/profiles';
 import { VENDORS, findVendor, modelsOfVendor, vendorCors } from '../data/models/vendors';
-import { currentTransport, useSettings } from '../store/settings';
+import { checkLocalModel, currentTransport, useSettings } from '../store/settings';
+import {
+  DEFAULT_LOCAL_MODEL_ENDPOINT,
+  DEFAULT_LOCAL_TIMEOUT_MS,
+  LOCAL_FLUX3_PROFILE_ID,
+  type LocalModelCheckResult,
+} from '../services/gateway/localModel';
 import { isModelOverridden, resolveModelName } from '../services/llm/modelName';
 import { testConnection, type ConnectionTestResult } from '../services/gateway';
 import type { ModelProfile } from '../types/model';
@@ -74,17 +80,34 @@ export function SettingsPage() {
 
   const llmProfiles = MODEL_PROFILES.filter((p) => p.type === 'llm');
   const t2iProfiles = MODEL_PROFILES.filter((p) => p.type === 't2i');
+  // 本地档案不混进 MODEL_PROFILES；候选里单独一组，默认档案仍是云端
+  const localT2iProfiles = LOCAL_MODEL_PROFILES.filter((p) => p.type === 't2i');
+  const localProfile = localT2iProfiles[0];
+  const localSelected =
+    prefs.defaultReferenceProfileId === LOCAL_FLUX3_PROFILE_ID ||
+    prefs.defaultT2iProfileId === LOCAL_FLUX3_PROFILE_ID;
+  const localTimeoutSec = Math.round(
+    (prefs.localModelTimeoutMs ?? localProfile?.timeoutMs ?? DEFAULT_LOCAL_TIMEOUT_MS) / 1000,
+  );
   const llmOptions = llmProfiles.map((p) => ({
     value: p.id,
     label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
   }));
-  const t2iOptions = t2iProfiles.map((p) => ({
-    value: p.id,
-    label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
-    hint: p.capabilities.referenceImage
-      ? `支持参考图 · 最多 ${p.capabilities.maxReferenceImages} 张`
-      : '不支持参考图',
-  }));
+  const t2iOptions = [
+    ...t2iProfiles.map((p) => ({
+      value: p.id,
+      label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
+      hint: p.capabilities.referenceImage
+        ? `支持参考图 · 最多 ${p.capabilities.maxReferenceImages} 张`
+        : '不支持参考图',
+    })),
+    ...localT2iProfiles.map((p) => ({
+      value: p.id,
+      label: '本地 FLUX3（需本机 vLLM-Omni）',
+      hint: '不需要 API Key，数据不出本机',
+      group: '本地（需自己启动服务）',
+    })),
+  ];
 
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ConnectionTestResult>>({});
@@ -92,6 +115,9 @@ export function SettingsPage() {
   const [imageStats, setImageStats] = useState<{ count: number; bytes: number } | null>(null);
   /** 代理口令默认遮起来；给一个「显示」按钮，和填 Key 的体验一致。 */
   const [showProxyPassword, setShowProxyPassword] = useState(false);
+  /** 本地模型「测试连接」的结果与 pending（不抛异常，展示 checkLocalModel 的人话）。 */
+  const [localTesting, setLocalTesting] = useState(false);
+  const [localResult, setLocalResult] = useState<LocalModelCheckResult | null>(null);
 
   useEffect(() => {
     void estimateUsage().then(setUsage);
@@ -144,6 +170,47 @@ export function SettingsPage() {
       setResults((r) => ({ ...r, [profile.vendorId ?? profile.id]: result }));
     } finally {
       setTesting(null);
+    }
+  }
+
+  /**
+   * 测试本地模型连接。
+   *
+   * 地址留空时用档案默认端点；填了就先做一次本地格式校验，
+   * 避免把明显不是 URL 的内容发给 fetch 后只拿到一句浏览器英文报错。
+   */
+  async function testLocalModel() {
+    const endpoint = (prefs.localModelEndpoint ?? '').trim();
+    setLocalResult(null);
+    if (endpoint) {
+      try {
+        const parsed = new URL(endpoint);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+          throw new Error('unsupported protocol');
+        }
+      } catch {
+        setLocalResult({
+          ok: false,
+          endpoint,
+          message:
+            '这个地址看起来不对。填 http:// 或 https:// 开头的地址，例如 http://127.0.0.1:8099/v1。',
+        });
+        return;
+      }
+    }
+    setLocalTesting(true);
+    try {
+      const result = await checkLocalModel(endpoint ? { endpoint } : {});
+      setLocalResult(result);
+    } catch {
+      // 核心层保证不抛异常；这里兜底，避免出现「点了没反应」
+      setLocalResult({
+        ok: false,
+        endpoint: endpoint || DEFAULT_LOCAL_MODEL_ENDPOINT,
+        message: '测试本地模型时出了点问题。确认服务已启动、地址和端口正确，再试一次。',
+      });
+    } finally {
+      setLocalTesting(false);
     }
   }
 
@@ -226,8 +293,24 @@ export function SettingsPage() {
           />
         </div>
 
+        {localSelected ? (
+          <div className="issue" style={{ marginTop: 10, marginBottom: 0 }}>
+            <div className="issue-title">
+              当前使用本地模型
+              <span className="tag tag-warning" style={{ marginLeft: 8 }}>
+                需本机服务
+              </span>
+            </div>
+            <div className="issue-line">
+              本地 FLUX3（需本机 vLLM-Omni）不需要 API Key，数据不出本机。服务没启动时出图会失败；先到「连接与 Key」的本地模型区块测试连接。
+            </div>
+          </div>
+        ) : null}
+
         <div className="hint">
-          不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。
+          {localSelected
+            ? '本地模型走你本机启动的服务，不需要 API Key；服务没启动时出图会失败。'
+            : '不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。'}
         </div>
       </div>
 
@@ -474,6 +557,92 @@ export function SettingsPage() {
         </WhyDetails>
       </div>
 
+      <div className="card">
+        <h2 className="card-title">
+          本地模型
+          <span className="tag" style={{ marginLeft: 8 }}>
+            可选
+          </span>
+          {localSelected ? (
+            <span className="tag tag-ok" style={{ marginLeft: 6 }}>
+              当前使用
+            </span>
+          ) : null}
+        </h2>
+        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
+          本地 FLUX3（需本机 vLLM-Omni）。不需要 API Key，数据不出本机；默认不启用，不影响云端模型。
+        </p>
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+          <span className="tag">最多 10 张参考图</span>
+          <span className="tag">每次出 1 张</span>
+          <span className="tag">不支持负向词</span>
+          <span className="tag">默认不启用</span>
+        </div>
+        <Field
+          label="本地服务地址"
+          hint={`留空 = 用档案默认地址 ${DEFAULT_LOCAL_MODEL_ENDPOINT}。默认超时 ${localTimeoutSec} 秒。`}
+        >
+          <input
+            type="text"
+            aria-label="本地模型服务地址"
+            value={prefs.localModelEndpoint ?? ''}
+            placeholder={DEFAULT_LOCAL_MODEL_ENDPOINT}
+            onChange={(e) => setPref('localModelEndpoint', e.target.value)}
+          />
+        </Field>
+        <div className="row" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn"
+            disabled={localTesting}
+            aria-label="测试本地模型连接"
+            title="向本地服务请求模型列表，确认识别到模型"
+            onClick={() => void testLocalModel()}
+          >
+            {localTesting ? '测试中…' : '测试连接'}
+          </button>
+        </div>
+        {localResult ? (
+          <div
+            className={`issue ${localResult.ok ? '' : 'error'}`}
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: 10,
+              marginBottom: 0,
+              borderLeftColor: localResult.ok ? 'var(--ok)' : undefined,
+            }}
+          >
+            <div className="issue-title">{localResult.ok ? '本地模型可用' : '连不上本地模型'}</div>
+            <div className="issue-line">{localResult.message}</div>
+            {localResult.ok && localResult.models?.length ? (
+              <div className="issue-line">
+                模型：<code>{localResult.models.join('、')}</code>
+              </div>
+            ) : null}
+            {localResult.detail ? (
+              <details className="why">
+                <summary>服务返回的原始信息</summary>
+                <div className="why-body">
+                  <pre>{localResult.detail.slice(0, 300)}</pre>
+                </div>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+        <details className="why">
+          <summary>用本地模型前要准备什么</summary>
+          <div className="why-body">
+            先在跑模型的电脑上启动 vLLM-Omni（默认端口 8099），浏览器必须能访问这个地址；同机最省事，远程用 SSH 端口转发。
+            <br />
+            启动 vLLM 时要允许应用 origin，02-start.sh 已经加了 --allowed-origins。
+            <br />
+            如果这个页面是 HTTPS 而本地服务是 HTTP，浏览器可能按混合内容拦截；改用端口转发或同源反代。
+            <br />
+            本地第一次出图可能要几分钟，属正常现象。
+          </div>
+        </details>
+      </div>
 
       </>) : null}
 
