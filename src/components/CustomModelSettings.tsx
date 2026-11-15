@@ -4,6 +4,11 @@ import { SelectMenu } from './SelectMenu';
 import { useSettings } from '../store/settings';
 import { customProfileId } from '../data/customModels';
 import { checkCustomModel, type CustomModelCheckResult } from '../services/customModels/check';
+import { SKYREELS_VIDEO_PRESET } from '../data/models/videoProfiles';
+import {
+  checkVideoProfile,
+  type VideoCheckResult,
+} from '../services/gateway/videoAdapters';
 import {
   MAX_CUSTOM_MODELS_PER_MODALITY,
   type CustomModality,
@@ -24,7 +29,7 @@ import {
 const MODALITIES: { key: CustomModality; label: string; hint: string }[] = [
   { key: 'text', label: '文字', hint: '写故事、分镜、对话' },
   { key: 'image', label: '图片', hint: '角色图、场景板、出帧' },
-  { key: 'video', label: '视频', hint: '下一批支持生成' },
+  { key: 'video', label: '视频', hint: '5 秒动画草稿' },
 ];
 
 const MODALITY_LABEL: Record<CustomModality, string> = {
@@ -37,7 +42,7 @@ const PROTOCOL_LABEL: Record<CustomProtocol, string> = {
   'openai-chat': 'OpenAI 兼容 chat',
   'openai-images': 'OpenAI Images（/images/generations）',
   'vllm-omni-chat-image': 'vLLM-Omni chat 多图（/chat/completions）',
-  'openai-videos': 'OpenAI Videos（下一批）',
+  'openai-videos': 'OpenAI Videos',
 };
 
 const MODALITY_PROTOCOLS: Record<CustomModality, CustomProtocol[]> = {
@@ -123,6 +128,9 @@ function draftFromForm(form: FormState): CustomModelDraft {
   } else if (form.modality === 'text') {
     const maxOutputTokens = numberOrUndefined(form.maxOutputTokens);
     if (maxOutputTokens !== undefined) capabilities.maxOutputTokens = maxOutputTokens;
+  } else if (form.modality === 'video') {
+    const maxReferenceImages = numberOrUndefined(form.maxReferenceImages);
+    if (maxReferenceImages !== undefined) capabilities.maxReferenceImages = maxReferenceImages;
   }
   const timeoutMs = numberOrUndefined(form.timeoutMs);
   return {
@@ -148,8 +156,8 @@ function statusOf(
   keys: Record<string, string>,
   result: CustomModelCheckResult | undefined,
 ): { label: string; tone: Tone } {
-  // 特殊状态优先于「需不需要 Key」：视频占位和 /models 404 都是可连但无法确认
-  if (result?.status === 'not-implemented') return { label: '视频下一批', tone: 'warning' };
+  // 特殊状态优先于「需不需要 Key」：/models 404 是可连但无法确认
+  if (result?.status === 'not-implemented') return { label: '无法自动检测', tone: 'warning' };
   if (result?.status === 'unknown') return { label: '无法自动检测', tone: 'warning' };
   if (!config.requiresKey) {
     return {
@@ -164,6 +172,26 @@ function statusOf(
   if (result.status === 'ready') return { label: '测试通过', tone: 'ok' };
   if (result.status === 'missing-key') return { label: '未配置 Key', tone: 'warning' };
   return { label: '测试失败', tone: 'error' };
+}
+
+const VIDEO_CHECK_STATUS_MAP: Record<VideoCheckResult['status'], CustomModelCheckResult['status']> = {
+  ready: 'ready',
+  'missing-key': 'missing-key',
+  unauthorized: 'unauthorized',
+  cors: 'cors',
+  timeout: 'timeout',
+  'not-found': 'bad-url',
+  'model-not-loaded': 'unknown',
+  error: 'error',
+};
+
+function fromVideoCheck(result: VideoCheckResult): CustomModelCheckResult {
+  return {
+    ok: result.ok,
+    status: VIDEO_CHECK_STATUS_MAP[result.status] ?? 'error',
+    message: result.message,
+    ...(result.detail ? { detail: result.detail } : {}),
+  };
 }
 
 function resultTone(result: CustomModelCheckResult): Tone {
@@ -248,6 +276,25 @@ export function CustomModelSettings() {
     setErrors({});
     setFormMessage(null);
     setKeyValue('');
+  }
+
+  /** 本地视频（SkyReels）：预填异步视频服务；字段可改。 */
+  function openLocalVideoAdd() {
+    const base = emptyForm('video');
+    setEditing({});
+    setErrors({});
+    setFormMessage(null);
+    setKeyValue('');
+    setForm({
+      ...base,
+      name: SKYREELS_VIDEO_PRESET.name,
+      protocol: 'openai-videos',
+      baseUrl: SKYREELS_VIDEO_PRESET.baseUrl,
+      model: SKYREELS_VIDEO_PRESET.model,
+      requiresKey: SKYREELS_VIDEO_PRESET.requiresKey ?? false,
+      timeoutMs: String(SKYREELS_VIDEO_PRESET.timeoutMs),
+      maxReferenceImages: String(SKYREELS_VIDEO_PRESET.capabilities?.maxReferenceImages ?? 4),
+    });
   }
 
   /**
@@ -339,7 +386,10 @@ export function CustomModelSettings() {
     setChecking(config.id);
     try {
       const key = config.requiresKey ? getCustomModelKey(config.id) : '';
-      const result = await checkCustomModel(config, key);
+      const result =
+        config.modality === 'video'
+          ? fromVideoCheck(await checkVideoProfile(config, key))
+          : await checkCustomModel(config, key);
       setCheckResults((current) => ({ ...current, [config.id]: result }));
     } catch {
       // 核心层保证不抛异常；这里兜底，避免出现「点了没反应」
@@ -459,6 +509,22 @@ export function CustomModelSettings() {
                 新建本地图片模型
               </button>
             ) : null}
+            {modality === 'video' ? (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={limitReached}
+                aria-label="新建本地视频模型（SkyReels）"
+                title={
+                  limitReached
+                    ? '已达 10 条上限，先删一条'
+                    : '预填本机 SkyReels 视频服务；字段可改'
+                }
+                onClick={openLocalVideoAdd}
+              >
+                新建本地视频模型（SkyReels）
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn btn-blue btn-sm"
@@ -543,7 +609,7 @@ export function CustomModelSettings() {
                   </div>
                   {config.modality === 'video' ? (
                     <div className="hint" style={{ marginTop: 2 }}>
-                      视频接入下一批支持生成；当前只能保存配置和测试连接。
+                      本地视频走异步任务：提交后排队生成，一条 5 秒约 12 分钟；一条一条跑。
                     </div>
                   ) : null}
                   {result ? (
@@ -652,7 +718,7 @@ export function CustomModelSettings() {
             />
           </Field>
 
-          <Field label="协议" hint="接口要跟协议匹配；视频协议本批只是占位。">
+          <Field label="协议" hint="接口要跟协议匹配；视频走 OpenAI Videos 异步任务。">
             <SelectMenu
               value={form.protocol}
               options={MODALITY_PROTOCOLS[form.modality].map((protocol) => ({
@@ -709,7 +775,10 @@ export function CustomModelSettings() {
 
           {keyInput}
 
-          <Field label="超时（毫秒，可选）" hint="1000–600000；留空用默认。">
+          <Field
+            label="超时（毫秒，可选）"
+            hint={form.modality === 'video' ? '1000–1200000；视频建议 1200000（20 分钟）。' : '1000–600000；留空用默认。'}
+          >
             <input
               type="text"
               inputMode="numeric"
@@ -792,8 +861,28 @@ export function CustomModelSettings() {
           ) : null}
 
           {form.modality === 'video' ? (
-            <div className="issue warning" style={{ margin: 0 }}>
-              <div className="issue-line">视频接入下一批支持生成；现在可以先保存配置和测试连接。</div>
+            <div className="custom-capabilities">
+              <b style={{ fontSize: 13 }}>视频能力</b>
+              <div className="hint" style={{ marginTop: 2 }}>
+                本地 SkyReels 支持 1–4 张参考图；第 1 张参考图决定画幅。
+              </div>
+              <Field label="参考图上限" hint="0 表示不传参考图；本地 SkyReels 填 4。">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="参考图上限"
+                  value={form.maxReferenceImages}
+                  onChange={(event) => update('maxReferenceImages', event.target.value)}
+                />
+              </Field>
+              {errorText(errors, 'capabilities') ? (
+                <div className="field-error">{errorText(errors, 'capabilities')}</div>
+              ) : null}
+              <div className="issue" style={{ margin: 0 }}>
+                <div className="issue-line">
+                  视频由本地服务异步生成：一条 5 秒约 12 分钟，服务端一次只跑一条；UI 会显示排队和进度，离开页面也会继续轮询。
+                </div>
+              </div>
             </div>
           ) : null}
         </div>

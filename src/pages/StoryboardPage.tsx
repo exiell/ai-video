@@ -11,6 +11,9 @@ import { useGeneration } from '../store/generation';
 import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { useImage } from '../store/image';
+import { useVideo, videoClipKey } from '../store/video';
+import { VideoPanel } from '../components/VideoPanel';
+import { VideoJobStrip } from '../components/VideoJobStrip';
 import { CameraMoveHint, ShotSizeHint } from '../components/TermHint';
 import {
   CAMERA_MOVE_LABEL,
@@ -197,6 +200,7 @@ export function StoryboardPage() {
   const generatingShots = useGeneration((s) => s.pending === 'shots');
   const gallery = useImage((s) => s.gallery);
   const loadGallery = useImage((s) => s.loadGallery);
+  const clips = useVideo((s) => s.clips);
 
   function galleryFor(refId: string) {
     return gallery[refId] ?? [];
@@ -245,6 +249,10 @@ export function StoryboardPage() {
     //
     // 依赖收成 project.id 之后：换项目时才重载；出图完成后由出图流程刷新。
     for (const shot of project?.shots ?? []) void loadGallery(shot.id);
+    void useVideo.getState().recoverJobs();
+    for (const shot of project?.shots ?? []) {
+      void useVideo.getState().getClip(project!.id, shot.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id]);
 
@@ -339,6 +347,18 @@ export function StoryboardPage() {
           </button>
         </div>
       </div>
+
+      <VideoJobStrip
+        onLocate={(shotId) => {
+          setExpanded(shotId);
+          window.requestAnimationFrame(() => {
+            document.getElementById(`shot-${shotId}`)?.scrollIntoView?.({
+              behavior: 'smooth',
+              block: 'center',
+            });
+          });
+        }}
+      />
 
       {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
       <AiFlowGuide variant="compact" />
@@ -592,6 +612,18 @@ export function StoryboardPage() {
                   而且不再单独占一行。
                 */}
                 <AssetPeek assets={galleryFor(shot.id)} />
+
+                {clips[videoClipKey(project.id, shot.id)] ? (
+                  <button
+                    type="button"
+                    className="video-badge"
+                    aria-label={`第 ${shot.number} 镜已有视频，点开查看`}
+                    title="这一镜已有视频"
+                    onClick={() => setExpanded(shot.id)}
+                  >
+                    视频 5s
+                  </button>
+                ) : null}
 
                 {/*
                   这一镜有几处要改。以前这个数字只在检查页有，
@@ -1014,6 +1046,7 @@ export function StoryboardPage() {
                   </div>
 
                   <div className="shot-output">
+                    <div className="shot-frames" id={`shot-frames-${shot.id}`}>
                     <ImagePanel
                       refId={shot.id}
                       target="frame"
@@ -1059,6 +1092,20 @@ export function StoryboardPage() {
                           />
                         </>
                       }
+                    />
+                    </div>
+
+                    <VideoPanel
+                      shot={shot}
+                      project={project}
+                      onJumpToFrames={() => {
+                        setExpanded(shot.id);
+                        window.requestAnimationFrame(() => {
+                          document
+                            .getElementById(`shot-frames-${shot.id}`)
+                            ?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        });
+                      }}
                     />
 
                     <div className="row" style={{ marginTop: 12 }}>

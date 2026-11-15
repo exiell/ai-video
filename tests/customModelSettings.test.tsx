@@ -9,16 +9,21 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
  * 设置页「自定义接入」UI（v0.63 第三批）
  *
  * 覆盖：三模态列表/新增编辑删除、Key 显示条件、就地校验、测试连接成功与失败、
- * pending 禁用、视频占位、默认模型下拉出现自定义项、删除默认回退提示、10 条上限。
+ * pending 禁用、视频本地接入、默认模型下拉出现自定义项、删除默认回退提示、10 条上限。
  * 核心层（校验/CRUD/localStorage/checkCustomModel）已由 feature 侧测试覆盖；
  * 这里 mock 掉测试连接，只测 UI 接线。
  */
 
-const mocks = vi.hoisted(() => ({ checkCustomModel: vi.fn() }));
+const mocks = vi.hoisted(() => ({ checkCustomModel: vi.fn(), checkVideoProfile: vi.fn() }));
 
 vi.mock('../src/services/customModels/check', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../src/services/customModels/check')>();
   return { ...actual, checkCustomModel: mocks.checkCustomModel };
+});
+
+vi.mock('../src/services/gateway/videoAdapters', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../src/services/gateway/videoAdapters')>();
+  return { ...actual, checkVideoProfile: mocks.checkVideoProfile };
 });
 
 import { SettingsPage } from '../src/pages/SettingsPage';
@@ -159,6 +164,7 @@ beforeEach(() => {
   document.body.innerHTML = '';
   localStorage.removeItem(CUSTOM_MODELS_STORAGE_KEY);
   mocks.checkCustomModel.mockReset();
+  mocks.checkVideoProfile.mockReset();
   useAppStore.setState({ project: structuredClone(sampleProject), report: null });
   useSettings.setState({
     ...initialActions,
@@ -382,7 +388,7 @@ describe('测试连接', () => {
     expect((button.textContent ?? '').trim()).toBe('测试连接');
   });
 
-  it('视频配置显示「下一批」占位与测试结果', async () => {
+  it('视频配置可保存并测试本地视频服务（核心 checkVideoProfile）', async () => {
     addConfig({
       name: '视频占位',
       modality: 'video',
@@ -390,20 +396,21 @@ describe('测试连接', () => {
       model: 'video-model',
       requiresKey: false,
     });
-    mocks.checkCustomModel.mockResolvedValue({
-      ok: false,
-      status: 'not-implemented',
-      message: '视频接入下一批支持；现在只能保存配置，暂不能测试连接/生成。',
-    } satisfies CustomModelCheckResult);
+    mocks.checkVideoProfile.mockResolvedValue({
+      ok: true,
+      status: 'ready',
+      message: '视频服务已就绪：video-model',
+    });
     const el = renderSettings('custom');
     click([...el.querySelectorAll('button')].find((node) =>
       (node.textContent ?? '').trim().startsWith('视频'),
     ));
-    expect(el.textContent ?? '').toContain('视频接入下一批支持生成');
+    expect(el.textContent ?? '').toContain('本地视频走异步任务');
     click(rowAction('测试「视频占位」的连接'));
     await flush();
-    expect(el.textContent ?? '').toContain('视频接入下一批支持');
-    expect(el.textContent ?? '').toContain('视频下一批');
+    expect(mocks.checkVideoProfile).toHaveBeenCalledTimes(1);
+    expect(el.textContent ?? '').toContain('视频服务已就绪');
+    expect(el.textContent ?? '').toContain('测试通过');
   });
 });
 

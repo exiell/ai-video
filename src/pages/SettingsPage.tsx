@@ -8,6 +8,7 @@ import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { findProfile, MODEL_PROFILES, resolveAllProfiles } from '../data/models/profiles';
+import { resolveDefaultVideoProfile } from '../data/models/videoProfiles';
 import { isCustomProfileId } from '../data/customModels';
 import { VENDORS, findVendor, modelsOfVendor, vendorCors } from '../data/models/vendors';
 import { currentTransport, useSettings } from '../store/settings';
@@ -115,6 +116,20 @@ export function SettingsPage() {
       group: '自定义（图片）',
     })),
   ];
+
+  const videoProfiles = allProfiles.filter(
+    (profile) => profile.type === 'i2v' && Boolean(profile.videoProtocol),
+  );
+  const videoOptions = videoProfiles.map((profile) => ({
+    value: profile.id,
+    label: profile.name,
+    hint: '自定义视频接入',
+    group: '自定义（视频）',
+  }));
+  const resolvedVideoProfile = resolveDefaultVideoProfile(
+    prefs.defaultVideoProfileId,
+    customModels,
+  );
 
   /**
    * 旧设置回显：prefs 里的默认档案如果被 hidden 过滤掉（例如迁移失败的本地 FLUX3），
@@ -289,6 +304,29 @@ export function SettingsPage() {
             }}
           />
         </div>
+
+        <div className="settings-select-row">
+          <span className="settings-select-label">生成视频</span>
+          {videoOptions.length > 0 ? (
+            <SelectMenu
+              className="grow"
+              value={resolvedVideoProfile?.id ?? ''}
+              options={videoOptions}
+              ariaLabel="生成视频的默认模型"
+              onChange={(value) => setPref('defaultVideoProfileId', value)}
+            />
+          ) : (
+            <span className="hint" style={{ marginTop: 0 }}>
+              还没有视频模型，先到{' '}
+              <Link to="/settings/custom">「自定义接入 → 视频」</Link> 新建一条本地视频模型。
+            </span>
+          )}
+        </div>
+        {prefs.defaultVideoProfileId && !resolvedVideoProfile ? (
+          <div className="hint" style={{ marginTop: 0 }}>
+            原来的默认视频模型找不到了，请重新选一个，或到「自定义接入 → 视频」新建。
+          </div>
+        ) : null}
 
         {legacyLlmProfile || legacyImageProfile ? (
           <div className="issue warning" style={{ marginTop: 10, marginBottom: 0 }}>
