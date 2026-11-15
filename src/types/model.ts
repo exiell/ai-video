@@ -11,6 +11,8 @@
 // 基础
 // ---------------------------------------------------------------------------
 
+import type { VideoCapabilities, VideoProtocol } from './video';
+
 /** 当前数据模型版本。改动模型结构时递增，并在 migrate.ts 补迁移函数。 */
 export const SCHEMA_VERSION = 1;
 
@@ -785,6 +787,10 @@ export interface ModelProfile {
    * 典型用途：local-flux3 已迁移为自定义图片配置，内置档案只负责兼容旧数据。
    */
   hidden?: boolean;
+  /** 视频协议（v0.65）；type='i2v' 的档案用它选视频适配器。 */
+  videoProtocol?: VideoProtocol;
+  /** 视频能力（v0.65）；只对 type='i2v' 有意义。 */
+  videoCapabilities?: VideoCapabilities;
   /** 浏览器直连是否可行。必须实测确认，不得凭推测填写。 */
   corsDirect: 'yes' | 'no' | 'unknown';
   /** 能力声明。三级降级策略靠它决定给用户哪一级。 */

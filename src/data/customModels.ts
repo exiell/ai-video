@@ -13,6 +13,7 @@
  */
 
 import type { ModelCapabilities, ModelProfile } from '../types/model';
+import { DEFAULT_VIDEO_CAPABILITIES } from '../types/video';
 import {
   MAX_CUSTOM_MODELS_PER_MODALITY,
   PROTOCOL_MODALITY,
@@ -103,8 +104,8 @@ function validateCapabilities(
   if (modality === 'text' && caps.maxReferenceImages !== undefined) {
     errors.capabilities = '文字模型不支持参考图，请不要填参考图上限。';
   }
-  if (modality === 'video' && (caps.maxReferenceImages ?? 0) > 0) {
-    errors.capabilities = '视频接入下一批，暂不支持参考图能力。';
+  if (modality === 'video' && (caps.maxReferenceImages ?? 0) > 4) {
+    errors.capabilities = '视频参考图最多 4 张。';
   }
 }
 
@@ -158,11 +159,12 @@ export function validateCustomModel(draft: CustomModelDraft): CustomModelValidat
   const model = typeof draft.model === 'string' ? draft.model.trim() : '';
   if (model.length === 0) errors.model = '请填写模型名。';
 
+  const maxTimeoutMs = draft.modality === 'video' ? 1_200_000 : 600_000;
   if (
     draft.timeoutMs !== undefined &&
-    (!Number.isInteger(draft.timeoutMs) || draft.timeoutMs < 1000 || draft.timeoutMs > 600_000)
+    (!Number.isInteger(draft.timeoutMs) || draft.timeoutMs < 1000 || draft.timeoutMs > maxTimeoutMs)
   ) {
-    errors.timeoutMs = '超时需在 1000–600000 毫秒之间。';
+    errors.timeoutMs = `超时需在 1000–${maxTimeoutMs} 毫秒之间。`;
   }
 
   validateCapabilities(draft.modality, draft.capabilities, errors);
@@ -223,16 +225,27 @@ export function customModelToProfile(config: CustomModelConfig): ModelProfile {
   }
 
   if (config.modality === 'video') {
+    const maxReferenceImages = Math.min(4, Math.max(0, config.capabilities?.maxReferenceImages ?? 0));
+    const timeoutMs = config.timeoutMs ?? DEFAULT_VIDEO_CAPABILITIES.maxTimeoutMs;
     return {
       ...common,
       type: 'i2v',
-      // 视频生成本批不实现；apiFlavor 先给 openai 让类型/展示可用，不参与生成。
+      // 视频生成走统一的 /v1/videos 适配器；apiFlavor 只为兼容旧类型
       apiFlavor: 'openai',
+      endpoint: baseUrl,
+      videoProtocol: 'openai-videos',
+      videoCapabilities: {
+        ...DEFAULT_VIDEO_CAPABILITIES,
+        maxReferenceImages,
+        supportsReferenceImages: maxReferenceImages > 0,
+        requiresKey,
+        maxTimeoutMs: timeoutMs,
+      },
       capabilities: {
         negativePrompt: false,
         seed: false,
-        referenceImage: false,
-        maxReferenceImages: 0,
+        referenceImage: maxReferenceImages > 0,
+        maxReferenceImages,
         maxOutputImages: 0,
       },
     };

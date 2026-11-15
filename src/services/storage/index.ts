@@ -13,6 +13,7 @@ import type {
   Variant,
 } from '../../types/model';
 import { SCHEMA_VERSION } from '../../types/model';
+import type { VideoClipRecord, VideoJobRecord } from '../../types/video';
 
 /**
  * 本地存储层（方案.md v0.6 §5.7）
@@ -37,6 +38,8 @@ export interface ProjectRecord {
 export class AniGuideDB extends Dexie {
   projects!: Table<ProjectRecord, string>;
   assets!: Table<Asset, string>;
+  videoJobs!: Table<VideoJobRecord, string>;
+  videoClips!: Table<VideoClipRecord, string>;
 
   constructor() {
     super('aniguide');
@@ -66,6 +69,17 @@ export class AniGuideDB extends Dexie {
     this.version(2).stores({
       projects: 'id, name, updatedAt',
       assets: 'id, projectId, kind, refId, [projectId+refId]',
+    });
+    /**
+     * v3：视频任务/成片（v0.65）。
+     * videoJobs 只存轻量元数据（不含 dataURL/Blob）；videoClips 存 mp4 Blob。
+     * 只加表，不迁移旧数据，Dexie 自动升级。
+     */
+    this.version(3).stores({
+      projects: 'id, name, updatedAt',
+      assets: 'id, projectId, kind, refId, [projectId+refId]',
+      videoJobs: 'id, projectId, shotId, status, createdAt',
+      videoClips: 'id, projectId, shotId, createdAt, [projectId+shotId]',
     });
   }
 }
@@ -148,6 +162,8 @@ export async function listProjects(): Promise<ProjectRecord[]> {
 export async function deleteProject(id: string): Promise<void> {
   await getDb().projects.delete(id);
   await getDb().assets.where('projectId').equals(id).delete();
+  await getDb().videoJobs.where('projectId').equals(id).delete();
+  await getDb().videoClips.where('projectId').equals(id).delete();
 }
 
 // ---------------------------------------------------------------------------
@@ -222,6 +238,92 @@ export async function requestPersistentStorage(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// ---------------------------------------------------------------------------
+// 视频任务 / 成片（v0.65）
+// ---------------------------------------------------------------------------
+
+export async function saveVideoJob(job: VideoJobRecord): Promise<void> {
+  await getDb().videoJobs.put(job);
+}
+
+export async function getVideoJob(id: string): Promise<VideoJobRecord | undefined> {
+  return getDb().videoJobs.get(id);
+}
+
+export async function listVideoJobs(projectId?: string): Promise<VideoJobRecord[]> {
+  const rows = projectId
+    ? await getDb().videoJobs.where('projectId').equals(projectId).toArray()
+    : await getDb().videoJobs.toArray();
+  return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function deleteVideoJob(id: string): Promise<void> {
+  await getDb().videoJobs.delete(id);
+}
+
+/** 保留最近 N 条视频任务；活动任务不删（避免刷新恢复时丢） */
+export async function pruneVideoJobs(max = 50): Promise<void> {
+  const rows = await listVideoJobs();
+  const active = new Set(['queued', 'submitting', 'submitted', 'running', 'submit-uncertain']);
+  for (const [index, job] of rows.entries()) {
+    if (index < max) continue;
+    if (active.has(job.status)) continue;
+    await getDb().videoJobs.delete(job.id);
+    if (job.outputClipId) {
+      // job 被清掉时它的成片也不再被引用，避免 Blob 永占 IndexedDB
+      await getDb().videoClips.delete(job.outputClipId);
+    }
+  }
+}
+
+export async function saveVideoClip(clip: VideoClipRecord): Promise<void> {
+  await getDb().videoClips.put(clip);
+}
+
+/**
+ * 原子替换某镜头的成片并同时保存 job：
+ * 新 clip 写入 → 删旧 clip → 写 job 全在一个 Dexie 事务里；任一步失败整体回滚，
+ * 旧成片不会丢，job 仍可重试。
+ */
+export async function saveVideoClipReplacingShot(
+  job: VideoJobRecord,
+  clip: VideoClipRecord,
+): Promise<void> {
+  const db = getDb();
+  await db.transaction('rw', db.videoClips, db.videoJobs, async () => {
+    const oldClips = await db.videoClips
+      .where('[projectId+shotId]')
+      .equals([clip.projectId, clip.shotId])
+      .toArray();
+    await db.videoClips.put(clip);
+    for (const old of oldClips) {
+      if (old.id !== clip.id) await db.videoClips.delete(old.id);
+    }
+    await db.videoJobs.put(job);
+  });
+}
+
+export async function getVideoClip(id: string): Promise<VideoClipRecord | undefined> {
+  return getDb().videoClips.get(id);
+}
+
+export async function listVideoClipsForShot(
+  projectId: string,
+  shotId: string,
+): Promise<VideoClipRecord[]> {
+  const rows = await getDb().videoClips.where('[projectId+shotId]').equals([projectId, shotId]).toArray();
+  return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export async function deleteVideoClip(id: string): Promise<void> {
+  await getDb().videoClips.delete(id);
+}
+
+/** 每个镜头只保留当前一版；重生成时先删旧 clip */
+export async function deleteVideoClipsForShot(projectId: string, shotId: string): Promise<void> {
+  await getDb().videoClips.where('[projectId+shotId]').equals([projectId, shotId]).delete();
 }
 
 /**

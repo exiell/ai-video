@@ -68,6 +68,8 @@ export interface Prefs {
   defaultT2iProfileId: string;
   /** 当前默认使用的「带参考图」档案 id —— L3 锚定用它 */
   defaultReferenceProfileId: string;
+  /** 当前默认视频档案 id（v0.65 视频层）；空/未配置时回退唯一自定义视频 */
+  defaultVideoProfileId?: string;
   /** 代理地址（留空 = 直连） */
   proxyBaseUrl: string;
   /** 代理通行口令 */
@@ -102,6 +104,7 @@ const DEFAULT_PREFS: Prefs = {
   localModelEndpoint: '',
   localModelTimeoutMs: undefined,
   localModelMigrated: false,
+  defaultVideoProfileId: undefined,
 };
 
 function safeParse<T>(raw: string | null, fallback: T): T {
