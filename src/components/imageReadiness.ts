@@ -11,7 +11,7 @@ import type { Prefs } from '../store/settings';
  *
  * 【为什么抽出来】ImagePanel 和 BatchGenerateCard 原来各写了一遍 `hasKey`：
  * 只看厂商 Key，于是本地档案（authType: 'none'，不需要 Key）被误判成没配置，
- * 切到本地模型后按钮全灰、还提示去填「通义千问」。
+ * 切到本地模型后按钮全灰、还提示去填某个固定厂商的 Key。
  *
  * 规则：
  *  - 档案可用 = `authType === 'none'`，或该厂商 Key 非空（trim）；

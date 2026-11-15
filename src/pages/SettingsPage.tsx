@@ -7,17 +7,12 @@ import { THEMES, useTheme } from '../store/theme';
 import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
 import { Link, NavLink, useParams } from 'react-router-dom';
-import { LOCAL_MODEL_PROFILES, MODEL_PROFILES, resolveAllProfiles } from '../data/models/profiles';
+import { findProfile, MODEL_PROFILES, resolveAllProfiles } from '../data/models/profiles';
 import { isCustomProfileId } from '../data/customModels';
 import { VENDORS, findVendor, modelsOfVendor, vendorCors } from '../data/models/vendors';
-import { checkLocalModel, currentTransport, useSettings } from '../store/settings';
+import { currentTransport, useSettings } from '../store/settings';
 import { CustomModelSettings } from '../components/CustomModelSettings';
-import {
-  DEFAULT_LOCAL_MODEL_ENDPOINT,
-  DEFAULT_LOCAL_TIMEOUT_MS,
-  LOCAL_FLUX3_PROFILE_ID,
-  type LocalModelCheckResult,
-} from '../services/gateway/localModel';
+import { LOCAL_FLUX3_PROFILE_ID } from '../services/gateway/localModel';
 import { isModelOverridden, resolveModelName } from '../services/llm/modelName';
 import { testConnection, type ConnectionTestResult } from '../services/gateway';
 import type { ModelProfile } from '../types/model';
@@ -93,15 +88,6 @@ export function SettingsPage() {
 
   const llmProfiles = MODEL_PROFILES.filter((p) => p.type === 'llm');
   const t2iProfiles = MODEL_PROFILES.filter((p) => p.type === 't2i');
-  // 本地档案不混进 MODEL_PROFILES；候选里单独一组，默认档案仍是云端
-  const localT2iProfiles = LOCAL_MODEL_PROFILES.filter((p) => p.type === 't2i');
-  const localProfile = localT2iProfiles[0];
-  const localSelected =
-    prefs.defaultReferenceProfileId === LOCAL_FLUX3_PROFILE_ID ||
-    prefs.defaultT2iProfileId === LOCAL_FLUX3_PROFILE_ID;
-  const localTimeoutSec = Math.round(
-    (prefs.localModelTimeoutMs ?? localProfile?.timeoutMs ?? DEFAULT_LOCAL_TIMEOUT_MS) / 1000,
-  );
   const llmOptions = [
     ...llmProfiles.map((p) => ({
       value: p.id,
@@ -122,12 +108,6 @@ export function SettingsPage() {
         ? `支持参考图 · 最多 ${p.capabilities.maxReferenceImages} 张`
         : '不支持参考图',
     })),
-    ...localT2iProfiles.map((p) => ({
-      value: p.id,
-      label: '本地 FLUX3（需本机 vLLM-Omni）',
-      hint: '不需要 API Key，数据不出本机',
-      group: '本地（需自己启动服务）',
-    })),
     ...customImageProfiles.map((p) => ({
       value: p.id,
       label: p.name,
@@ -136,15 +116,46 @@ export function SettingsPage() {
     })),
   ];
 
+  /**
+   * 旧设置回显：prefs 里的默认档案如果被 hidden 过滤掉（例如迁移失败的本地 FLUX3），
+   * 候选里没有它，SelectMenu 会回落到第一个云模型，但生成仍在用旧档案。
+   * 这里用 findProfile 把它加回候选并标注，避免「显示的和实际用的不是一个」。
+   */
+  function legacyOption(profile: ModelProfile) {
+    return {
+      value: profile.id,
+      label:
+        profile.id === LOCAL_FLUX3_PROFILE_ID
+          ? '本地 FLUX3（旧设置）'
+          : `${profile.provider} · ${profile.name}（旧设置）`,
+      hint: '旧设置已隐藏，建议到自定义接入重建',
+      group: '旧设置（已隐藏）',
+    };
+  }
+
+  const hasOption = (id: string, options: { value: string }[]): boolean =>
+    options.some((option) => option.value === id);
+  const legacyLlmProfile = hasOption(prefs.defaultLlmProfileId, llmOptions)
+    ? undefined
+    : findProfile(prefs.defaultLlmProfileId);
+  const legacyImageProfile = hasOption(prefs.defaultReferenceProfileId, t2iOptions)
+    ? undefined
+    : findProfile(prefs.defaultReferenceProfileId);
+  const llmOptionsWithLegacy = legacyLlmProfile
+    ? [...llmOptions, legacyOption(legacyLlmProfile)]
+    : llmOptions;
+  const t2iOptionsWithLegacy = legacyImageProfile
+    ? [...t2iOptions, legacyOption(legacyImageProfile)]
+    : t2iOptions;
+
   const [testing, setTesting] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ConnectionTestResult>>({});
   const [usage, setUsage] = useState<{ usage: number; quota: number } | null>(null);
   const [imageStats, setImageStats] = useState<{ count: number; bytes: number } | null>(null);
   /** 代理口令默认遮起来；给一个「显示」按钮，和填 Key 的体验一致。 */
   const [showProxyPassword, setShowProxyPassword] = useState(false);
-  /** 本地模型「测试连接」的结果与 pending（不抛异常，展示 checkLocalModel 的人话）。 */
-  const [localTesting, setLocalTesting] = useState(false);
-  const [localResult, setLocalResult] = useState<LocalModelCheckResult | null>(null);
+  /** 每家厂商默认收起；展开状态按厂商 id 记。 */
+  const [openVendors, setOpenVendors] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     void estimateUsage().then(setUsage);
@@ -197,47 +208,6 @@ export function SettingsPage() {
       setResults((r) => ({ ...r, [profile.vendorId ?? profile.id]: result }));
     } finally {
       setTesting(null);
-    }
-  }
-
-  /**
-   * 测试本地模型连接。
-   *
-   * 地址留空时用档案默认端点；填了就先做一次本地格式校验，
-   * 避免把明显不是 URL 的内容发给 fetch 后只拿到一句浏览器英文报错。
-   */
-  async function testLocalModel() {
-    const endpoint = (prefs.localModelEndpoint ?? '').trim();
-    setLocalResult(null);
-    if (endpoint) {
-      try {
-        const parsed = new URL(endpoint);
-        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-          throw new Error('unsupported protocol');
-        }
-      } catch {
-        setLocalResult({
-          ok: false,
-          endpoint,
-          message:
-            '这个地址看起来不对。填 http:// 或 https:// 开头的地址，例如 http://127.0.0.1:8099/v1。',
-        });
-        return;
-      }
-    }
-    setLocalTesting(true);
-    try {
-      const result = await checkLocalModel(endpoint ? { endpoint } : {});
-      setLocalResult(result);
-    } catch {
-      // 核心层保证不抛异常；这里兜底，避免出现「点了没反应」
-      setLocalResult({
-        ok: false,
-        endpoint: endpoint || DEFAULT_LOCAL_MODEL_ENDPOINT,
-        message: '测试本地模型时出了点问题。确认服务已启动、地址和端口正确，再试一次。',
-      });
-    } finally {
-      setLocalTesting(false);
     }
   }
 
@@ -300,7 +270,7 @@ export function SettingsPage() {
           <SelectMenu
             className="grow"
             value={prefs.defaultLlmProfileId}
-            options={llmOptions}
+            options={llmOptionsWithLegacy}
             ariaLabel="写故事与分镜的默认模型"
             onChange={(value) => setPref('defaultLlmProfileId', value)}
           />
@@ -311,7 +281,7 @@ export function SettingsPage() {
           <SelectMenu
             className="grow"
             value={prefs.defaultReferenceProfileId}
-            options={t2iOptions}
+            options={t2iOptionsWithLegacy}
             ariaLabel="生成画面的默认模型"
             onChange={(value) => {
               setPref('defaultReferenceProfileId', value);
@@ -320,24 +290,16 @@ export function SettingsPage() {
           />
         </div>
 
-        {localSelected ? (
-          <div className="issue" style={{ marginTop: 10, marginBottom: 0 }}>
-            <div className="issue-title">
-              当前使用本地模型
-              <span className="tag tag-warning" style={{ marginLeft: 8 }}>
-                需本机服务
-              </span>
-            </div>
+        {legacyLlmProfile || legacyImageProfile ? (
+          <div className="issue warning" style={{ marginTop: 10, marginBottom: 0 }}>
             <div className="issue-line">
-              本地 FLUX3（需本机 vLLM-Omni）不需要 API Key，数据不出本机。服务没启动时出图会失败；先到「连接与 Key」的本地模型区块测试连接。
+              默认模型里有旧设置（已隐藏）。建议到「自定义接入」重建；在重建前，生成仍按旧档案执行。
             </div>
           </div>
         ) : null}
 
         <div className="hint">
-          {localSelected
-            ? '本地模型走你本机启动的服务，不需要 API Key；服务没启动时出图会失败。'
-            : '不确定选哪个就用默认的：写故事用 DeepSeek 快速版，出图用通义千问图生图。'}
+          不确定选哪个就用默认的：写故事用默认对话模型，出图用默认图片模型。
         </div>
       </div>
 
@@ -363,37 +325,59 @@ export function SettingsPage() {
             models.find((m) => m.type === 'llm') ??
             models[0]!;
 
-          return (
-            <div
-              key={vendor.id}
-              style={{
-                marginBottom: 18,
-                paddingBottom: 16,
-                borderBottom: '1px solid var(--border)',
-              }}
-            >
-              <div className="row" style={{ justifyContent: 'space-between', marginBottom: 6 }}>
-                <b style={{ fontSize: 14 }}>
-                  {vendorIcon ? <Icon name={vendorIcon} size={16} className="vendor-icon" /> : null}
-                  {vendor.name}
-                  <span
-                    className={`tag ${cors === 'unknown' ? 'tag-warning' : 'tag-ok'}`}
-                    style={{ marginLeft: 8 }}
-                  >
-                    {cors === 'unknown' ? '直连待实测' : '可直连'}
-                  </span>
-                </b>
-                <a
-                  className="btn btn-ghost btn-sm"
-                  href={vendor.consoleUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  去申请 Key →
-                </a>
-              </div>
+          const open = openVendors[vendor.id] === true;
+          const keySaved = key.trim().length > 0;
+          const testSummary = result ? (result.ok ? '测试通过' : '测试失败') : '未测试';
+          const corsLabel = cors === 'unknown' ? 'CORS 待实测' : '可直连';
 
-              <div className="row">
+          return (
+            <div className="vendor-item" key={vendor.id}>
+              <button
+                type="button"
+                className="vendor-head"
+                aria-expanded={open}
+                aria-controls={`vendor-body-${vendor.id}`}
+                onClick={() =>
+                  setOpenVendors((current) => ({ ...current, [vendor.id]: !current[vendor.id] }))
+                }
+              >
+                <span className="vendor-title">
+                  {vendorIcon ? (
+                    <Icon name={vendorIcon} size={16} className="vendor-icon" />
+                  ) : null}
+                  <b>{vendor.name}</b>
+                  <span className={`tag ${cors === 'unknown' ? 'tag-warning' : 'tag-ok'}`}>
+                    {corsLabel}
+                  </span>
+                </span>
+                <span className="vendor-summary">
+                  <span className={keySaved ? 'vendor-ok' : 'vendor-muted'}>
+                    {keySaved ? 'Key 已保存' : '未保存 Key'}
+                  </span>
+                  <span
+                    className={
+                      result ? (result.ok ? 'vendor-ok' : 'vendor-bad') : 'vendor-muted'
+                    }
+                  >
+                    {testSummary}
+                  </span>
+                  <Icon name="chevron-right" size={14} className="vendor-chevron" />
+                </span>
+              </button>
+
+              <div className="vendor-body" id={`vendor-body-${vendor.id}`} hidden={!open}>
+                <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 6 }}>
+                  <a
+                    className="btn btn-ghost btn-sm"
+                    href={vendor.consoleUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    去申请 Key →
+                  </a>
+                </div>
+
+                <div className="row">
                 <input
                   type="password"
                   aria-label={`${vendor.name} 的 API Key`}
@@ -510,6 +494,7 @@ export function SettingsPage() {
                   )}
                 </div>
               ) : null}
+              </div>
             </div>
           );
         })}
@@ -584,96 +569,6 @@ export function SettingsPage() {
           想自己搭一个的话，Cloudflare Workers 免费版每天 10 万次请求够个人用。
           这一栏填上就启用，清空就回到直连。
         </WhyDetails>
-      </div>
-
-      <div className="card">
-        <h2 className="card-title">
-          本地模型
-          <span className="tag" style={{ marginLeft: 8 }}>
-            可选
-          </span>
-          {localSelected ? (
-            <span className="tag tag-ok" style={{ marginLeft: 6 }}>
-              当前使用
-            </span>
-          ) : null}
-        </h2>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          本地 FLUX3（需本机 vLLM-Omni）。不需要 API Key，数据不出本机；默认不启用，不影响云端模型。
-        </p>
-        <p className="hint" style={{ marginTop: 0 }}>
-          其他本地模型请用「自定义接入」里的图片配置接入。
-        </p>
-        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-          <span className="tag">最多 10 张参考图</span>
-          <span className="tag">每次出 1 张</span>
-          <span className="tag">不支持负向词</span>
-          <span className="tag">默认不启用</span>
-        </div>
-        <Field
-          label="本地服务地址"
-          hint={`留空 = 用档案默认地址 ${DEFAULT_LOCAL_MODEL_ENDPOINT}。默认超时 ${localTimeoutSec} 秒。`}
-        >
-          <input
-            type="text"
-            aria-label="本地模型服务地址"
-            value={prefs.localModelEndpoint ?? ''}
-            placeholder={DEFAULT_LOCAL_MODEL_ENDPOINT}
-            onChange={(e) => setPref('localModelEndpoint', e.target.value)}
-          />
-        </Field>
-        <div className="row" style={{ marginTop: 8 }}>
-          <button
-            type="button"
-            className="btn"
-            disabled={localTesting}
-            aria-label="测试本地模型连接"
-            title="向本地服务请求模型列表，确认识别到模型"
-            onClick={() => void testLocalModel()}
-          >
-            {localTesting ? '测试中…' : '测试连接'}
-          </button>
-        </div>
-        {localResult ? (
-          <div
-            className={`issue ${localResult.ok ? '' : 'error'}`}
-            role="status"
-            aria-live="polite"
-            style={{
-              marginTop: 10,
-              marginBottom: 0,
-              borderLeftColor: localResult.ok ? 'var(--ok)' : undefined,
-            }}
-          >
-            <div className="issue-title">{localResult.ok ? '本地模型可用' : '连不上本地模型'}</div>
-            <div className="issue-line">{localResult.message}</div>
-            {localResult.ok && localResult.models?.length ? (
-              <div className="issue-line">
-                模型：<code>{localResult.models.join('、')}</code>
-              </div>
-            ) : null}
-            {localResult.detail ? (
-              <details className="why">
-                <summary>服务返回的原始信息</summary>
-                <div className="why-body">
-                  <pre>{localResult.detail.slice(0, 300)}</pre>
-                </div>
-              </details>
-            ) : null}
-          </div>
-        ) : null}
-        <details className="why">
-          <summary>用本地模型前要准备什么</summary>
-          <div className="why-body">
-            先在跑模型的电脑上启动 vLLM-Omni（默认端口 8099），浏览器必须能访问这个地址；同机最省事，远程用 SSH 端口转发。
-            <br />
-            启动 vLLM 时要允许应用 origin，02-start.sh 已经加了 --allowed-origins。
-            <br />
-            如果这个页面是 HTTPS 而本地服务是 HTTP，浏览器可能按混合内容拦截；改用端口转发或同源反代。
-            <br />
-            本地第一次出图可能要几分钟，属正常现象。
-          </div>
-        </details>
       </div>
 
       </>) : null}

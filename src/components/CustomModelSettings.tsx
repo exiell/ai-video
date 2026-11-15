@@ -250,6 +250,41 @@ export function CustomModelSettings() {
     setKeyValue('');
   }
 
+  /**
+   * 本地模型是自定义接入的一种，不再单独配。
+   * 这里只做常用本地服务的预填，字段仍可改。
+   */
+  function openLocalAdd(kind: 'text' | 'image') {
+    const base = emptyForm(kind);
+    setEditing({});
+    setErrors({});
+    setFormMessage(null);
+    setKeyValue('');
+    setForm(
+      kind === 'image'
+        ? {
+            ...base,
+            name: '本地图片模型',
+            protocol: 'vllm-omni-chat-image',
+            baseUrl: 'http://127.0.0.1:8099/v1',
+            model: 'flux-3-image-klein',
+            requiresKey: false,
+            timeoutMs: '600000',
+            maxReferenceImages: '10',
+            maxOutputImages: '1',
+          }
+        : {
+            ...base,
+            name: '本地文字模型',
+            protocol: 'openai-chat',
+            baseUrl: 'http://127.0.0.1:8100/v1',
+            model: 'qwen3.6-27b',
+            requiresKey: false,
+            timeoutMs: '600000',
+          },
+    );
+  }
+
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -368,6 +403,7 @@ export function CustomModelSettings() {
         <h2 className="card-title">自定义接入</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           接你自己的 OpenAI 兼容服务。配置只存在本机，Key 不进配置 JSON；服务需要允许浏览器直连（CORS）。
+          FLUX3、本机 vLLM 等本地模型也在这里配置。
         </p>
 
         <div className="custom-tabs" role="tablist" aria-label="自定义接入类型">
@@ -390,20 +426,54 @@ export function CustomModelSettings() {
           <span className="hint" style={{ marginTop: 0 }}>
             {MODALITY_LABEL[modality]}配置 {items.length} / {MAX_CUSTOM_MODELS_PER_MODALITY}
           </span>
-          <button
-            type="button"
-            className="btn btn-blue btn-sm"
-            disabled={limitReached}
-            aria-label={`新增${MODALITY_LABEL[modality]}自定义接入`}
-            title={limitReached ? '每个类型最多 10 条' : '新增一条自定义接入'}
-            onClick={openAdd}
-          >
-            + 新增{MODALITY_LABEL[modality]}
-          </button>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            {modality === 'text' ? (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={limitReached}
+                aria-label="新建本地文字模型"
+                title={
+                  limitReached
+                    ? '已达 10 条上限，先删一条'
+                    : '预填本机 vLLM / OpenAI 兼容文字服务；字段可改'
+                }
+                onClick={() => openLocalAdd('text')}
+              >
+                新建本地文字模型
+              </button>
+            ) : null}
+            {modality === 'image' ? (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={limitReached}
+                aria-label="新建本地图片模型"
+                title={
+                  limitReached
+                    ? '已达 10 条上限，先删一条'
+                    : '预填本机 vLLM-Omni / FLUX3；字段可改'
+                }
+                onClick={() => openLocalAdd('image')}
+              >
+                新建本地图片模型
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-blue btn-sm"
+              disabled={limitReached}
+              aria-label={`新增${MODALITY_LABEL[modality]}自定义接入`}
+              title={limitReached ? '每个类型最多 10 条' : '新增一条自定义接入'}
+              onClick={openAdd}
+            >
+              + 新增{MODALITY_LABEL[modality]}
+            </button>
+          </div>
         </div>
         {limitReached ? (
           <div className="hint" style={{ marginTop: 4 }}>
-            这个类型已经有 {MAX_CUSTOM_MODELS_PER_MODALITY} 条配置，达到上限。先删一条再加。
+            已达 {MAX_CUSTOM_MODELS_PER_MODALITY} 条上限，先删一条。
           </div>
         ) : null}
 

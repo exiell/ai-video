@@ -417,7 +417,7 @@ describe('边界', () => {
       'button[aria-label="新增文字自定义接入"]',
     );
     expect(addButton?.disabled).toBe(true);
-    expect(el.textContent ?? '').toContain('达到上限');
+    expect(el.textContent ?? '').toContain('已达 10 条上限');
   });
 
   it('地址过长时列表里截断展示，但 title 保留完整地址', () => {
