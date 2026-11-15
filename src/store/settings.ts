@@ -13,6 +13,10 @@ import {
 import type { CustomModelConfig, CustomModelDraft, CustomModelValidation } from '../types/customModel';
 import { DEFAULT_LLM_PROFILE_ID } from '../types/customModel';
 import {
+  DEFAULT_LOCAL_MODEL_ENDPOINT,
+  DEFAULT_LOCAL_TIMEOUT_MS,
+  LOCAL_FLUX3_PROFILE_ID,
+  normalizeLocalEndpoint,
   probeLocalModel,
   type LocalModelCheckOptions,
   type LocalModelCheckResult,
@@ -70,11 +74,20 @@ export interface Prefs {
   proxyPassword: string;
   /**
    * 本地模型端点覆盖（v0.61）。
-   * 空字符串表示用档案默认值（local-flux3 默认 http://127.0.0.1:8099/v1）。
+   * @deprecated v0.64：本地模型已统一进自定义接入；仅保留给未迁移的旧数据/兼容读取。
+   * 迁移完成前这一项会用于生成「本地 FLUX3（自动迁移）」配置。
    */
   localModelEndpoint?: string;
-  /** 本地模型超时覆盖（毫秒）；不填用档案默认 600s */
+  /**
+   * 本地模型超时覆盖（毫秒）。
+   * @deprecated v0.64：同上，迁移后会写入自定义配置的 timeoutMs。
+   */
   localModelTimeoutMs?: number;
+  /**
+   * 一次性迁移标记（v0.64）。
+   * true = 已把旧的本地模型偏好迁移成自定义图片配置，不再重复创建。
+   */
+  localModelMigrated?: boolean;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -88,6 +101,7 @@ const DEFAULT_PREFS: Prefs = {
   proxyPassword: '',
   localModelEndpoint: '',
   localModelTimeoutMs: undefined,
+  localModelMigrated: false,
 };
 
 function safeParse<T>(raw: string | null, fallback: T): T {
@@ -278,6 +292,159 @@ function newCustomId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** 自动迁移生成的配置使用稳定 id，保证写盘失败/重试时不会重复创建 */
+export const MIGRATED_LOCAL_FLUX3_CONFIG_ID = 'migrated-local-flux3';
+
+export interface LocalModelMigrationPlan {
+  prefs: Prefs;
+  configs: CustomModelConfig[];
+  changed: boolean;
+  /** 需要新建并写盘（false = 已有迁移配置，只切默认/写标记） */
+  needsConfigWrite: boolean;
+}
+
+export interface LocalModelMigrationResult extends LocalModelMigrationPlan {
+  configWriteFailed: boolean;
+  prefsWriteFailed: boolean;
+}
+
+function safePersistPrefs(prefs: Prefs): boolean {
+  try {
+    persistPrefs(prefs);
+    return true;
+  } catch {
+    // 隐私模式/配额等写盘失败不应该让应用启动失败；内存值仍然可用
+    return false;
+  }
+}
+
+/**
+ * 计算本地模型 → 自定义接入的迁移计划（纯函数，便于测试）。
+ *
+ * 触发条件（且没有迁移标记）：
+ *  - prefs.localModelEndpoint 非空；或
+ *  - defaultT2iProfileId/defaultReferenceProfileId 指向内置 local-flux3。
+ *
+ * 迁移后内置 local-flux3 仍保留（hidden），旧默认仍可被 findProfile 解析。
+ */
+export function planLocalModelMigration(
+  prefs: Prefs,
+  configs: CustomModelConfig[],
+): LocalModelMigrationPlan {
+  const unchanged: LocalModelMigrationPlan = {
+    prefs,
+    configs,
+    changed: false,
+    needsConfigWrite: false,
+  };
+  if (prefs.localModelMigrated === true) return unchanged;
+
+  const rawEndpoint =
+    typeof prefs.localModelEndpoint === 'string' ? prefs.localModelEndpoint.trim() : '';
+  const defaultsLocal =
+    prefs.defaultT2iProfileId === LOCAL_FLUX3_PROFILE_ID ||
+    prefs.defaultReferenceProfileId === LOCAL_FLUX3_PROFILE_ID;
+  if (rawEndpoint.length === 0 && !defaultsLocal) return unchanged;
+
+  // 旧本地档案生成时会 normalizeLocalEndpoint + chatCompletionsUrl（裸主机自动补 /v1）；
+  // 迁移必须得到同一最终 URL，否则 /v1/models 会变成 /v1/models/chat/completions。
+  const normalized = rawEndpoint.length > 0 ? normalizeLocalEndpoint(rawEndpoint) : undefined;
+  if (rawEndpoint.length > 0 && normalized === undefined) return unchanged;
+  const endpoint =
+    rawEndpoint.length > 0 && normalized !== undefined
+      ? normalized.endsWith('/v1')
+        ? normalized
+        : `${normalized}/v1`
+      : DEFAULT_LOCAL_MODEL_ENDPOINT;
+
+  const profileId = customProfileId('image', MIGRATED_LOCAL_FLUX3_CONFIG_ID);
+  let nextConfigs = configs;
+  let needsConfigWrite = false;
+  const existing = configs.find((config) => config.id === MIGRATED_LOCAL_FLUX3_CONFIG_ID);
+  if (!existing) {
+    // 每模态上限 10：已满且没有迁移配置时不创建，保持旧本地默认可用（最安全）
+    if (countCustomModels(configs, 'image') >= MAX_CUSTOM_MODELS_PER_MODALITY) {
+      return unchanged;
+    }
+    const timeoutCandidate = prefs.localModelTimeoutMs;
+    const timeoutMs =
+      typeof timeoutCandidate === 'number' &&
+      Number.isInteger(timeoutCandidate) &&
+      timeoutCandidate >= 1000 &&
+      timeoutCandidate <= 600_000
+        ? timeoutCandidate
+        : DEFAULT_LOCAL_TIMEOUT_MS;
+    const draft: CustomModelDraft = {
+      name: '本地 FLUX3（自动迁移）',
+      modality: 'image',
+      protocol: 'vllm-omni-chat-image',
+      baseUrl: endpoint,
+      model: 'flux-3-image-klein',
+      requiresKey: false,
+      timeoutMs,
+      capabilities: { maxReferenceImages: 10, maxOutputImages: 1 },
+    };
+    const validation = validateCustomModel(draft);
+    if (!validation.ok || !validation.normalized) {
+      // 端点等字段不合法：安全降级，保持旧本地档案，不写半截配置
+      return unchanged;
+    }
+    const config: CustomModelConfig = {
+      ...validation.normalized,
+      requiresKey: false,
+      capabilities: validation.normalized.capabilities ?? { maxReferenceImages: 10, maxOutputImages: 1 },
+      id: MIGRATED_LOCAL_FLUX3_CONFIG_ID,
+      createdAt: new Date().toISOString(),
+    };
+    nextConfigs = [...configs, config];
+    needsConfigWrite = true;
+  }
+
+  return {
+    prefs: {
+      ...prefs,
+      defaultT2iProfileId: profileId,
+      defaultReferenceProfileId: profileId,
+      localModelMigrated: true,
+    },
+    configs: nextConfigs,
+    changed: true,
+    needsConfigWrite,
+  };
+}
+
+/**
+ * 执行迁移；写盘失败时保留旧 prefs/配置（应用照旧可用）。
+ * 单测可注入 writer 模拟 localStorage 失败。
+ */
+export function applyLocalModelMigration(
+  prefs: Prefs,
+  configs: CustomModelConfig[],
+  options: {
+    writeConfigs?: (configs: CustomModelConfig[]) => boolean;
+    writePrefs?: (prefs: Prefs) => boolean;
+  } = {},
+): LocalModelMigrationResult {
+  const plan = planLocalModelMigration(prefs, configs);
+  if (!plan.changed) {
+    return { ...plan, configWriteFailed: false, prefsWriteFailed: false };
+  }
+  const writeConfigs = options.writeConfigs ?? writeCustomModelConfigs;
+  const writePrefs = options.writePrefs ?? safePersistPrefs;
+  if (plan.needsConfigWrite && !writeConfigs(plan.configs)) {
+    return {
+      prefs,
+      configs,
+      changed: false,
+      needsConfigWrite: false,
+      configWriteFailed: true,
+      prefsWriteFailed: false,
+    };
+  }
+  const prefsWriteFailed = !writePrefs(plan.prefs);
+  return { ...plan, configWriteFailed: false, prefsWriteFailed };
+}
+
 /** 默认档案指向已删除/不存在的自定义配置时，回退到内置默认 */
 function fallbackMissingCustomDefaults(
   prefs: Prefs,
@@ -342,15 +509,16 @@ interface SettingsState {
 // 是为了保证任何读取 Key 的地方看到的都已经是新格式。
 persistMigratedKeys();
 
-const initialCustomModels = readCustomModelConfigs();
-const initialFallback = fallbackMissingCustomDefaults(readPrefs(), initialCustomModels);
-if (initialFallback.changed) persistPrefs(initialFallback.prefs);
+const rawPrefs = readPrefs();
+const migration = applyLocalModelMigration(rawPrefs, readCustomModelConfigs());
+const initialFallback = fallbackMissingCustomDefaults(migration.prefs, migration.configs);
+if (initialFallback.changed) safePersistPrefs(initialFallback.prefs);
 
 export const useSettings = create<SettingsState>((set, get) => ({
   prefs: initialFallback.prefs,
   keys: readKeys(),
   modelOverrides: readOverrides(),
-  customModels: initialCustomModels,
+  customModels: migration.configs,
 
   addCustomModel: (draft) => {
     const validation = validateCustomModel(draft);

@@ -547,6 +547,8 @@ export const LOCAL_MODEL_PROFILES: ModelProfile[] = [
   {
     id: 'local-flux3',
     vendorId: 'local',
+    // 本地模型统一走「自定义接入」后，内置档案只保留兼容解析，不再出现在下拉里
+    hidden: true,
     name: '本地 FLUX3 Image Klein（vLLM-Omni）',
     provider: '本地 vLLM-Omni',
     type: 't2i',
@@ -610,11 +612,15 @@ export function findProfile(id: string): ModelProfile | undefined {
 }
 
 /**
- * 动态全量档案（内置 + 本地 + 自定义）——UI 下一批展示模型下拉时用这个。
- * 内置 `ALL_MODEL_PROFILES` 保持静态，不包含自定义，避免旧测试/旧页面行为变化。
+ * 动态全量档案（内置 + 本地 + 自定义）——UI 展示模型下拉时用这个。
+ *
+ * 默认过滤 `hidden` 档案（例如已迁入自定义接入的 local-flux3）；
+ * 需要兼容/调试时传 `{ includeHidden: true }`。内置 `ALL_MODEL_PROFILES`
+ * 保持静态语义不变（仍包含 local-flux3），避免旧测试/旧页面被破坏。
  */
-export function resolveAllProfiles(): ModelProfile[] {
-  return [...MODEL_PROFILES, ...LOCAL_MODEL_PROFILES, ...readCustomProfiles()];
+export function resolveAllProfiles(options: { includeHidden?: boolean } = {}): ModelProfile[] {
+  const all = [...MODEL_PROFILES, ...LOCAL_MODEL_PROFILES, ...readCustomProfiles()];
+  return options.includeHidden === true ? all : all.filter((profile) => profile.hidden !== true);
 }
 
 

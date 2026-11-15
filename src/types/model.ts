@@ -779,6 +779,12 @@ export interface ModelProfile {
    * 内置档案不填；填了以后文本生成取 min(任务默认上限, 该值)。
    */
   maxOutputTokens?: number;
+  /**
+   * 隐藏档案（v0.64）：`findProfile` / 旧默认仍能解析，但
+   * `resolveAllProfiles()` 默认不返回它，避免在模型下拉里重复出现。
+   * 典型用途：local-flux3 已迁移为自定义图片配置，内置档案只负责兼容旧数据。
+   */
+  hidden?: boolean;
   /** 浏览器直连是否可行。必须实测确认，不得凭推测填写。 */
   corsDirect: 'yes' | 'no' | 'unknown';
   /** 能力声明。三级降级策略靠它决定给用户哪一级。 */
