@@ -5532,6 +5532,98 @@ details.shot-section[open] > summary.shot-section-rail {
 
 /* 任务行与右栏的动作：文字换成箭头，指向哪一行由行本身说明 */
 
+/* 设置页 · 自定义接入（v0.63） */
+.custom-tabs {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.custom-tab-hint {
+  margin-left: 6px;
+  color: var(--text-faint);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.custom-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.custom-model {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+
+.custom-model-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.custom-model-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.custom-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.custom-url {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-status.is-ok {
+  color: var(--ok);
+}
+
+.custom-status.is-warning {
+  color: var(--warning);
+}
+
+.custom-status.is-error {
+  color: var(--error);
+}
+
+.custom-status.is-quiet {
+  color: var(--text-faint);
+}
+
+.custom-status {
+  font-size: 12px;
+}
+
+.custom-capabilities {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.field-error {
+  margin-top: 2px;
+  color: var(--error);
+  font-size: 12px;
+}
+
 /* ==========================================================================
    可访问性工具类
    ========================================================================== */

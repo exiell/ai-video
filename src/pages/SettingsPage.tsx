@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Field, WhyDetails } from '../components/bits';
 import { RichText } from '../components/bits';
 import { Icon, type IconName } from '../components/Icon';
@@ -7,9 +7,11 @@ import { THEMES, useTheme } from '../store/theme';
 import { estimateUsage, assetsByteSize, listAssets } from '../services/storage';
 import { useAppStore } from '../store/app';
 import { Link, NavLink, useParams } from 'react-router-dom';
-import { LOCAL_MODEL_PROFILES, MODEL_PROFILES } from '../data/models/profiles';
+import { LOCAL_MODEL_PROFILES, MODEL_PROFILES, resolveAllProfiles } from '../data/models/profiles';
+import { isCustomProfileId } from '../data/customModels';
 import { VENDORS, findVendor, modelsOfVendor, vendorCors } from '../data/models/vendors';
 import { checkLocalModel, currentTransport, useSettings } from '../store/settings';
+import { CustomModelSettings } from '../components/CustomModelSettings';
 import {
   DEFAULT_LOCAL_MODEL_ENDPOINT,
   DEFAULT_LOCAL_TIMEOUT_MS,
@@ -29,6 +31,7 @@ import type { ModelProfile } from '../types/model';
 const SECTIONS: { key: string; label: string; title: string; blurb: string }[] = [
   { key: 'models', label: '默认模型', title: '默认模型', blurb: '选好以后就不用再管。' },
   { key: 'connection', label: '连接与 Key', title: '连接与 Key', blurb: '填 Key，测能不能连上。' },
+  { key: 'custom', label: '自定义接入', title: '自定义接入', blurb: '接自己的 OpenAI 兼容服务。' },
   { key: 'data', label: '数据与备份', title: '数据与备份', blurb: '你的东西都存在这台电脑上。' },
   { key: 'appearance', label: '外观', title: '外观', blurb: '换配色和字体，不改功能。' },
   { key: 'language', label: '语言', title: '语言', blurb: '界面与提示词的语言。' },
@@ -78,6 +81,16 @@ export function SettingsPage() {
     cors: vendorCors(vendor.id),
   })).filter((card) => card.models.length > 0);
 
+  // 订阅自定义配置：新增/删除后要重新生成下拉候选（resolveAllProfiles 读持久化结果）
+  const customModels = useSettings((s) => s.customModels);
+  const allProfiles = useMemo(() => resolveAllProfiles(), [customModels]);
+  const customLlmProfiles = allProfiles.filter(
+    (profile) => isCustomProfileId(profile.id) && profile.type === 'llm',
+  );
+  const customImageProfiles = allProfiles.filter(
+    (profile) => isCustomProfileId(profile.id) && profile.type === 't2i',
+  );
+
   const llmProfiles = MODEL_PROFILES.filter((p) => p.type === 'llm');
   const t2iProfiles = MODEL_PROFILES.filter((p) => p.type === 't2i');
   // 本地档案不混进 MODEL_PROFILES；候选里单独一组，默认档案仍是云端
@@ -89,10 +102,18 @@ export function SettingsPage() {
   const localTimeoutSec = Math.round(
     (prefs.localModelTimeoutMs ?? localProfile?.timeoutMs ?? DEFAULT_LOCAL_TIMEOUT_MS) / 1000,
   );
-  const llmOptions = llmProfiles.map((p) => ({
-    value: p.id,
-    label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
-  }));
+  const llmOptions = [
+    ...llmProfiles.map((p) => ({
+      value: p.id,
+      label: `${findVendor(p.vendorId)?.name ?? p.provider} · ${p.name.replace(/^[^·]*·\s*/, '')}`,
+    })),
+    ...customLlmProfiles.map((p) => ({
+      value: p.id,
+      label: p.name,
+      hint: '自定义接入',
+      group: '自定义（文字）',
+    })),
+  ];
   const t2iOptions = [
     ...t2iProfiles.map((p) => ({
       value: p.id,
@@ -106,6 +127,12 @@ export function SettingsPage() {
       label: '本地 FLUX3（需本机 vLLM-Omni）',
       hint: '不需要 API Key，数据不出本机',
       group: '本地（需自己启动服务）',
+    })),
+    ...customImageProfiles.map((p) => ({
+      value: p.id,
+      label: p.name,
+      hint: '自定义接入',
+      group: '自定义（图片）',
     })),
   ];
 
@@ -315,6 +342,8 @@ export function SettingsPage() {
       </div>
 
       </>) : null}
+
+      {tab === 'custom' ? <CustomModelSettings /> : null}
 
       {tab === 'connection' ? (<>
       <div className="card">
@@ -571,6 +600,9 @@ export function SettingsPage() {
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
           本地 FLUX3（需本机 vLLM-Omni）。不需要 API Key，数据不出本机；默认不启用，不影响云端模型。
+        </p>
+        <p className="hint" style={{ marginTop: 0 }}>
+          其他本地模型请用「自定义接入」里的图片配置接入。
         </p>
         <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
           <span className="tag">最多 10 张参考图</span>
