@@ -22,6 +22,7 @@ import {
 import { useAppStore } from './app';
 import { currentTransport, useSettings } from './settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
+import { applyLocalProfileOverrides } from '../services/gateway/localModel';
 import { generateImages, toAssets, type GenerateImagesOutcome } from '../services/image/generate';
 import { prepareReference, type PreparePurpose } from '../services/image/prepare';
 import {
@@ -239,13 +240,19 @@ function resolveImageProfile(preferReference: boolean): ResolvedImageProfile {
 
   const referenceId = prefs.defaultReferenceProfileId || DEFAULT_REFERENCE_PROFILE_ID;
   const plainId = prefs.defaultT2iProfileId || DEFAULT_T2I_PROFILE_ID;
-  const profile = findProfile(preferReference ? referenceId : plainId) ?? findProfile(plainId);
+  const found = findProfile(preferReference ? referenceId : plainId) ?? findProfile(plainId);
 
-  if (!profile) {
+  if (!found) {
     return { ok: false, error: '没有可用的出图档案。' };
   }
+  // v0.61：本地档案允许在设置里覆盖端点/超时；不改内置档案对象
+  const profile = applyLocalProfileOverrides(found, {
+    endpoint: prefs.localModelEndpoint,
+    timeoutMs: prefs.localModelTimeoutMs,
+  });
   const apiKey = (keys[profile.vendorId ?? ''] ?? '').trim();
-  if (apiKey.length === 0) {
+  // 本地模型（authType: 'none'）不需要 Key，也不应该被 Key 校验挡住
+  if (apiKey.length === 0 && profile.authType !== 'none') {
     return {
       ok: false,
       error: `还没有填「${profile.name}」的 API Key。去「设置」页填上并点「测试连接」确认能通。`,
@@ -951,7 +958,8 @@ async function runGeneration(args: RunArgs): Promise<void> {
 
   const resolved = resolveImageProfile(preferReference);
 
-  if (!resolved.ok || !resolved.profile || !resolved.apiKey) {
+  const requiresKey = resolved.profile !== undefined && resolved.profile.authType !== 'none';
+  if (!resolved.ok || !resolved.profile || (requiresKey && !resolved.apiKey)) {
     const message = resolved.error ?? '出图模型还没配置好。';
     set((s) => ({
       feedback: { ...s.feedback, [key]: { kind: 'error', message, warnings: [] } },
@@ -959,7 +967,8 @@ async function runGeneration(args: RunArgs): Promise<void> {
     return;
   }
 
-  const { profile, apiKey } = resolved as { profile: ModelProfile; apiKey: string };
+  const { profile } = resolved as { profile: ModelProfile };
+  const apiKey = resolved.apiKey ?? '';
   set((s) => ({ pending: key, feedback: { ...s.feedback, [key]: undefined } }));
 
   const transport = currentTransport();

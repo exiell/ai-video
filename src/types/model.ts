@@ -467,7 +467,17 @@ export interface CheckReport {
 // ---------------------------------------------------------------------------
 
 /** 接口协议。OpenAI 兼容载荷与 DashScope 原生载荷完全不同，必须显式区分。 */
-export type ApiFlavor = 'openai' | 'dashscope-sync' | 'dashscope-async';
+export type ApiFlavor =
+  | 'openai'
+  | 'dashscope-sync'
+  | 'dashscope-async'
+  /**
+   * OpenAI 风格的 `/v1/chat/completions` 多图编辑（v0.61 · 本地 FLUX3）。
+   *
+   * 与 `openai` 的图生图载荷不同：prompt 与参考图都放在 messages.content 里，
+   * 生成参数放 `extra_body`，输出图从 assistant message 的 image_url 里取。
+   */
+  | 'chat-completions-image';
 
 // ---------------------------------------------------------------------------
 // 参考图能力声明（v0.58 · P1/P2-a）
@@ -560,6 +570,8 @@ export interface ImageRequest {
   negativePrompt?: string;
   /** 画幅比例，例：9:16。由适配层换算成各协议需要的尺寸格式。 */
   aspectRatio?: string;
+  /** 明确尺寸（例 1024x1024）；本地 FLUX3 等 chat 协议用 size 而不是 aspect。 */
+  size?: string;
   /** 出图张数 */
   count?: number;
   seed?: number;
@@ -696,7 +708,11 @@ export interface ModelProfile {
   /** 提示词语言 */
   lang: 'zh' | 'en';
   endpoint: string;
-  authType: 'bearer' | 'header-key';
+  /**
+   * 鉴权方式。`none` 用于本地模型（vLLM-Omni 默认无鉴权）。
+   * 不是「Key 可以空着」的宽松写法——`none` 时**不会**发任何 Authorization 头。
+   */
+  authType: 'bearer' | 'header-key' | 'none';
   /**
    * 出图请求体的**字段名映射**。
    *
@@ -753,6 +769,11 @@ export interface ModelProfile {
    * 意味着拿到 URL 之后**必须立刻下载留存**，不能只存 URL。
    */
   imageUrlTtlHours?: number;
+  /**
+   * 单次生成请求的默认超时（毫秒）。缺省沿用网关的 180s/60s。
+   * 本地模型（FLUX3）默认 600s；设置页可覆盖（见 Prefs.localModelTimeoutMs）。
+   */
+  timeoutMs?: number;
   /** 浏览器直连是否可行。必须实测确认，不得凭推测填写。 */
   corsDirect: 'yes' | 'no' | 'unknown';
   /** 能力声明。三级降级策略靠它决定给用户哪一级。 */

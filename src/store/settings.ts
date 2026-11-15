@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import { DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID, MODEL_PROFILES } from '../data/models/profiles';
+import {
+  probeLocalModel,
+  type LocalModelCheckOptions,
+  type LocalModelCheckResult,
+} from '../services/gateway/localModel';
 
 /**
  * 设置状态（方案.md v0.6 §3.2 M0 + §0.1 第 4 条 BYOK）
@@ -51,6 +56,13 @@ export interface Prefs {
   proxyBaseUrl: string;
   /** 代理通行口令 */
   proxyPassword: string;
+  /**
+   * 本地模型端点覆盖（v0.61）。
+   * 空字符串表示用档案默认值（local-flux3 默认 http://127.0.0.1:8099/v1）。
+   */
+  localModelEndpoint?: string;
+  /** 本地模型超时覆盖（毫秒）；不填用档案默认 600s */
+  localModelTimeoutMs?: number;
 }
 
 const DEFAULT_PREFS: Prefs = {
@@ -62,6 +74,8 @@ const DEFAULT_PREFS: Prefs = {
   defaultReferenceProfileId: DEFAULT_REFERENCE_PROFILE_ID,
   proxyBaseUrl: '',
   proxyPassword: '',
+  localModelEndpoint: '',
+  localModelTimeoutMs: undefined,
 };
 
 function safeParse<T>(raw: string | null, fallback: T): T {
@@ -335,6 +349,25 @@ function writeKeys(keys: Record<string, string>, remember: boolean): void {
   } else {
     localStorage.removeItem(LS_KEYS);
   }
+}
+
+/**
+ * 测试本地模型连接（v0.61，UI 下一批直接调用）。
+ *
+ * 默认用设置里的 localModelEndpoint（空则用档案默认端点）；
+ * 也可传 endpoint 做「先测再保存」。不抛异常，返回可展示的一句话。
+ */
+export async function checkLocalModel(
+  options: LocalModelCheckOptions & { endpoint?: string } = {},
+): Promise<LocalModelCheckResult> {
+  const prefs = useSettings.getState().prefs;
+  const endpoint = options.endpoint ?? prefs.localModelEndpoint?.trim() ?? '';
+  const timeoutMs = options.timeoutMs ?? prefs.localModelTimeoutMs;
+  return probeLocalModel(endpoint || undefined, {
+    ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs: Math.min(timeoutMs, 10_000) } : {}),
+    ...(options.expectedModel ? { expectedModel: options.expectedModel } : {}),
+  });
 }
 
 /** 组装给 gateway 用的 transport 配置；没填代理地址就返回 undefined（走直连） */

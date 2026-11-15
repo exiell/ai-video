@@ -12,6 +12,7 @@ import {
   parseDashScopeTaskStatus,
   withReferenceInstruction,
 } from '../gateway/dashscope';
+import { executeImageGeneration, getImageAdapter } from '../gateway/imageAdapters';
 import { newId } from '../storage';
 
 /**
@@ -171,6 +172,8 @@ export interface GenerateImagesOptions {
   prefetch?: boolean;
   /** 测试用：自定义预取实现 */
   prefetchImpl?: (url: string) => Promise<PrefetchedImage>;
+  /** 调用方取消（v0.61：本地生图可能很慢，允许用户中止） */
+  signal?: AbortSignal;
 }
 
 export interface GenerateImagesOutcome {
@@ -198,6 +201,7 @@ export async function generateImages(
     fetchImpl,
     prefetch = true,
     prefetchImpl,
+    signal,
   } = options;
 
   const warnings: string[] = [];
@@ -265,6 +269,62 @@ export async function generateImages(
    *
    * 现在只有一处构造：网关。档案声明字段名，网关照着拼。
    */
+  /*
+    v0.61：本地 FLUX3 走统一的 chat-completions 适配器。
+    云端档案（openai/dashscope）继续走下面原有链路，保证既有行为字节级不变。
+  */
+  if (flavor === 'chat-completions-image') {
+    const adapter = getImageAdapter(profile);
+    try {
+      const executed = await executeImageGeneration({
+        profile,
+        apiKey,
+        request: {
+          prompt: effectivePrompt,
+          ...(req.negativePrompt !== undefined ? { negativePrompt: req.negativePrompt } : {}),
+          ...(req.aspectRatio !== undefined ? { aspectRatio: req.aspectRatio } : {}),
+          ...(req.size !== undefined ? { size: req.size } : {}),
+          count: Math.min(req.count ?? 1, profile.capabilities.maxOutputImages || 1),
+          ...(req.seed !== undefined ? { seed: req.seed } : {}),
+          referenceImages,
+          timeoutMs: profile.timeoutMs,
+        },
+        ...(transport ? { transport } : {}),
+        ...(fetchImpl ? { fetchImpl } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      if (executed.images.length === 0) {
+        return {
+          ok: false,
+          images: [],
+          warnings,
+          error:
+            '接口调用成功了，但没有返回图片。可能是提示词被安全策略拦下，或者返回结构不在预期内。',
+        };
+      }
+      const requestId = extractRequestId(executed.response);
+      return {
+        ok: true,
+        images: executed.images.map((image) => ({
+          // 本地响应本来就是 data URI；url 与 dataUrl 同值，兼容既有素材结构
+          url: image.dataUrl,
+          dataUrl: image.dataUrl,
+          ...(image.width !== undefined ? { width: image.width } : {}),
+          ...(image.height !== undefined ? { height: image.height } : {}),
+        })),
+        warnings,
+        ...(requestId !== undefined ? { requestId } : {}),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        images: [],
+        warnings,
+        error: adapter.normalizeError(error),
+      };
+    }
+  }
+
   const payload = buildImagePayloadFor(profile, {
     model: profile.model ?? profile.name,
     prompt: effectivePrompt,

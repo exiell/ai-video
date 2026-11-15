@@ -531,6 +531,63 @@ export const MODEL_PROFILES: ModelProfile[] = [
   },
 ];
 
+/**
+ * 本地模型档案（v0.61 第一批：本地 FLUX3）。
+ *
+ * 为什么不直接塞进 `MODEL_PROFILES`：
+ *  - 既有档案测试把 `MODEL_PROFILES` 当成「云端档案集合」来断言（例如 endpoint 必须是 https）；
+ *    本地档案是 http://127.0.0.1，塞进去会让这些「既有行为不变」的测试误报；
+ *  - 旧 UI 也没有「本地」分组，强行混进列表会改变现有档案顺序/数量。
+ *
+ * 所以单独导出；`findProfile()` 会同时查两份。UI 下一批用
+ * `LOCAL_MODEL_PROFILES` / `ALL_MODEL_PROFILES` 展示「本地模型」。
+ */
+export const LOCAL_MODEL_PROFILES: ModelProfile[] = [
+  {
+    id: 'local-flux3',
+    vendorId: 'local',
+    name: '本地 FLUX3 Image Klein（vLLM-Omni）',
+    provider: '本地 vLLM-Omni',
+    type: 't2i',
+    group: 't2i-experimental',
+    lang: 'en',
+    endpoint: 'http://127.0.0.1:8099/v1',
+    authType: 'none',
+    apiFlavor: 'chat-completions-image',
+    model: 'flux-3-image-klein',
+    corsDirect: 'unknown',
+    timeoutMs: 600_000,
+    capabilities: {
+      negativePrompt: false,
+      seed: true,
+      referenceImage: true,
+      maxReferenceImages: 10,
+      maxOutputImages: 1,
+      /*
+        v0.61：按本地冒烟已核实的接口声明（不是猜）：
+        - 多图走 /v1/chat/completions 的 messages content，顺序即语义；
+        - 最多 10 张（BFL 官方 / vLLM-Omni recipe）；
+        - 接受 data URI；
+        - 画幅按 size 参数（aspectFollows: 'param'）。
+      */
+      reference: {
+        semantics: 'reference',
+        maxImages: 10,
+        acceptsDataUri: true,
+        aspectFollows: 'param',
+      },
+    },
+    notes:
+      '**本地模型，先看说明再用。** 需要在本机跑 vLLM-Omni 的 FLUX3（默认 http://127.0.0.1:8099/v1，' +
+      '模型名 flux-3-image-klein），不需要 API Key；接口走 chat/completions 多图，' +
+      '因此浏览器直连的 CORS 约束**未能核实**：需要端口转发 + vLLM 配 --allowed-origins。' +
+      '端点可在设置页用 localModelEndpoint 覆盖；超时默认 600 秒。',
+  },
+];
+
+/** 内置档案 + 本地档案（UI 展示用；`findProfile` 也查这两份） */
+export const ALL_MODEL_PROFILES: ModelProfile[] = [...MODEL_PROFILES, ...LOCAL_MODEL_PROFILES];
+
 /** 当前默认的文生图档案 id */
 export const DEFAULT_T2I_PROFILE_ID = 'qwen-image';
 
@@ -538,7 +595,9 @@ export const DEFAULT_T2I_PROFILE_ID = 'qwen-image';
 export const DEFAULT_REFERENCE_PROFILE_ID = 'qwen-image-edit';
 
 export function findProfile(id: string): ModelProfile | undefined {
-  return MODEL_PROFILES.find((p) => p.id === id);
+  return (
+    MODEL_PROFILES.find((p) => p.id === id) ?? LOCAL_MODEL_PROFILES.find((p) => p.id === id)
+  );
 }
 
 

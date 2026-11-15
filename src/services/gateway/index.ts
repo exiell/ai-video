@@ -1,4 +1,4 @@
-import type { ModelProfile } from '../../types/model';
+import type { ApiFlavor, ModelProfile } from '../../types/model';
 import {
   buildDashScopeAsyncPayload,
   buildDashScopeHeaders,
@@ -291,6 +291,11 @@ export interface TransportConfig {
 export interface RequestOptions {
   profile: ModelProfile;
   apiKey: string;
+  /**
+   * 目标 URL 覆盖（v0.61）。本地 chat-completions 适配器需要把 endpoint
+   * `http://host:8099/v1` 拼成 `/chat/completions`；云端档案不传，行为不变。
+   */
+  url?: string;
   /** 相对 endpoint 的路径；profile.endpoint 已是完整地址，这里一般不需要 */
   body: unknown;
   transport?: TransportConfig;
@@ -316,6 +321,8 @@ export function buildProxyUrl(proxyBaseUrl: string, target: string): string {
  */
 export function buildHeaders(profile: ModelProfile, apiKey: string): Record<string, string> {
   const flavor = profile.apiFlavor ?? 'openai';
+  // 本地模型无鉴权：明确不发 Authorization / x-api-key（避免把空 Key 发出去）
+  if (profile.authType === 'none') return { 'Content-Type': 'application/json' };
   if (flavor === 'dashscope-sync' || flavor === 'dashscope-async') {
     return buildDashScopeHeaders(flavor, apiKey);
   }
@@ -326,7 +333,7 @@ export function buildHeaders(profile: ModelProfile, apiKey: string): Record<stri
 }
 
 /** 该档案走的是哪套协议 */
-export function flavorOf(profile: ModelProfile): 'openai' | 'dashscope-sync' | 'dashscope-async' {
+export function flavorOf(profile: ModelProfile): ApiFlavor {
   return profile.apiFlavor ?? 'openai';
 }
 
@@ -463,9 +470,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
   } = options;
 
   const useProxy = Boolean(transport?.proxyBaseUrl);
-  const url = useProxy
-    ? buildProxyUrl(transport!.proxyBaseUrl!, profile.endpoint)
-    : profile.endpoint;
+  const target = options.url ?? profile.endpoint;
+  const url = useProxy ? buildProxyUrl(transport!.proxyBaseUrl!, target) : target;
 
   const headers = buildHeaders(profile, apiKey);
   if (useProxy && transport?.applicationPassword) {
@@ -487,7 +493,12 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     controller.abort();
   }, timeoutMs);
   const onCallerAbort = (): void => controller.abort();
-  if (signal) signal.addEventListener('abort', onCallerAbort, { once: true });
+  if (signal) {
+    signal.addEventListener('abort', onCallerAbort, { once: true });
+    // 如果传进来的 signal 在注册监听前就已经 abort（例如用户立刻取消），
+    // addEventListener 不会再触发一次；这里主动补一刀，避免请求继续挂着。
+    if (signal.aborted) controller.abort();
+  }
 
   try {
     let response: Response;
@@ -645,6 +656,7 @@ export function buildImagePayloadFor(
      */
     ...(options.referenceImages !== undefined ? { referenceImages: options.referenceImages } : {}),
   };
+  if (flavor === 'chat-completions-image') return buildChatCompletionsImagePayload(options);
   if (flavor === 'dashscope-sync') return buildDashScopeSyncPayload(common);
   if (flavor === 'dashscope-async') return buildDashScopeAsyncPayload(common);
   // 有字段映射就按映射构造；没有就是 OpenAI 形状
@@ -709,6 +721,124 @@ export function buildMappedImagePayload(
   return payload;
 }
 
+/**
+ * 本地 chat-completions 图片协议（v0.61 · FLUX3）。
+ *
+ * 与 OpenAI 文生图不是一回事：
+ *  - prompt 与参考图都在 `messages[0].content` 里，参考图按顺序作为多个
+ *    `image_url`（顺序即语义）；
+ *  - 生成参数（size/seed）放 `extra_body`；
+ *  - **不能**发 guidance_scale / negative_prompt（FLUX3 蒸馏包会拒绝或忽略）。
+ */
+export function chatCompletionsUrl(endpoint: string): string {
+  const base = endpoint.replace(/\/+$/, '');
+  if (base.endsWith('/chat/completions')) return base;
+  if (base.endsWith('/v1')) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+/** 构造本地 FLUX3 的 `/v1/chat/completions` 请求体（顺序即参考图语义） */
+export function buildChatCompletionsImagePayload(
+  options: ImageRequestOptions,
+): Record<string, unknown> {
+  const content: Record<string, unknown>[] = [
+    { type: 'text', text: options.prompt },
+  ];
+  for (const reference of options.referenceImages ?? []) {
+    content.push({ type: 'image_url', image_url: { url: reference } });
+  }
+
+  const extraBody: Record<string, unknown> = {};
+  const size =
+    options.imageSize ??
+    (options.aspectRatio !== undefined ? ratioToSizeFor(options.aspectRatio) : undefined);
+  if (size !== undefined) extraBody.size = size;
+  if (options.seed !== undefined) extraBody.seed = options.seed;
+
+  return {
+    model: options.model,
+    messages: [{ role: 'user', content }],
+    ...(Object.keys(extraBody).length > 0 ? { extra_body: extraBody } : {}),
+  };
+}
+
+/**
+ * 从本地 chat-completions 响应里取图片（data URI）。
+ *
+ * 兼容：
+ *  - `choices[0].message.content[]` 里多个 `image_url.url`（官方形状）；
+ *  - content 是字符串（data URI/URL/JSON 字符串）；
+ *  - 顶层 `data[].b64_json` / `data[].url`（部分 vLLM-Omni 版本的通用图片响应）。
+ * 返回顺序即 content 里的顺序；b64 统一补成 data URI。
+ */
+export function extractChatCompletionsImageUrls(response: unknown): string[] {
+  const out: string[] = [];
+  const push = (value: unknown): void => {
+    if (typeof value !== 'string' || !value.trim()) return;
+    const trimmed = value.trim();
+    if (trimmed.startsWith('data:image/')) out.push(trimmed);
+    else if (/^https?:\/\//.test(trimmed)) out.push(trimmed);
+    else if (/^[A-Za-z0-9+/=\s]+$/.test(trimmed) && trimmed.length > 64) {
+      out.push(`data:image/png;base64,${trimmed.replace(/\s+/g, '')}`);
+    }
+  };
+  const visitContent = (content: unknown): void => {
+    if (typeof content === 'string') {
+      const trimmed = content.trim();
+      if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+        try {
+          visitContent(JSON.parse(trimmed) as unknown);
+          return;
+        } catch {
+          // 不是 JSON，继续按 URL/data URI 试
+        }
+      }
+      push(trimmed);
+      return;
+    }
+    if (Array.isArray(content)) {
+      for (const item of content) visitContent(item);
+      return;
+    }
+    if (typeof content !== 'object' || content === null) return;
+    const record = content as Record<string, unknown>;
+    const imageUrl = record.image_url;
+    if (typeof imageUrl === 'string') push(imageUrl);
+    else if (typeof imageUrl === 'object' && imageUrl !== null) {
+      const nested = imageUrl as Record<string, unknown>;
+      push(nested.url);
+      push(nested.b64_json);
+    }
+    push(record.url);
+    push(record.b64_json);
+    if (record.content !== undefined) visitContent(record.content);
+  };
+
+  if (typeof response === 'object' && response !== null) {
+    const root = response as Record<string, unknown>;
+    const choices = root.choices;
+    if (Array.isArray(choices)) {
+      for (const choice of choices) {
+        if (typeof choice !== 'object' || choice === null) continue;
+        const message = (choice as Record<string, unknown>).message;
+        if (typeof message === 'object' && message !== null) {
+          visitContent((message as Record<string, unknown>).content);
+        }
+      }
+    }
+    const data = root.data;
+    if (Array.isArray(data)) {
+      for (const item of data) {
+        if (typeof item !== 'object' || item === null) continue;
+        push((item as Record<string, unknown>).url);
+        push((item as Record<string, unknown>).b64_json);
+      }
+    }
+  }
+
+  return [...new Set(out)];
+}
+
 /** 把比例换算成方形像素尺寸（各家对 size 的取值要求不同，这里给保守的方图） */
 function ratioToSizeFor(ratio: string): string {
   if (ratio === '16:9') return '1280x720';
@@ -733,6 +863,7 @@ export function extractOpenAiImageUrls(response: unknown): string[] {
 /** 按档案的协议风格解析出图片 URL */
 export function extractImageUrlsFor(profile: ModelProfile, response: unknown): string[] {
   const flavor = flavorOf(profile);
+  if (flavor === 'chat-completions-image') return extractChatCompletionsImageUrls(response);
   if (flavor === 'dashscope-sync') return extractDashScopeSyncImages(response);
   // 异步接口的创建任务响应里没有图；这里返回空，由轮询逻辑负责取图
   if (flavor === 'dashscope-async') return extractDashScopeSyncImages(response);
