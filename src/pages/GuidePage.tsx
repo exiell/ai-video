@@ -114,7 +114,7 @@ export function GuidePage() {
 
   const estShots = Math.max(1, Math.round((project.brief.targetDuration || 30) / 4));
   const activeAspect =
-    ASPECT_CARDS.find((a) => a.value === project.brief.aspectRatio) ?? ASPECT_CARDS[1];
+    ASPECT_CARDS.find((a) => a.value === project.brief.aspectRatio) ?? ASPECT_CARDS[0]!;
 
   return (
     <div className="guide-v2">
@@ -264,6 +264,7 @@ export function GuidePage() {
                         type="button"
                         className="btn btn-ghost btn-icon is-danger"
                         aria-label={`删除场次 ${scene.label}`}
+                        title={`删除场次 ${scene.label}`}
                         onClick={() => removeStoryScene(scene.id)}
                       >
                         <Icon name="trash" size={14} />
