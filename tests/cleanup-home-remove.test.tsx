@@ -98,7 +98,7 @@ describe('主页删除存档的失败提示', () => {
     expect(el.querySelectorAll('.saved-row:not(.saved-head)').length).toBe(1);
   });
 
-  it('删除成功后刷新列表，空列表显示空状态', async () => {
+  it('删除成功后刷新列表；列表为空时新版主页不再渲染存档区（旧空状态文案已移除）', async () => {
     mocks.listProjects.mockResolvedValueOnce([makeRecord()]).mockResolvedValueOnce([]);
     useAppStore.setState({ removeProject: async () => ({ ok: true }) });
 
@@ -110,7 +110,8 @@ describe('主页删除存档的失败提示', () => {
       await Promise.resolve();
     });
 
-    expect(el.textContent ?? '').toContain('还没有保存过的项目。');
+    expect(el.querySelector('.saved-section')).toBeNull();
+    expect(el.querySelectorAll('.saved-row').length).toBe(0);
   });
 });
 
@@ -133,8 +134,8 @@ describe('主页列表读取失败的兜底', () => {
     });
 
     const text = el.textContent ?? '';
-    expect(text).toContain('项目列表没读出来');
-    expect(text).toContain('已经打开的项目不受影响');
+    expect(text).toContain('项目列表暂时没读出来');
+    expect(text).toContain('当前项目不受影响');
     // 关键：没把列表清空
     expect(el.querySelectorAll('.saved-row:not(.saved-head)').length).toBe(1);
   });

@@ -65,7 +65,9 @@ describe('作品主页 · 打开项目之后仍能新建', () => {
     */
     const el = render(<HomePage />);
     const buttons = [...el.querySelectorAll('button')].map((b) => b.textContent?.trim() ?? '');
-    expect(buttons.some((t) => t.includes('新建项目'))).toBe(true);
+    expect(
+      buttons.some((t) => t.includes('新建') || t.includes('创建新项目')),
+    ).toBe(true);
     cleanup(el);
   });
 
@@ -73,7 +75,7 @@ describe('作品主页 · 打开项目之后仍能新建', () => {
     useAppStore.setState({ project: null });
     const el = render(<HomePage />);
     const buttons = [...el.querySelectorAll('button')].map((b) => b.textContent?.trim() ?? '');
-    expect(buttons.some((t) => t.includes('新建空项目'))).toBe(true);
+    expect(buttons.some((t) => t.includes('创建新项目') || t.includes('新建'))).toBe(true);
     cleanup(el);
   });
 });
@@ -100,7 +102,7 @@ describe('引导向导 · 风格预设要能取消', () => {
    */
   function goToStyleStep(el: HTMLElement): void {
     const stepBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('风格与规格'),
+      b.textContent?.includes('画风与规格'),
     );
     if (!stepBtn) throw new Error('找不到「风格与规格」这一步');
     act(() => (stepBtn as HTMLButtonElement).click());
@@ -167,7 +169,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     cleanup(el2);
   });
 
-  it('**风格与规格这一步有「用这段中文生成英文关键词」按钮**', () => {
+  it('**风格与规格这一步有「用这段中文生成英文风格词」按钮**', () => {
     /*
       「风格倾向」是中文，真正进提示词的是下面的英文关键词。
       新手写得出一堆中文、写不出英文，于是风格词一直是空的 —— 风格根本没生效。
@@ -176,7 +178,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     const el = render(<GuidePage />);
     goToStyleStep(el);
     const labels = [...el.querySelectorAll('button')].map((b) => b.textContent?.trim() ?? '');
-    expect(labels.some((t) => t.includes('用这段中文生成英文关键词'))).toBe(true);
+    expect(labels.some((t) => t.includes('用这段中文生成英文风格词'))).toBe(true);
     cleanup(el);
   });
 
@@ -185,7 +187,7 @@ describe('引导向导 · 风格预设要能取消', () => {
     goToStyleStep(el);
     const html = el.innerHTML;
     // GenerateBar 在未就绪时会渲染原因与入口
-    expect(html).toMatch(/还不能生成|去设置|用这段中文生成英文关键词/);
+    expect(html).toMatch(/还不能生成|去设置|用这段中文生成英文风格词/);
     cleanup(el);
   });
 

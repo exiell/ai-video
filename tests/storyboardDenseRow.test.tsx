@@ -74,16 +74,18 @@ describe('分镜折叠行只留核心信息', () => {
     expect((el.textContent ?? '').includes('单镜上限')).toBe(false);
   });
 
-  it('展开后四个板块里，声音与剪辑两段默认收起', () => {
+  it('展开后「机位 · 台词 · 声音 · 情绪」整组默认收起', () => {
     const el = render(<StoryboardPage />);
     const toggle = el.querySelector('.shot-card .expand-toggle') as HTMLButtonElement;
     act(() => {
       toggle.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
-    const sections = [...el.querySelectorAll('.shot-card .shot-section')];
-    const closed = sections.filter((node) => node.tagName === 'DETAILS' && !node.hasAttribute('open'));
-    expect(sections.length).toBe(4);
-    expect(closed.length).toBe(2);
+    // 新版把机位/台词/声音/情绪/剪辑收进一个默认折叠的 shot-extras
+    const extras = el.querySelector<HTMLDetailsElement>('.shot-card details.shot-extras');
+    expect(extras).toBeTruthy();
+    expect(extras!.open).toBe(false);
+    expect(extras!.querySelector('.card-fold-title')?.textContent ?? '').toContain('声音');
+    expect(extras!.querySelector('.card-fold-title')?.textContent ?? '').toContain('情绪');
   });
 });
 

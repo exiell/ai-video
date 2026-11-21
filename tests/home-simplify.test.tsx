@@ -103,8 +103,8 @@ function nextCta(el: HTMLElement): string {
 }
 
 function deliveryStep(el: HTMLElement): Element | undefined {
-  return [...el.querySelectorAll('.stage-step')].find(
-    (node) => (node.querySelector('.stage-step-name')?.textContent ?? '').trim() === '交付',
+  return [...el.querySelectorAll('.stage-step')].find((node) =>
+    (node.querySelector('.stage-step-name')?.textContent ?? '').trim().endsWith('交付中心'),
   );
 }
 
@@ -126,42 +126,32 @@ beforeEach(() => {
 });
 
 describe('主页说明字段精简', () => {
-  it('下一步卡只留标签、标题、按钮；待办/检查/参考图/存档/最近镜头不再挂解释性文案', async () => {
+  it('下一步卡只留标签、标题、按钮；主页不再挂旧版解释性文案', async () => {
     useImage.setState({ gallery: emptyLoadedGallery() });
     const el = render();
     await flush();
 
-    // 下一步：保留标签 + 标题 + 主按钮
+    // 下一步：保留标签 + 标题 + 主按钮，不再有正文/时间预估/建议提示
     expect(el.querySelector('.next-label')).toBeTruthy();
     expect(nextTitle(el).length).toBeGreaterThan(0);
     expect(nextCta(el).length).toBeGreaterThan(0);
-    // 删掉：正文、时间预估、建议提示
     expect(el.querySelector('.next-card p')).toBeNull();
     expect(el.querySelector('.next-time')).toBeNull();
     expect(el.querySelector('.next-hint')).toBeNull();
 
-    // 待办：整行是标题链接，没有 meta 行
-    expect(el.querySelectorAll('.task-row').length).toBeGreaterThan(0);
-    expect(el.querySelectorAll('.task-main span').length).toBe(0);
-
-    // 穿帮检查：删掉时间戳与建议/参考两行
+    // 新版主页把待办/检查/存档改成阶段条 + 健康度三联卡，旧版说明字段不再出现
     expect(el.querySelector('.check-row')).toBeNull();
-
-    // 参考图：删掉 note，两条进度各自是链接
     expect(el.querySelector('.asset-note')).toBeNull();
-    const charLink = el.querySelector('a[aria-label^="角色设定：角色形象图"]');
-    const sceneLink = el.querySelector('a[aria-label^="场景设定：场景参考板"]');
-    expect(charLink?.getAttribute('href')).toBe('/characters');
-    expect(sceneLink?.getAttribute('href')).toBe('/scenes');
-
-    // 存档：没有 saveError 时不显示常驻说明
-    expect(el.querySelector('.save-panel .asset-note')).toBeNull();
-
-    // 最近镜头：删掉固定文案「文字分镜 · 关键帧未生成」和「按 N 个场次排的」
     expect(el.querySelector('.shot-tile-foot')).toBeNull();
     expect(el.querySelector('.shots-foot')).toBeNull();
     expect(el.textContent ?? '').not.toContain('关键帧未生成');
     expect(el.textContent ?? '').not.toContain('个场次排的');
+
+    // 参考图两条进度仍是可点链接
+    const charLink = el.querySelector('a[aria-label^="角色设定：角色形象图"]');
+    const sceneLink = el.querySelector('a[aria-label^="场景设定：场景参考板"]');
+    expect(charLink?.getAttribute('href')).toBe('/characters');
+    expect(sceneLink?.getAttribute('href')).toBe('/scenes');
   });
 
   it('存档面板只在 saveError 时显示错误原因（错误反馈不是说明字段）', async () => {
@@ -178,17 +168,17 @@ describe('下一步：图片没出齐不推荐导出', () => {
   it('图库还没加载时保守显示参考图，而不是去导出', async () => {
     // 故意不预置 gallery：页面挂载后会触发懒加载
     const el = render();
-    expect(nextTitle(el)).toBe('参考图');
+    expect(nextTitle(el)).toBe('先出齐角色形象图与场景参考板');
     await flush();
-    expect(nextTitle(el)).not.toBe('导出');
+    expect(nextTitle(el)).not.toBe('前期方案齐备，可以复制提示词并导出');
   });
 
   it('已加载但一张图都没有：下一步是参考图 / 去出图', async () => {
     useImage.setState({ gallery: emptyLoadedGallery() });
     const el = render();
     await flush();
-    expect(nextTitle(el)).toBe('参考图');
-    expect(nextCta(el)).toBe('去出图');
+    expect(nextTitle(el)).toBe('先出齐角色形象图与场景参考板');
+    expect(nextCta(el)).toBe('去设定集出图');
     expect(deliveryState(el)).toBe('待出图');
     expect(deliveryStep(el)?.classList.contains('is-done')).toBe(false);
   });
@@ -197,8 +187,8 @@ describe('下一步：图片没出齐不推荐导出', () => {
     useImage.setState({ gallery: refsReadyGallery() });
     const el = render();
     await flush();
-    expect(nextTitle(el)).toBe('分镜三帧');
-    expect(nextCta(el)).toBe('去出帧');
+    expect(nextTitle(el)).toBe(`补齐分镜三帧（0 / ${project.shots.length} 镜）`);
+    expect(nextCta(el)).toBe('去分镜出帧');
     expect(deliveryState(el)).toBe('待出帧');
   });
 
@@ -206,8 +196,8 @@ describe('下一步：图片没出齐不推荐导出', () => {
     useImage.setState({ gallery: fullGallery() });
     const el = render();
     await flush();
-    expect(nextTitle(el)).toBe('导出');
-    expect(nextCta(el)).toBe('去导出');
+    expect(nextTitle(el)).toBe('前期方案齐备，可以复制提示词并导出');
+    expect(nextCta(el)).toBe('去交付中心');
     expect(deliveryState(el)).toBe('可以导出');
     expect(deliveryStep(el)?.classList.contains('is-done')).toBe(true);
   });
@@ -218,6 +208,6 @@ describe('下一步：图片没出齐不推荐导出', () => {
     useImage.setState({ gallery: {} });
     const el = render();
     await flush();
-    expect(nextTitle(el)).toBe('故事');
+    expect(nextTitle(el)).toBe('先写下你的故事与画风');
   });
 });

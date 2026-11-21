@@ -86,7 +86,7 @@ describe('渲染结果里不能有字面星号', () => {
 });
 
 /**
- * 把向导切到最后一步（「完成」），返回挂载容器。
+ * 把向导切到最后一步（「启动制作」），返回挂载容器。
  *
  * 原来这条用例只断言 `typeof html === 'string'`——那是个占位断言，
  * 测不到标题里声称的顺序。这里真的点一下最后一步，再按 DOM 顺序断言。
@@ -102,7 +102,7 @@ function renderGuideAtFinishStep(): HTMLDivElement {
       </MemoryRouter>,
     );
   });
-  const steps = [...container.querySelectorAll<HTMLButtonElement>('.wizard-step')];
+  const steps = [...container.querySelectorAll<HTMLButtonElement>('.guide-step-pill')];
   expect(steps.length).toBeGreaterThan(0);
   act(() => {
     steps[steps.length - 1]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -110,7 +110,7 @@ function renderGuideAtFinishStep(): HTMLDivElement {
   return container;
 }
 
-describe('引导向导「4. 完成」把 AI 流程放在手动手册之前', () => {
+describe('引导向导「启动制作」把 AI 流程放在手动路径之前', () => {
   beforeEach(() => {
     useAppStore.setState({ project: makeEmptyProject('向导'), report: null, dirty: false, revision: 0, saveError: null });
     useImage.setState({ gallery: {}, feedback: {}, batch: null, batchSummary: null });
@@ -119,14 +119,14 @@ describe('引导向导「4. 完成」把 AI 流程放在手动手册之前', () 
   it('**AI 生成流程出现在页面上，且排在手动清单前面**', () => {
     const el = renderGuideAtFinishStep();
 
-    const manual = el.querySelector('details.manual-guide');
-    expect(manual, '第 4 步应该有「也可以全程手动」的折叠区').toBeTruthy();
+    const manual = [...el.querySelectorAll<HTMLElement>('.guide-launch-cards .card')].find(
+      (card) => (card.textContent ?? '').includes('手动路径'),
+    );
+    expect(manual, '最后一步应该有手动路径卡片').toBeTruthy();
 
-    const aiCard =
-      [...el.querySelectorAll('.card')].find((card) =>
-        (card.textContent ?? '').includes('让 AI 先生成'),
-      ) ?? null;
-    expect(aiCard, '第 4 步应该有 AI 生成流程卡片').toBeTruthy();
+    const aiCard = el.querySelector('.card');
+    expect(aiCard, '最后一步应该有 AI 生成流程卡片').toBeTruthy();
+    expect(aiCard!.textContent ?? '').toContain('让 AI 先生成');
 
     const relation = aiCard!.compareDocumentPosition(manual!);
     expect(

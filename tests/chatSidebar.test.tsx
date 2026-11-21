@@ -64,9 +64,10 @@ describe('对话栏', () => {
     useChat.setState({ open: true });
     const { html, unmount } = render(<ChatSidebar />);
     expect(html).toContain('chat-body');
-    expect(html).toContain('问 AI 怎么改');
-    // 空状态给几个示例问题，新手不知道该怎么开口
+    // 新版引导语：助手先说理解、用户确认后才改，并给示例问题
+    expect(html).toContain('它先说出自己的理解');
     expect(html).toContain('chat-quick');
+    expect(html).toContain('第三镜太平了');
     unmount();
   });
 

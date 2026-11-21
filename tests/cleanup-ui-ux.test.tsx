@@ -50,15 +50,17 @@ beforeEach(() => {
 });
 
 describe('主页建议提示', () => {
-  it('简版主页不再渲染「还有 N 条建议」', () => {
+  it('主页用新版统计文案，不再出现旧「还有 N 条建议」', () => {
     useAppStore.setState({ report: reportWith(2, 3) });
     const el = render(<HomePage />);
-    expect(el.textContent ?? '').not.toContain('条建议');
+    const text = el.textContent ?? '';
+    expect(text).toContain('3 条建议');
+    expect(text).not.toContain('还有 3 条建议');
   });
 });
 
 describe('导入文件大小上限', () => {
-  it('超过 20MB 时给出人话提示，不进入解析', () => {
+  it('超过 20MB 时给出人话提示，不进入解析', async () => {
     const el = render(<ExportPage />);
     const input = el.querySelector<HTMLInputElement>('input[type="file"]');
     expect(input).toBeTruthy();
@@ -66,8 +68,10 @@ describe('导入文件大小上限', () => {
     Object.defineProperty(file, 'size', { value: 21 * 1024 * 1024 });
     const textSpy = vi.spyOn(file, 'text');
     Object.defineProperty(input!, 'files', { value: [file], configurable: true });
-    act(() => {
+    await act(async () => {
       input!.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
     });
     expect(el.textContent ?? '').toContain('超过 20MB');
     expect(el.textContent ?? '').not.toContain('已导入');
@@ -82,6 +86,6 @@ describe('用模型生成抽屉的展开入口', () => {
     const summary = el.querySelector('.tools-drawer > summary');
     expect(summary).toBeTruthy();
     expect(summary?.querySelector('.expand-chevron')).toBeTruthy();
-    expect((summary?.textContent ?? '').trim()).toBe('用模型生成');
+    expect((summary?.textContent ?? '').trim()).toBe('AI 生成与批量出图');
   });
 });

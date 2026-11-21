@@ -17,7 +17,7 @@ import { makeEmptyProject, useAppStore } from '../src/store/app';
  * 但对新手来说「把故事写下来」就是这一页唯一的任务，四格是给检查引擎核对
  * 「该拍的是不是都拍了」用的，没想好可以空着。
  *
- * 现在它们收进「补充四个格子（可选）」，标题旁边显示已填几格。
+ * 现在它们收进「四要素（可选）」折叠区，标题旁边显示已填几格。
  * 三条不能退：正文还在第一屏、四格还能填、已填数量看得见。
  */
 
@@ -36,13 +36,6 @@ function render(): HTMLDivElement {
     );
   });
   return container;
-}
-
-function gotoStep(index: number) {
-  const buttons = [...container!.querySelectorAll<HTMLButtonElement>('.wizard-step')];
-  act(() => {
-    buttons[index]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-  });
 }
 
 beforeEach(() => {
@@ -66,7 +59,6 @@ afterEach(() => {
 describe('「填写故事」这一步的复杂度', () => {
   it('故事正文在折叠外面，进这一步就能写', () => {
     const el = render();
-    gotoStep(1);
     const textarea = el.querySelector<HTMLTextAreaElement>('textarea');
     expect(textarea).toBeTruthy();
     // 第一个 textarea 不能在被收起的 details 里
@@ -75,9 +67,8 @@ describe('「填写故事」这一步的复杂度', () => {
 
   it('四个补充格子默认收起，但四格都在', () => {
     const el = render();
-    gotoStep(1);
     const fold = [...el.querySelectorAll('details.card-fold')].find((node) =>
-      (node.querySelector('.card-fold-title')?.textContent ?? '').includes('补充四个格子'),
+      (node.querySelector('.card-fold-title')?.textContent ?? '').includes('四要素'),
     );
     expect(fold).toBeTruthy();
     expect(fold!.hasAttribute('open')).toBe(false);
@@ -96,7 +87,6 @@ describe('「填写故事」这一步的复杂度', () => {
       },
     });
     const el = render();
-    gotoStep(1);
     const count = [...el.querySelectorAll('.card-fold-count')].map((n) => n.textContent?.trim());
     expect(count.some((text) => text === '2 / 4 已填')).toBe(true);
   });

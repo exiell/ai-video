@@ -36,24 +36,33 @@ function click(element: Element) {
   });
 }
 
-function rail() {
-  return [...container.querySelectorAll<HTMLButtonElement>('.wizard-step')];
+function pills() {
+  return [...container.querySelectorAll<HTMLButtonElement>('.guide-step-pill')];
 }
 
-function stateOf(label: string): string {
-  const button = rail().find((item) => item.textContent?.includes(label));
-  return button?.querySelector('.wizard-state')?.textContent?.trim() ?? '';
+function pill(label: string): HTMLButtonElement {
+  const found = pills().find((item) => item.textContent?.includes(label));
+  if (!found) throw new Error(`找不到步骤：${label}`);
+  return found;
+}
+
+function done(label: string): boolean {
+  return pill(label).classList.contains('done');
+}
+
+function active(label: string): boolean {
+  return pill(label).getAttribute('aria-current') === 'step';
 }
 
 function viewStep(index: number) {
-  const button = rail()[index];
+  const button = pills()[index];
   if (!button) throw new Error(`找不到第 ${index} 步`);
   click(button);
 }
 
 function next() {
-  const button = [...container.querySelectorAll<HTMLButtonElement>('button')].find(
-    (item) => item.textContent?.trim() === '下一步',
+  const button = [...container.querySelectorAll<HTMLButtonElement>('button')].find((item) =>
+    item.textContent?.trim().startsWith('下一步'),
   );
   if (!button) throw new Error('找不到下一步');
   click(button);
@@ -85,54 +94,49 @@ afterEach(() => {
 });
 
 describe('故事向导的完成状态', () => {
-  it('点下一步不会把没写完的「故事正文」标成已完成', () => {
-    const view = render();
-    expect(view.querySelector('.wizard-step.active')?.textContent).toContain('故事来源');
-
+  it('点下一步不会把没写完的「定故事」标成已完成', () => {
+    render();
+    expect(active('定故事')).toBe(true);
     next();
-    expect(stateOf('故事来源')).toBe('已完成');
-    expect(stateOf('故事正文')).toBe('当前');
-    expect(stateOf('故事正文')).not.toContain('已完成');
+    expect(active('画风与规格')).toBe(true);
+    expect(done('定故事')).toBe(false);
   });
 
-  it('空项目手动切到「风格与规格」，不会因为默认值自动算完成', () => {
+  it('空项目手动切到「画风与规格」，不会因为默认值自动算完成', () => {
+    const project = makeEmptyProject('风格未填');
+    project.brief.styleTags = [];
+    project.brief.styleTone = '';
+    project.logline = '';
+    useAppStore.setState({ project });
     render();
-    viewStep(2);
-    expect(stateOf('风格与规格')).toBe('当前');
-    expect(stateOf('风格与规格')).not.toContain('已完成');
+    viewStep(1);
+    expect(active('画风与规格')).toBe(true);
+    expect(done('画风与规格')).toBe(false);
   });
 
   it('填写正文后才算完成，切到别的步骤再切回来仍然是已完成', () => {
     render();
-    next();
-
+    expect(done('定故事')).toBe(false);
     writeBody('林冲在风雪夜看守草料场，听见门外有人密谋烧死他。');
-    expect(stateOf('故事正文')).toBe('当前 · 已完成');
-
-    // 去风格页，再回故事页：完成态不能因为 index < step 失效
-    viewStep(2);
-    expect(stateOf('故事正文')).toBe('已完成');
+    expect(done('定故事')).toBe(true);
 
     viewStep(1);
-    expect(stateOf('故事正文')).toBe('当前 · 已完成');
+    expect(done('定故事')).toBe(true);
 
-    // 回到第 0 步，第 1 步仍然是已完成
     viewStep(0);
-    expect(stateOf('故事正文')).toBe('已完成');
+    expect(done('定故事')).toBe(true);
+    expect(active('定故事')).toBe(true);
   });
 
   it('删掉正文后完成态跟着消失', () => {
     render();
-    next();
     writeBody('先写一段。');
-    viewStep(2);
-    expect(stateOf('故事正文')).toBe('已完成');
-
+    expect(done('定故事')).toBe(true);
     viewStep(1);
+    expect(done('定故事')).toBe(true);
+
+    viewStep(0);
     writeBody('');
-    expect(stateOf('故事正文')).toBe('当前');
-    viewStep(2);
-    expect(stateOf('故事正文')).toBe('未完成');
+    expect(done('定故事')).toBe(false);
   });
 });
-

@@ -55,7 +55,8 @@ const PAGES: Array<[string, () => React.ReactElement, boolean]> = [
   ['角色页', () => <CharactersPage />, true],
   ['场景页', () => <ScenesPage />, true],
   ['分镜页', () => <StoryboardPage />, true],
-  ['故事向导', () => <GuidePage />, true],
+  // 新版故事向导默认第一步没有图标按钮（上一步在底部且禁用），不强制数量
+  ['故事向导', () => <GuidePage />, false],
   ['作品主页', () => <HomePage />, false],
 ];
 
@@ -85,28 +86,36 @@ describe('纯图标按钮的可访问性', () => {
     expect(toggle?.getAttribute('aria-expanded')).toBe('false');
   });
 
-  it('故事向导：已完成的步骤用勾图标，状态文字仍在 DOM 里给读屏', () => {
+  it('故事向导：已完成步骤带勾图标，当前步骤有 aria-current', () => {
     const el = render(<GuidePage />);
-    const icon = el.querySelector('.wizard-state-icon');
-    expect(icon).toBeTruthy();
-    // 视觉隐藏，但读屏还能念出「当前 · 已完成」这类状态
-    const states = [...el.querySelectorAll('.wizard-state')].map((n) => n.textContent?.trim());
-    expect(states.some((text) => (text ?? '').includes('完成'))).toBe(true);
+    // 新版用顶部步骤条：完成步骤的 pill 里有 circle-check 图标
+    const donePills = [...el.querySelectorAll('.guide-step-pill.done')];
+    expect(donePills.length).toBeGreaterThan(0);
+    expect(donePills[0]!.querySelector('.icon')).toBeTruthy();
+    const current = el.querySelector('.guide-step-pill[aria-current="step"]');
+    expect(current).toBeTruthy();
+    expect((current!.textContent ?? '').trim().length).toBeGreaterThan(0);
   });
 
-  it('主页待办行整行是链接：点标题就跳对应页面，且不含嵌套锚点', () => {
+  it('主页阶段条/镜头/健康度都是语义化链接，且不含嵌套锚点', () => {
     const el = render(<HomePage />);
-    const rows = [...el.querySelectorAll('.task-list > li')];
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      const link = row.querySelector('a[href]');
-      expect(link).toBeTruthy();
-      expect((link!.getAttribute('href') ?? '').startsWith('/')).toBe(true);
-      expect((link!.textContent ?? '').trim().length).toBeGreaterThan(0);
-      expect(link!.querySelector('a')).toBeNull();
+    const stageLinks = [...el.querySelectorAll<HTMLAnchorElement>('.stage-strip a.stage-step')];
+    expect(stageLinks.length).toBe(4);
+    for (const link of stageLinks) {
+      expect((link.getAttribute('href') ?? '').startsWith('/')).toBe(true);
+      expect((link.textContent ?? '').trim().length).toBeGreaterThan(0);
+      expect(link.querySelector('a')).toBeNull();
     }
-    // 行尾箭头已移除
-    expect(el.querySelector('a.task-go')).toBeNull();
+    const previewLinks = [...el.querySelectorAll<HTMLAnchorElement>('.shot-grid a.shot-tile')];
+    expect(previewLinks.length).toBeGreaterThan(0);
+    // 健康度面板整块可点：参考图 / 穿帮 / 存档
+    expect(el.querySelector('a.panel-link[href="/storyboard?qc=1"]')).toBeTruthy();
+    expect(el.querySelector('a.panel-link[href="/export"]')).toBeTruthy();
+    expect(el.querySelector('a.asset[href="/characters"]')).toBeTruthy();
+    expect(el.querySelector('a.asset[href="/scenes"]')).toBeTruthy();
+    // 页面里没有嵌套锚点（新版用卡片链接，不是旧的整行待办）
+    expect(el.querySelectorAll('a a').length).toBe(0);
+    expect(el.querySelectorAll('a button, button a').length).toBe(0);
   });
 
   it('删除按钮带上是删哪个对象，而不是只有一个「删除」', () => {

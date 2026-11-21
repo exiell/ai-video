@@ -119,9 +119,9 @@ describe('assessStyleChange · 什么时候该提示', () => {
 describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
   function goToStyleStep(el: HTMLElement): void {
     const stepBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('风格与规格'),
+      b.textContent?.includes('画风与规格'),
     );
-    if (!stepBtn) throw new Error('找不到「风格与规格」这一步');
+    if (!stepBtn) throw new Error('找不到「画风与规格」这一步');
     act(() => (stepBtn as HTMLButtonElement).click());
   }
 
@@ -134,8 +134,8 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
   it('**已经有角色/场景/分镜时，风格这一节显示风险提示**', () => {
     const el = render(<GuidePage />);
     goToStyleStep(el);
-    expect(el.textContent).toContain('已经做过内容了');
-    expect(el.textContent).toContain('按这个顺序做');
+    expect(el.textContent).toContain('已有设定或图片，改风格不会自动更新旧图');
+    expect(el.textContent).toContain('切换风格后，建议重新核对角色、场景与关键帧');
     cleanup(el);
   });
 
@@ -151,7 +151,7 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
     cleanup(el);
   });
 
-  it('**「用这段中文生成英文关键词」也要先确认**（它绕过了手动改的那条路）', () => {
+  it('**「用这段中文生成英文风格词」也要先确认**（它绕过了手动改的那条路）', () => {
     /*
       漏掉这条路径的后果：点「生成关键词」→ store 里 runStyleTags 直接 patchBrief，
       页面的守卫根本拦不到 —— 用户以为会看到提示，结果什么都没发生就换了风格。
@@ -162,7 +162,7 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
     goToStyleStep(el);
 
     const genBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('用这段中文生成英文关键词'),
+      b.textContent?.includes('用这段中文生成英文风格词'),
     ) as HTMLButtonElement | undefined;
     expect(genBtn, '找不到生成按钮').toBeTruthy();
     expect(genBtn!.disabled, '按钮应当是可用状态（已配 Key）').toBe(false);
@@ -172,7 +172,7 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
     // 闸门拦住 → 弹确认，而不是直接调模型
     expect(document.body.innerHTML).toContain('role="dialog"');
     expect(document.body.textContent).toContain('改风格会影响已经做好的内容');
-    expect(document.body.textContent).toContain('按这个顺序做');
+    expect(document.body.textContent).toContain('更换风格后旧图不会自动重画');
     cleanup(el);
   });
 
@@ -186,18 +186,24 @@ describe('引导向导 · 做过的项目改风格时有常驻提示', () => {
     const el = render(<GuidePage />);
     goToStyleStep(el);
     const genBtn = [...el.querySelectorAll('button')].find((b) =>
-      b.textContent?.includes('用这段中文生成英文关键词'),
+      b.textContent?.includes('用这段中文生成英文风格词'),
     ) as HTMLButtonElement;
     act(() => genBtn.click());
     expect(document.body.innerHTML).not.toContain('role="dialog"');
     cleanup(el);
   });
 
-  it('**出过图时提示里会点出图的数量**', () => {
+  it('**出过图时确认弹窗里会点出图的数量**', () => {
     useImage.setState({ assetCount: 9 });
     const el = render(<GuidePage />);
     goToStyleStep(el);
-    expect(el.textContent).toContain('9 张图');
+    // 点一个风格预设触发确认弹窗（有角色/场景/分镜时必须先确认）
+    const preset = [...el.querySelectorAll<HTMLButtonElement>('button')].find(
+      (button) => (button.textContent ?? '').includes('· 已选'),
+    );
+    expect(preset, '找不到已选风格预设').toBeTruthy();
+    act(() => preset!.click());
+    expect(document.body.textContent).toContain('9 张图');
     cleanup(el);
   });
 });

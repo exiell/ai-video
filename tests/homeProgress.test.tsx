@@ -74,8 +74,8 @@ function fullGallery(): Record<string, Asset[]> {
 }
 
 function deliveryStep(el: Element): Element | undefined {
-  return [...el.querySelectorAll('.stage-step')].find(
-    (node) => (node.querySelector('.stage-step-name')?.textContent ?? '').trim() === '交付',
+  return [...el.querySelectorAll('.stage-step')].find((node) =>
+    (node.querySelector('.stage-step-name')?.textContent ?? '').trim().endsWith('交付中心'),
   );
 }
 
@@ -101,13 +101,13 @@ describe('工作主页四步进度', () => {
     const names = steps(el).map((node) =>
       (node.querySelector('.stage-step-name')?.textContent ?? '').trim(),
     );
-    expect(names).toEqual(['故事', '角色与场景', '分镜', '交付']);
+    expect(names).toEqual(['01 故事', '02 设定集', '03 分镜与质检', '04 交付中心']);
   });
 
   it('每一步都能点进对应页面', () => {
     const el = render(<HomePage />);
     const hrefs = steps(el).map((node) => node.getAttribute('href'));
-    expect(hrefs).toEqual(['/guide', '/characters', '/storyboard', '/export']);
+    expect(hrefs).toEqual(['/guide', '/assets', '/storyboard', '/delivery']);
   });
 
   it('已完成 / 当前 / 待做三档有各自的类名', () => {
@@ -129,7 +129,7 @@ describe('工作主页四步进度', () => {
     expect(todo.length).toBe(2);
     expect(
       todo.map((node) => (node.querySelector('.stage-step-name')?.textContent ?? '').trim()),
-    ).toEqual(['分镜', '交付']);
+    ).toEqual(['03 分镜与质检', '04 交付中心']);
   });
 
   it('交付阶段纳入图片进度：图没出齐时显示「待出图」，不算完成', () => {
