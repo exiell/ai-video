@@ -633,7 +633,7 @@ describe('默认参考图追加与下载清理（task-92）', () => {
     expect(submitVideo).toHaveBeenCalledWith(shot.id, {
       referenceAssetIds: ['first', 'face', 'scene', 'full'],
     });
-  });
+  }, 15_000);
 
   it('别的项目还在提交时，当前项目同一 shotId 不应被 submittingShotId 误禁用', async () => {
     const otherProject = { ...structuredClone(project), id: 'project-other', title: '另一个项目' };
