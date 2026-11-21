@@ -22,7 +22,13 @@ import {
 import { useAppStore } from './app';
 import { currentTransport, useSettings } from './settings';
 import { findProfile, DEFAULT_REFERENCE_PROFILE_ID, DEFAULT_T2I_PROFILE_ID } from '../data/models/profiles';
-import { applyLocalProfileOverrides } from '../services/gateway/localModel';
+import { resolveDefaultImageEditProfile } from '../data/models/imageProfiles';
+import {
+  applyLocalProfileOverrides,
+  isLocalProfile,
+  LOCAL_REFERENCE_MAX_BYTES,
+  LOCAL_REFERENCE_MAX_LONG_EDGE,
+} from '../services/gateway/localModel';
 import { generateImages, toAssets, type GenerateImagesOutcome } from '../services/image/generate';
 import { prepareReference, type PreparePurpose } from '../services/image/prepare';
 import {
@@ -60,6 +66,19 @@ export type ImageTaskKind =
   | 'first-frame'
   | 'action-peak'
   | 'end-frame';
+
+export type ImageEditTarget = 'character' | 'scene' | 'frame';
+
+export interface GenerateEditedImageInput {
+  target: ImageEditTarget;
+  refId: string;
+  frameKind?: FrameKind;
+  /** 用户的修改要求（原文） */
+  prompt: string;
+  /** data URI，顺序即语义 */
+  referenceImages: string[];
+  referenceLabels?: string[];
+}
 
 export interface ImageTaskFeedback {
   kind: 'ok' | 'error' | 'info';
@@ -130,6 +149,8 @@ interface ImageState {
   generateAllFramesInOrder: () => Promise<void>;
   clearFeedback: (key: string) => void;
   removeAsset: (refId: string, assetId: string) => Promise<void>;
+
+  generateEditedImage: (input: GenerateEditedImageInput) => Promise<void>;
 
   generateForCharacter: (
     characterId: string,
@@ -218,6 +239,39 @@ const FRAME_BATCH_LABEL: Record<FrameKind, string> = {
 
 function taskKey(kind: ImageTaskKind, refId: string): string {
   return `${kind}:${refId}`;
+}
+
+/** 图像编辑的同步防重（不能只依赖 pending：pending 在 runGeneration 里才设置）。 */
+const editLocks = new Set<string>();
+
+/** 生成编辑 prompt 的上下文：用户要求在前，目标锁/风格在后。 */
+function buildEditedPrompt(
+  project: NonNullable<ReturnType<typeof useAppStore.getState>['project']>,
+  target: ImageEditTarget,
+  refId: string,
+  frameKind: FrameKind | undefined,
+  userPrompt: string,
+): ImagePromptInput | null {
+  let context: ImagePromptInput | null = null;
+  if (target === 'character') {
+    context = buildCharacterSheetPrompt(project, refId, 'turnaround');
+  } else if (target === 'scene') {
+    context = buildScenePlatePrompt(project, refId, 'master');
+  } else {
+    context = buildFramePrompt(project, refId, frameKind ?? 'first-frame');
+  }
+  if (!context) return null;
+  const style = project.brief.styleTags.filter(Boolean);
+  const instruction =
+    `Edit the provided reference image(s) according to this request: ${userPrompt.trim()}. ` +
+    'Keep the target\'s identity / spatial structure / camera framing consistent with the reference images; ' +
+    'only change what the request asks for.';
+  return {
+    ...context,
+    positive: [instruction, context.positive, style.length > 0 ? `Project visual style: ${style.join(', ')}.` : '']
+      .filter(Boolean)
+      .join('\n'),
+  };
 }
 
 /**
@@ -729,7 +783,10 @@ export const useImage = create<ImageState>((set, get) => ({
         0 槽时 plan.slots 为空，整段不执行（纯文生图不经过预处理）。
       */
       const preprocessWarnings: string[] = [];
-      const maxBytesPerImage = caps.reference?.maxBytesPerImage;
+      const local = isLocalProfile(resolved.profile);
+      // 本地 24GB 卡用更保守档；云端仍按档案声明，未声明就不猜
+      const maxBytesPerImage = caps.reference?.maxBytesPerImage ?? (local ? LOCAL_REFERENCE_MAX_BYTES : undefined);
+      const maxLongEdge = caps.reference?.maxLongEdge ?? (local ? LOCAL_REFERENCE_MAX_LONG_EDGE : undefined);
       for (let index = 0; index < plan.slots.length; index += 1) {
         const slot = plan.slots[index]!;
         const isFrameAnchor =
@@ -745,6 +802,7 @@ export const useImage = create<ImageState>((set, get) => ({
           {
             ...(isFrameAnchor ? { targetAspect: project.brief.aspectRatio } : {}),
             ...(maxBytesPerImage !== undefined ? { maxBytesPerImage } : {}),
+            ...(maxLongEdge !== undefined ? { maxLongEdge } : {}),
           },
         );
         referenceImages.push(prepared.dataUrl);
@@ -835,6 +893,132 @@ export const useImage = create<ImageState>((set, get) => ({
       get,
     });
   },
+
+  generateEditedImage: async (input) => {
+    const project = useAppStore.getState().project;
+    if (!project) return;
+    const key = `edit:${input.refId}`;
+    if (get().pending || editLocks.has(key)) return;
+    editLocks.add(key);
+    const fail = (message: string, warnings: string[] = []): void => {
+      set((state) => ({
+        feedback: {
+          ...state.feedback,
+          [key]: { kind: 'error', message, warnings },
+        },
+      }));
+    };
+    try {
+      const prefs = useSettings.getState().prefs;
+      const editProfile = resolveDefaultImageEditProfile(prefs);
+      if (!editProfile) {
+        fail(
+          prefs.defaultImageEditProfileId
+            ? '原来的图像编辑模型找不到了。请到「设置 → 默认模型 → 图像编辑」重新选择，或去「自定义接入 → 图片」新建一个支持参考图的模型。'
+            : '还没有设置图像编辑模型。到「设置 → 默认模型 → 图像编辑」选择一个支持参考图的模型。',
+        );
+        return;
+      }
+      if (!editProfile.capabilities.referenceImage) {
+        fail(`「${editProfile.name}」不支持参考图，不能做图像编辑。请换一个改图模型。`);
+        return;
+      }
+      const keys = useSettings.getState().keys;
+      const apiKey = (keys[editProfile.vendorId ?? ''] ?? '').trim();
+      if (editProfile.authType !== 'none' && !apiKey) {
+        fail(`还没有填「${editProfile.name}」的 API Key。去「设置」页填上再试。`);
+        return;
+      }
+
+      const requested = input.referenceImages ?? [];
+      if (requested.length === 0) {
+        fail('图像编辑至少需要 1 张参考图。请先在对话框里选择项目素材或上传图片。');
+        return;
+      }
+      const maxReferences = Math.max(1, editProfile.capabilities.maxReferenceImages || 1);
+      const minReferences = Math.max(1, editProfile.capabilities.minReferenceImages ?? 1);
+      if (requested.length < minReferences) {
+        fail(
+          `图像编辑至少需要 ${minReferences} 张参考图；当前 ${requested.length} 张。` +
+            '请先在对话框里选择项目素材或上传图片。',
+        );
+        return;
+      }
+      const referenceImages = requested.slice(0, maxReferences);
+      const referenceLabels = (input.referenceLabels ?? []).slice(0, referenceImages.length);
+      while (referenceLabels.length < referenceImages.length) {
+        referenceLabels.push(`参考图 ${referenceLabels.length + 1}`);
+      }
+      const extraWarnings: string[] = [];
+      if (requested.length > referenceImages.length) {
+        extraWarnings.push(
+          `「${editProfile.name}」最多接受 ${maxReferences} 张参考图，多出的 ${requested.length - referenceImages.length} 张已忽略。`,
+        );
+      }
+
+      // 目标 → 素材 kind/refId；角色/场景/帧分别落到现有图库。
+      let kind: Asset['kind'];
+      let targetLabel: string;
+      let frameKind: FrameKind | undefined;
+      if (input.target === 'character') {
+        const character = project.characters.find((item) => item.id === input.refId);
+        if (!character) {
+          fail('找不到这个角色，可能刚被删除。');
+          return;
+        }
+        kind = 'character-sheet';
+        targetLabel = `角色「${character.name}」`;
+      } else if (input.target === 'scene') {
+        const scene = project.scenes.find((item) => item.id === input.refId);
+        if (!scene) {
+          fail('找不到这个场景，可能刚被删除。');
+          return;
+        }
+        kind = 'scene-plate';
+        targetLabel = `场景「${scene.name}」`;
+      } else {
+        const shot = project.shots.find((item) => item.id === input.refId);
+        if (!shot) {
+          fail('找不到这个镜头，可能刚被删除。');
+          return;
+        }
+        frameKind = input.frameKind ?? 'first-frame';
+        kind = frameKind;
+        targetLabel = `第 ${shot.number} 镜 · ${
+          frameKind === 'first-frame' ? '首帧' : frameKind === 'action-peak' ? '动作关键帧' : '尾帧'
+        }`;
+      }
+
+      const prompt = buildEditedPrompt(project, input.target, input.refId, frameKind, input.prompt);
+      if (!prompt) {
+        fail(`找不到${targetLabel}可用的编辑上下文。`);
+        return;
+      }
+      await runGeneration({
+        key,
+        prompt,
+        draft: {
+          projectId: project.id,
+          kind,
+          refId: input.refId,
+          // 记录用户原文；目标上下文/风格已经在实际请求 prompt 中
+          promptSnapshot: input.prompt.trim(),
+          lockPhrases: prompt.lockPhrases,
+          styleTags: [...project.brief.styleTags],
+          referenceCount: referenceImages.length,
+        },
+        preferReference: true,
+        referenceImages,
+        referenceLabels,
+        resolvedProfile: { ok: true, profile: editProfile, apiKey },
+        ...(extraWarnings.length > 0 ? { extraWarnings } : {}),
+        set,
+        get,
+      });
+    } finally {
+      editLocks.delete(key);
+    }
+  },
 }));
 
 interface RunArgs {
@@ -870,6 +1054,8 @@ interface RunArgs {
    * 否则会以为参考图机制坏了，去改提示词/换模型，全都改不到点上。
    */
   extraWarnings?: string[];
+  /** 图像编辑等调用方已自行解析档案；不传则按旧逻辑 resolveImageProfile。 */
+  resolvedProfile?: ResolvedImageProfile;
   set: StoreApi<ImageState>['setState'];
   get: StoreApi<ImageState>['getState'];
 }
@@ -956,7 +1142,7 @@ async function runGeneration(args: RunArgs): Promise<void> {
     return;
   }
 
-  const resolved = resolveImageProfile(preferReference);
+  const resolved = args.resolvedProfile ?? resolveImageProfile(preferReference);
 
   const requiresKey = resolved.profile !== undefined && resolved.profile.authType !== 'none';
   if (!resolved.ok || !resolved.profile || (requiresKey && !resolved.apiKey)) {

@@ -70,6 +70,8 @@ export interface Prefs {
   defaultReferenceProfileId: string;
   /** 当前默认视频档案 id（v0.65 视频层）；空/未配置时回退唯一自定义视频 */
   defaultVideoProfileId?: string;
+  /** 当前默认图像编辑档案 id（v0.66，独立于生成画面）；undefined=未设置 */
+  defaultImageEditProfileId?: string;
   /** 代理地址（留空 = 直连） */
   proxyBaseUrl: string;
   /** 代理通行口令 */
@@ -105,6 +107,7 @@ const DEFAULT_PREFS: Prefs = {
   localModelTimeoutMs: undefined,
   localModelMigrated: false,
   defaultVideoProfileId: undefined,
+  defaultImageEditProfileId: undefined,
 };
 
 function safeParse<T>(raw: string | null, fallback: T): T {
@@ -471,6 +474,15 @@ function fallbackMissingCustomDefaults(
     next.defaultReferenceProfileId = DEFAULT_REFERENCE_PROFILE_ID;
     changed = true;
   }
+  if (
+    prefs.defaultImageEditProfileId !== undefined &&
+    isCustomProfileId(prefs.defaultImageEditProfileId) &&
+    !ids.has(prefs.defaultImageEditProfileId)
+  ) {
+    // 图像编辑是独立槽位：档案没了就回到「未选择」，不占用生成画面默认
+    next.defaultImageEditProfileId = undefined;
+    changed = true;
+  }
   return { prefs: next, changed };
 }
 
@@ -601,6 +613,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
       if (prefs.defaultReferenceProfileId === oldProfileId) {
         get().setPref('defaultReferenceProfileId', DEFAULT_REFERENCE_PROFILE_ID);
       }
+      if (prefs.defaultImageEditProfileId === oldProfileId) {
+        get().setPref('defaultImageEditProfileId', undefined);
+      }
     }
     return { ok: true, config: updated };
   },
@@ -628,6 +643,9 @@ export const useSettings = create<SettingsState>((set, get) => ({
       if (prefs.defaultT2iProfileId === profileId) get().setPref('defaultT2iProfileId', DEFAULT_T2I_PROFILE_ID);
       if (prefs.defaultReferenceProfileId === profileId) {
         get().setPref('defaultReferenceProfileId', DEFAULT_REFERENCE_PROFILE_ID);
+      }
+      if (prefs.defaultImageEditProfileId === profileId) {
+        get().setPref('defaultImageEditProfileId', undefined);
       }
     }
     return { ok: true };

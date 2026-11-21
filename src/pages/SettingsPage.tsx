@@ -9,6 +9,7 @@ import { useAppStore } from '../store/app';
 import { Link, NavLink, useParams } from 'react-router-dom';
 import { findProfile, MODEL_PROFILES, resolveAllProfiles } from '../data/models/profiles';
 import { resolveDefaultVideoProfile } from '../data/models/videoProfiles';
+import { resolveDefaultImageEditProfile } from '../data/models/imageProfiles';
 import { isCustomProfileId } from '../data/customModels';
 import { VENDORS, findVendor, modelsOfVendor, vendorCors } from '../data/models/vendors';
 import { currentTransport, useSettings } from '../store/settings';
@@ -116,6 +117,26 @@ export function SettingsPage() {
       group: '自定义（图片）',
     })),
   ];
+
+  const imageEditProfiles = useMemo(
+    () =>
+      resolveAllProfiles().filter(
+        (profile) => profile.type === 't2i' && profile.capabilities.referenceImage === true,
+      ),
+    [customModels],
+  );
+  const imageEditOptions = [
+    { value: '', label: '未选择', hint: '改图模型需要有参考图能力' },
+    ...imageEditProfiles.map((profile) => ({
+      value: profile.id,
+      label: `${profile.name}（最多 ${profile.capabilities.maxReferenceImages} 张参考图）`,
+      hint: profile.capabilities.minReferenceImages
+        ? `至少 ${profile.capabilities.minReferenceImages} 张参考图`
+        : '支持参考图',
+      group: '支持参考图的图片模型',
+    })),
+  ];
+  const resolvedImageEditProfile = resolveDefaultImageEditProfile(prefs);
 
   const videoProfiles = allProfiles.filter(
     (profile) => profile.type === 'i2v' && Boolean(profile.videoProtocol),
@@ -304,6 +325,29 @@ export function SettingsPage() {
             }}
           />
         </div>
+
+        <div className="settings-select-row">
+          <span className="settings-select-label">图像编辑</span>
+          <SelectMenu
+            className="grow"
+            value={prefs.defaultImageEditProfileId ?? ''}
+            options={imageEditOptions}
+            ariaLabel="图像编辑的默认模型"
+            onChange={(value) =>
+              setPref('defaultImageEditProfileId', value.length > 0 ? value : undefined)
+            }
+          />
+        </div>
+        {!prefs.defaultImageEditProfileId ? (
+          <div className="hint" style={{ marginTop: 0 }}>
+            未选择图像编辑模型。改图模型需要有参考图能力，去{' '}
+            <Link to="/settings/custom">「自定义接入 → 图片」</Link> 新建一条（如 Qwen-Image-Edit）。
+          </div>
+        ) : !resolvedImageEditProfile ? (
+          <div className="hint" style={{ marginTop: 0 }}>
+            原来的图像编辑模型找不到了，请重新选一个，或到「自定义接入 → 图片」新建。
+          </div>
+        ) : null}
 
         <div className="settings-select-row">
           <span className="settings-select-label">生成视频</span>

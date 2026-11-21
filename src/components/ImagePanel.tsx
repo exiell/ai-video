@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
 import { useSettings } from '../store/settings';
@@ -10,6 +10,8 @@ import { SCENE_ANGLE_LABEL } from '../types/model';
 import { Icon } from './Icon';
 import { ImageLightbox, type LightboxState } from './ImageLightbox';
 import { ImagePromptView } from './ImagePromptView';
+import { ImageEditDialog } from './ImageEditDialog';
+import { resolveDefaultImageEditProfile } from '../data/models/imageProfiles';
 
 /**
  * 出图按钮 + 图库（方案.md §3.2 M3/M4）
@@ -77,6 +79,9 @@ export function ImagePanel({
         : null;
 
   const busy = pending !== null;
+  const editProfile = resolveDefaultImageEditProfile(prefs);
+  const [editOpen, setEditOpen] = useState(false);
+  const editButtonRef = useRef<HTMLButtonElement | null>(null);
 
   // 反馈可能挂在几个不同的任务键上（全身图与头部特写是两条），合并显示
   const feedbacks = Object.entries(feedbackMap)
@@ -157,7 +162,45 @@ export function ImagePanel({
           都应该能直接拿到。原来它算完就进了请求体，界面上从不出现。
         */}
         <ImagePromptView refId={refId} target={target} options={options} />
+
+        {/*
+          图像编辑：和「出一张新图」不是同一件事，所以单独描边 + 铅笔图标，
+          放在生成按钮行末尾，避免和普通生成混在一起。
+        */}
+        <button
+          ref={editButtonRef}
+          type="button"
+          className="btn btn-ai image-edit-btn"
+          disabled={busy || !editProfile}
+          title={
+            editProfile
+              ? `用「${editProfile.name}」按参考图修改`
+              : '先到设置 → 默认模型 → 图像编辑 选一个支持参考图的模型'
+          }
+          onClick={() => setEditOpen(true)}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+            <path d="M13.5 6.5l4 4" />
+          </svg>
+          图像编辑
+        </button>
       </div>
+      {!editProfile ? (
+        <div className="hint image-edit-hint">
+          先到设置 → 默认模型 → 图像编辑 选一个模型。
+        </div>
+      ) : null}
 
       {advice ? (
         <details className="why consistency-advice">
@@ -203,6 +246,14 @@ export function ImagePanel({
       ))}
 
       {footer}
+
+      <ImageEditDialog
+        open={editOpen}
+        target={target}
+        refId={refId}
+        onClose={() => setEditOpen(false)}
+        returnFocusRef={editButtonRef}
+      />
     </div>
   );
 }
