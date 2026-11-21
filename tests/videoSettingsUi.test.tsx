@@ -34,14 +34,16 @@ const initialActions = {
 };
 
 let container: HTMLDivElement | null = null;
+let root: ReturnType<typeof createRoot> | null = null;
 
 function renderSettings(tab: string): HTMLDivElement {
   document.body.innerHTML = '';
   container = document.createElement('div');
   document.body.appendChild(container);
-  const root = createRoot(container);
+  const created = createRoot(container);
+  root = created;
   act(() => {
-    root.render(
+    created.render(
       <MemoryRouter initialEntries={[`/settings/${tab}`]}>
         <Routes>
           <Route path="/settings/:section" element={<SettingsPage />} />
@@ -134,7 +136,18 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => {
+afterEach(async () => {
+  // React 19 的异步调度可能在用例结束、jsdom 环境销毁之后才跑到下一帧；
+  // 不 unmount 就会在 CI 上冒成 “window is not defined” 的 unhandled error。
+  if (root) {
+    const current = root;
+    root = null;
+    await act(async () => {
+      current.unmount();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
   vi.unstubAllGlobals();
 });
 
