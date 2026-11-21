@@ -8,6 +8,21 @@
 import type { ModelProfile } from '../../types/model';
 
 export const LOCAL_FLUX3_PROFILE_ID = 'local-flux3';
+/** 本地生图参考图的保守档：24GB 3090 上 VAE encode 阶段容易 OOM */
+export const LOCAL_REFERENCE_MAX_BYTES = 2 * 1024 * 1024;
+export const LOCAL_REFERENCE_MAX_LONG_EDGE = 1024;
+
+/** 判断是否本地档案：authType none 或 provider/id 明显是本地模型（含自定义接入的本地配置） */
+export function isLocalProfile(profile: ModelProfile | undefined): boolean {
+  if (!profile) return false;
+  return (
+    profile.authType === 'none' ||
+    profile.vendorId === 'local' ||
+    profile.id === LOCAL_FLUX3_PROFILE_ID ||
+    /^local[-_]/i.test(profile.id) ||
+    /本地/i.test(profile.provider)
+  );
+}
 export const DEFAULT_LOCAL_MODEL_ENDPOINT = 'http://127.0.0.1:8099/v1';
 /** 本地生图默认超时：vLLM-Omni + FLUX3 在 3090 上首张可能很慢 */
 export const DEFAULT_LOCAL_TIMEOUT_MS = 600_000;

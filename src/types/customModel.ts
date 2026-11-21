@@ -39,6 +39,8 @@ export const MAX_CUSTOM_MODELS_PER_MODALITY = 10;
 export interface CustomModelCapabilities {
   /** 图片：最多参考图数；不确定默认 0，不猜 */
   maxReferenceImages?: number;
+  /** 图片：最少参考图数；0=可纯文生图，纯改图模型填 1 */
+  minReferenceImages?: number;
   /** 图片：是否支持负向词；默认 false */
   negativePrompt?: boolean;
   /** 图片：是否支持 seed；默认 false */

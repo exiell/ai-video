@@ -5,6 +5,7 @@ import { useSettings } from '../store/settings';
 import { customProfileId } from '../data/customModels';
 import { checkCustomModel, type CustomModelCheckResult } from '../services/customModels/check';
 import { SKYREELS_VIDEO_PRESET } from '../data/models/videoProfiles';
+import { QWEN_IMAGE_EDIT_PRESET } from '../data/models/imageProfiles';
 import {
   checkVideoProfile,
   type VideoCheckResult,
@@ -69,6 +70,7 @@ interface FormState {
   requiresKey: boolean;
   timeoutMs: string;
   maxReferenceImages: string;
+  minReferenceImages: string;
   negativePrompt: boolean;
   seed: boolean;
   maxOutputImages: string;
@@ -85,6 +87,7 @@ function emptyForm(modality: CustomModality): FormState {
     requiresKey: true,
     timeoutMs: '',
     maxReferenceImages: '0',
+    minReferenceImages: '0',
     negativePrompt: false,
     seed: false,
     maxOutputImages: '1',
@@ -103,6 +106,7 @@ function formFromConfig(config: CustomModelConfig): FormState {
     requiresKey: config.requiresKey !== false,
     timeoutMs: config.timeoutMs !== undefined ? String(config.timeoutMs) : '',
     maxReferenceImages: String(caps.maxReferenceImages ?? 0),
+    minReferenceImages: String(caps.minReferenceImages ?? 0),
     negativePrompt: caps.negativePrompt === true,
     seed: caps.seed === true,
     maxOutputImages: String(caps.maxOutputImages ?? 1),
@@ -120,8 +124,10 @@ function draftFromForm(form: FormState): CustomModelDraft {
   const capabilities: CustomModelDraft['capabilities'] = {};
   if (form.modality === 'image') {
     const maxReferenceImages = numberOrUndefined(form.maxReferenceImages);
+    const minReferenceImages = numberOrUndefined(form.minReferenceImages);
     const maxOutputImages = numberOrUndefined(form.maxOutputImages);
     if (maxReferenceImages !== undefined) capabilities.maxReferenceImages = maxReferenceImages;
+    if (minReferenceImages !== undefined) capabilities.minReferenceImages = minReferenceImages;
     if (maxOutputImages !== undefined) capabilities.maxOutputImages = maxOutputImages;
     capabilities.negativePrompt = form.negativePrompt;
     capabilities.seed = form.seed;
@@ -294,6 +300,27 @@ export function CustomModelSettings() {
       requiresKey: SKYREELS_VIDEO_PRESET.requiresKey ?? false,
       timeoutMs: String(SKYREELS_VIDEO_PRESET.timeoutMs),
       maxReferenceImages: String(SKYREELS_VIDEO_PRESET.capabilities?.maxReferenceImages ?? 4),
+    });
+  }
+
+  /** 本地改图（Qwen-Image-Edit-2511）：预填 8098 的纯改图服务；字段可改。 */
+  function openLocalImageEditAdd() {
+    const base = emptyForm('image');
+    setEditing({});
+    setErrors({});
+    setFormMessage(null);
+    setKeyValue('');
+    setForm({
+      ...base,
+      name: QWEN_IMAGE_EDIT_PRESET.name,
+      protocol: 'vllm-omni-chat-image',
+      baseUrl: QWEN_IMAGE_EDIT_PRESET.baseUrl,
+      model: QWEN_IMAGE_EDIT_PRESET.model,
+      requiresKey: QWEN_IMAGE_EDIT_PRESET.requiresKey ?? false,
+      timeoutMs: String(QWEN_IMAGE_EDIT_PRESET.timeoutMs),
+      maxReferenceImages: String(QWEN_IMAGE_EDIT_PRESET.capabilities?.maxReferenceImages ?? 3),
+      minReferenceImages: String(QWEN_IMAGE_EDIT_PRESET.capabilities?.minReferenceImages ?? 1),
+      maxOutputImages: String(QWEN_IMAGE_EDIT_PRESET.capabilities?.maxOutputImages ?? 1),
     });
   }
 
@@ -494,20 +521,36 @@ export function CustomModelSettings() {
               </button>
             ) : null}
             {modality === 'image' ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={limitReached}
-                aria-label="新建本地图片模型"
-                title={
-                  limitReached
-                    ? '已达 10 条上限，先删一条'
-                    : '预填本机 vLLM-Omni / FLUX3；字段可改'
-                }
-                onClick={() => openLocalAdd('image')}
-              >
-                新建本地图片模型
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={limitReached}
+                  aria-label="新建本地图片模型"
+                  title={
+                    limitReached
+                      ? '已达 10 条上限，先删一条'
+                      : '预填本机 vLLM-Omni / FLUX3；字段可改'
+                  }
+                  onClick={() => openLocalAdd('image')}
+                >
+                  新建本地图片模型
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={limitReached}
+                  aria-label="新建本地改图模型（Qwen-Image-Edit）"
+                  title={
+                    limitReached
+                      ? '已达 10 条上限，先删一条'
+                      : '3 卡 + CPU offload，纯改图（至少 1 张参考图），约 40–170 秒/张；字段可改'
+                  }
+                  onClick={openLocalImageEditAdd}
+                >
+                  新建本地改图模型（Qwen-Image-Edit）
+                </button>
+              </>
             ) : null}
             {modality === 'video' ? (
               <button
@@ -805,6 +848,18 @@ export function CustomModelSettings() {
                   aria-label="参考图上限"
                   value={form.maxReferenceImages}
                   onChange={(event) => update('maxReferenceImages', event.target.value)}
+                />
+              </Field>
+              <Field
+                label="最少参考图"
+                hint="纯改图模型填 1；0 表示支持纯文生图。不能大于参考图上限。"
+              >
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  aria-label="最少参考图"
+                  value={form.minReferenceImages}
+                  onChange={(event) => update('minReferenceImages', event.target.value)}
                 />
               </Field>
               <Field label="最多出图张数" hint="默认 1；出图至少 1 张。">

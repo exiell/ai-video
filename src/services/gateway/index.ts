@@ -1,4 +1,5 @@
 import type { ApiFlavor, ModelProfile } from '../../types/model';
+import { isLocalProfile } from './localModel';
 import {
   buildDashScopeAsyncPayload,
   buildDashScopeHeaders,
@@ -60,7 +61,12 @@ export interface GatewayErrorInfo {
  * 这是本模块最重要的部分：新手看到 "TypeError: Failed to fetch" 只会放弃，
  * 看到「浏览器被跨域策略挡住了，需要开启代理」才知道下一步做什么。
  */
-export function classifyError(error: unknown, status?: number, body?: string): GatewayErrorInfo {
+export function classifyError(
+  error: unknown,
+  status?: number,
+  body?: string,
+  profile?: ModelProfile,
+): GatewayErrorInfo {
   // 主动取消
   if (error instanceof DOMException && error.name === 'AbortError') {
     return { kind: 'aborted', title: '请求已取消', advice: '如果你没有主动取消，可能是超时了，重试一次。' };
@@ -215,6 +221,34 @@ export function classifyError(error: unknown, status?: number, body?: string): G
         };
       default:
         if (status >= 500) {
+          // 本地模型（FLUX3 等）的 500 大多不是「厂商维护」，而是 24GB 显存跑
+          // VAE encode 时 OOM。给本地专用人话，避免把用户引到不存在的状态页。
+          if (isLocalProfile(profile)) {
+            // Qwen-Image-Edit 等纯改图模型的 500 不是显存：App 发了 0 张参考图，
+            // 服务端报 Missing preprocess images。给可操作的人话，保留 raw。
+            if (/missing preprocess images/i.test(detail) || /missing preprocess images/i.test(body ?? '')) {
+              return {
+                kind: 'server',
+                title: '这个改图模型需要至少 1 张参考图',
+                advice:
+                  '它是纯改图模型，不能纯文生图。先在页面里选一张角色/场景/首帧图再重试；' +
+                  '如果要纯文生图，请换 FLUX3 或支持纯文生图的模型。',
+                status,
+                raw: body,
+              };
+            }
+            return {
+              kind: 'server',
+              title: `本地模型显存不足或服务出错（${status}）`,
+              advice:
+                '先减少参考图（留 1–3 张）或降低输出尺寸，再重试。' +
+                '持续失败就重启本地服务：bash 02-start.sh --stop，' +
+                '再用 `START_EXTRA_ARGS="--vae-use-slicing --vae-use-tiling" bash 02-start.sh` 启动' +
+                '（02-start.sh 已默认带这两个参数，旧启动参数需要重启才会生效）。',
+              status,
+              raw: body,
+            };
+          }
           return {
             kind: 'server',
             title: `厂商服务端出错（${status}）`,
@@ -522,7 +556,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
             '网络慢或服务端卡住时会出现，重试一次通常能好；持续出现就换个模型或代理。',
         });
       }
-      throw new GatewayError(classifyError(error));
+      throw new GatewayError(classifyError(error, undefined, undefined, profile));
     }
 
     /*
@@ -532,7 +566,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     const errorText = useProxy ? redactProxyErrorBody(text) : text;
 
     if (!response.ok) {
-      throw new GatewayError(classifyError(undefined, response.status, errorText));
+      throw new GatewayError(classifyError(undefined, response.status, errorText, profile));
     }
 
     try {
@@ -1057,7 +1091,7 @@ export async function testConnection(
     };
   } catch (error) {
     const info =
-      error instanceof GatewayError ? error.info : classifyError(error);
+      error instanceof GatewayError ? error.info : classifyError(error, undefined, undefined, profile);
     return { ok: false, via, elapsedMs: Date.now() - started, info };
   }
 }

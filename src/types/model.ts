@@ -529,6 +529,8 @@ export interface ReferenceCapability {
   acceptsDataUri: TriState;
   /** 单张图字节上限；没核实就不填，绝不猜 */
   maxBytesPerImage?: number;
+  /** 预处理时长边上限（可选）；本地 24GB 卡可声明更保守的 1024 */
+  maxLongEdge?: number;
   /** 画幅归属；'unknown' 时不把任何槽标为画幅决定者 */
   aspectFollows?: AspectFollows;
 }
@@ -554,6 +556,11 @@ export interface ModelCapabilities {
   referenceImage: boolean;
   /** 单次最多可传几张参考图 */
   maxReferenceImages: number;
+  /**
+   * 最少需要几张参考图（v0.66）。默认 0=可纯文生图；
+   * 纯改图模型（Qwen-Image-Edit 等）填 1，不足时 App 提前拦截，不发请求。
+   */
+  minReferenceImages?: number;
   /** 单次最多出几张图 */
   maxOutputImages: number;
   /**

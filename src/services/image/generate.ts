@@ -236,6 +236,20 @@ export async function generateImages(
     );
   }
 
+  // 纯改图模型必须有输入图：在发请求前拦，避免把「0 图」发到服务端后
+  // 拿到 500（Qwen-Image-Edit 会报 Missing preprocess images）。
+  const minReferenceImages = profile.capabilities.minReferenceImages ?? 0;
+  if (referenceImages.length < minReferenceImages) {
+    return {
+      ok: false,
+      images: [],
+      warnings,
+      error:
+        `这个模型需要至少 ${minReferenceImages} 张参考图；当前 ${referenceImages.length} 张。` +
+        '请先在页面里选角色/场景/首帧图，或换支持纯文生图的模型。',
+    };
+  }
+
   const flavor = profile.apiFlavor ?? 'openai';
 
   /**

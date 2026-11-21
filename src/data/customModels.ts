@@ -73,6 +73,10 @@ function normalizeCapabilities(
   if (caps.maxReferenceImages !== undefined) {
     result.maxReferenceImages = caps.maxReferenceImages;
   }
+  if (caps.minReferenceImages !== undefined) {
+    // max=0 时没有参考图能力，不保留 min（避免「0 张也要求 1 张」的坏配置）
+    if ((caps.maxReferenceImages ?? 0) > 0) result.minReferenceImages = caps.minReferenceImages;
+  }
   if (caps.negativePrompt !== undefined) result.negativePrompt = caps.negativePrompt;
   if (caps.seed !== undefined) result.seed = caps.seed;
   if (caps.maxOutputImages !== undefined) result.maxOutputImages = caps.maxOutputImages;
@@ -90,6 +94,16 @@ function validateCapabilities(
     typeof value === 'number' && Number.isInteger(value) && value >= 0;
   if (caps.maxReferenceImages !== undefined && !isNonNegativeInt(caps.maxReferenceImages)) {
     errors.capabilities = '参考图上限必须是非负整数。';
+  }
+  if (caps.minReferenceImages !== undefined && !isNonNegativeInt(caps.minReferenceImages)) {
+    errors.capabilities = '最少参考图必须是非负整数。';
+  }
+  if (
+    caps.minReferenceImages !== undefined &&
+    (caps.maxReferenceImages ?? 0) > 0 &&
+    caps.minReferenceImages > (caps.maxReferenceImages ?? 0)
+  ) {
+    errors.capabilities = '最少参考图不能大于参考图上限。';
   }
   if (caps.maxOutputImages !== undefined) {
     if (!Number.isInteger(caps.maxOutputImages) || caps.maxOutputImages < 1) {
@@ -256,11 +270,14 @@ export function customModelToProfile(config: CustomModelConfig): ModelProfile {
   const maxOutputImages = Math.max(1, caps.maxOutputImages ?? 1);
   const negativePrompt = caps.negativePrompt === true;
   const seed = caps.seed === true;
+  const minReferenceImages =
+    maxReferenceImages > 0 ? Math.min(maxReferenceImages, Math.max(0, caps.minReferenceImages ?? 0)) : 0;
   const capabilities: ModelCapabilities = {
     negativePrompt,
     seed,
     referenceImage: maxReferenceImages > 0,
     maxReferenceImages,
+    ...(minReferenceImages > 0 ? { minReferenceImages } : {}),
     maxOutputImages,
     ...(maxReferenceImages > 0
       ? {
