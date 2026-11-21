@@ -38,7 +38,7 @@ function makeScene(name: string): SceneCard {
   };
 }
 
-export function ScenesPage() {
+export function ScenesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const project = useAppStore((s) => s.project);
   const upsertScene = useAppStore((s) => s.upsertScene);
   const removeScene = useAppStore((s) => s.removeScene);
@@ -75,66 +75,16 @@ export function ScenesPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>场景设定</h1>
-          <p>
-            <b>固定元素</b>是「这是同一个地方」的依据。
-          </p>
-        </div>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          + 加一个场景
+      <div className={`page-head${embedded ? ' page-head-compact' : ''}`}>
+        {embedded ? <span /> : <h1>场景设定</h1>}
+        <button type="button" className="btn btn-primary btn-sm" onClick={add}>
+          <Icon name="plus" size={14} />
+          <span>场景</span>
         </button>
       </div>
 
       {/* AI 流程指引：只显示「当前该做哪一步」，全做完就自动消失 */}
       <AiFlowGuide variant="compact" />
-
-      <details className="why scene-consistency">
-        <summary>场景一致性靠什么保证？</summary>
-        <div className="why-body">
-          <p style={{ fontSize: 13, marginTop: 0 }}>
-            三个字段，都要写成<b>能直接贴进提示词的短语</b>：
-          </p>
-          <table className="simple">
-            <thead>
-              <tr>
-                <th style={{ width: 110 }}>字段</th>
-                <th>作用</th>
-                <th>例子</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>固定元素</td>
-                <td>观众认出「还是这地方」的依据，3–5 条</td>
-                <td>
-                  <code>rows of wooden desks facing a green blackboard</code>
-                </td>
-              </tr>
-              <tr>
-                <td>主光方向</td>
-                <td>决定同一处地方在不同镜头里像不像同一个时刻</td>
-                <td>傍晚，暖光从右侧窗户斜射</td>
-              </tr>
-              <tr>
-                <td>主色调</td>
-                <td>观众判断「换了地方」最直接的线索</td>
-                <td>暖橙 + 灰绿</td>
-              </tr>
-            </tbody>
-          </table>
-          <p>
-            为什么光线和色调也算场景一致性？观众判断这是不是同一个地方，主要看光的方向和整体色调；
-            墙上的裂缝只是次要线索。
-          </p>
-          <p>
-            一个傍晚的教室写成「正午顶光」，观众立刻会觉得不对劲，即使桌椅黑板一个没变。
-            检查引擎会把这种冲突指出来；如果是剧情有意安排的（比如时间真的从白天到了晚上），
-            给它建一个<b>变体</b>，引擎就知道这是有意的，不再报冲突。
-          </p>
-        </div>
-      </details>
 
       {project.scenes.length > 0 ? <BatchGenerateCard tasks={['scenes']} /> : null}
 

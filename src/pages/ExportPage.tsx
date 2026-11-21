@@ -1,4 +1,5 @@
 import { Info } from '../components/bits';
+import { Icon } from '../components/Icon';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -9,7 +10,8 @@ import {
   summarizeBundle,
   type ZipEntry,
 } from '../domain/export/bundle';
-import { deleteProject, listAssets, parseImportedProject, type ImportResult } from '../services/storage';
+import { deleteProject, listAssets } from '../services/storage';
+import { importProjectFile } from '../services/storage/importBundle';
 import { runChecks } from '../domain/checks';
 import type { Asset } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
@@ -24,7 +26,7 @@ import { ASSET_KIND_LABEL } from '../types/model';
  * 把它整个清空。文本还能靠复制粘贴留存，几十张真金白银生成的图不行。
  * 所以「打包下载」被放在最显眼的位置，并且明确写出这次包里有什么、多大。
  */
-export function ExportPage() {
+export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
   const project = useAppStore((s) => s.project);
   const report = useAppStore((s) => s.report);
   const setProject = useAppStore((s) => s.setProject);
@@ -83,30 +85,18 @@ export function ExportPage() {
   async function importFile(file: File) {
     setImportError(null);
     setImportOk(null);
-    try {
-      // 先看大小再读：几百 MB 的 JSON 一次性读进来会让页面假死
-      if (file.size > 20 * 1024 * 1024) {
-        setImportError(
-          '这个文件超过 20MB，不像是纯项目数据。确认选的是压缩包根目录的「项目数据.json」，而不是整个压缩包或图片。',
-        );
-        return;
-      }
-      const text = await file.text();
-      const result: ImportResult = parseImportedProject(text);
-      if (!result.ok || !result.project) {
-        setImportError(result.error ?? '导入失败。');
-        return;
-      }
-      setProject(result.project);
-      setImportOk(
-        `已导入「${result.project.name}」。注意：项目数据里不含图片，图片需要从「图包★」里手动查看。`,
-      );
-    } catch {
-      // 文件读不出来时不能什么都不发生：给一句人话，并告诉用户下一步能做什么。
-      setImportError(
-        '这个项目文件读不出来。可能不是 AniGuide 导出的 项目数据.json，或者文件已经不完整；可以让对方重新导出一次再试。',
-      );
+    const result = await importProjectFile(file);
+    if (!result.ok || !result.project) {
+      setImportError(result.error ?? '导入失败。');
+      return;
     }
+    setProject(result.project);
+    const imgCount = result.restoredImages ?? 0;
+    setImportOk(
+      imgCount > 0
+        ? `已导入「${result.project.name}」并恢复 ${imgCount} 张图片，已保存至本机。`
+        : `已导入「${result.project.name}」，已保存至本机。`,
+    );
   }
 
   const textEntries = entries.filter((e) => !e.bytes);
@@ -114,15 +104,11 @@ export function ExportPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>导出</h1>
-          <p>
-            这个包既是成品，也是<b>唯一的备份</b>。图片只在这个浏览器里，清了就没了。
-          </p>
-        </div>
+      <div className={`page-head${embedded ? ' page-head-compact' : ''}`}>
+        {embedded ? <span /> : <h1>导出</h1>}
         <button type="button" className="btn btn-primary" onClick={download}>
-          打包下载（zip）
+          <Icon name="download" size={15} />
+          <span>打包下载</span>
         </button>
       </div>
 

@@ -1,0 +1,1018 @@
+/* ==========================================================================
+   外观 E · 彩绘棱镜（Pop Prism · 浅色奔放版）
+   明亮奶油白底 + 高饱和糖果彩虹流光 + 彩色几何装饰图形 + 圆润活力字体 + 弹性动效。
+   ========================================================================== */
+
+@keyframes popAuroraBounce {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(-2.5%, 2%, 0) scale(1.06) rotate(1.5deg);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes popShapesFloat {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(10px, -12px, 0);
+  }
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes popRainbowRun {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes popFabFloat {
+  0%,
+  100% {
+    transform: translateY(0);
+    box-shadow:
+      0 10px 26px rgba(124, 92, 255, 0.34),
+      0 0 0 3px rgba(255, 92, 138, 0.16);
+  }
+  50% {
+    transform: translateY(-4px);
+    box-shadow:
+      0 16px 32px rgba(0, 194, 255, 0.36),
+      0 0 0 5px rgba(124, 92, 255, 0.14);
+  }
+}
+
+@keyframes popPulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(124, 92, 255, 0.55);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgba(124, 92, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(124, 92, 255, 0);
+  }
+}
+
+@keyframes popLocatePop {
+  0% {
+    transform: scale(1);
+    box-shadow:
+      0 0 0 0 rgba(255, 92, 138, 0.65),
+      0 16px 34px rgba(124, 92, 255, 0.25);
+  }
+  35% {
+    transform: scale(1.012);
+    box-shadow:
+      0 0 0 10px rgba(0, 194, 255, 0),
+      0 20px 38px rgba(255, 92, 138, 0.22);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 10px 28px rgba(72, 62, 130, 0.08);
+  }
+}
+
+@keyframes popDrawerSpring {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.94);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ---------- 色彩变量与活泼圆润字体 ---------- */
+
+[data-theme='pop'] {
+  color-scheme: light;
+  --bg: #faf9ff;
+  --bg-soft: rgba(255, 255, 255, 0.84);
+  --bg-card: rgba(255, 255, 255, 0.92);
+  --bg-hover: #f2f0ff;
+  --border: rgba(124, 92, 255, 0.16);
+  --border-strong: rgba(124, 92, 255, 0.34);
+
+  --text: #1b1734;
+  --text-dim: #524b75;
+  --text-faint: #7d76a3;
+
+  --accent: #7c5cff;
+  --accent-dim: #ff5c8a;
+  --error: #f43f5e;
+  --warning: #f59e0b;
+  --info: #0284c7;
+  --ok: #059669;
+
+  --pop-cyan: #00b8f4;
+  --pop-violet: #7c5cff;
+  --pop-pink: #ff5c8a;
+  --pop-amber: #ffaa2b;
+  --pop-mint: #10c98f;
+  --pop-grad: linear-gradient(120deg, #00b8f4 0%, #7c5cff 45%, #ff5c8a 82%, #ffaa2b 100%);
+  --pop-grad-soft: linear-gradient(
+    120deg,
+    rgba(0, 184, 244, 0.13) 0%,
+    rgba(124, 92, 255, 0.13) 50%,
+    rgba(255, 92, 138, 0.13) 100%
+  );
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --shadow: 0 12px 30px rgba(82, 66, 160, 0.1);
+
+  --font: 'Hiragino Maru Gothic ProN', 'Yuanti SC', 'PingFang SC', 'Quicksand', 'Nunito',
+    'Microsoft YaHei', sans-serif;
+  --pop-display: 'Hiragino Maru Gothic ProN', 'Yuanti SC', 'PingFang SC', 'Segoe UI', sans-serif;
+}
+
+[data-theme='pop'] html,
+[data-theme='pop'] body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+[data-theme='pop'] h1,
+[data-theme='pop'] h2,
+[data-theme='pop'] h3,
+[data-theme='pop'] .brand-text b {
+  font-family: var(--pop-display);
+  letter-spacing: -0.02em;
+}
+
+/* ---------- 奔放多彩背景：极光光晕 + 漂浮彩色几何图形 ---------- */
+
+[data-theme='pop'] .app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+[data-theme='pop'] .app::before {
+  content: '';
+  position: fixed;
+  inset: -10%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(38% 36% at 10% 12%, rgba(0, 184, 244, 0.22) 0%, transparent 70%),
+    radial-gradient(36% 36% at 88% 14%, rgba(255, 92, 138, 0.2) 0%, transparent 70%),
+    radial-gradient(40% 34% at 74% 88%, rgba(255, 212, 59, 0.24) 0%, transparent 72%),
+    radial-gradient(38% 38% at 20% 84%, rgba(124, 92, 255, 0.18) 0%, transparent 72%);
+  animation: popAuroraBounce 15s ease-in-out infinite;
+}
+
+/* 彩色波普几何图形层（星芒、空心圆环、小三角与彩点） */
+[data-theme='pop'] .app::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.72;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='420' height='420' viewBox='0 0 420 420'%3E%3Ccircle cx='56' cy='68' r='16' fill='none' stroke='%2300b8f4' stroke-width='3' stroke-opacity='.28'/%3E%3Cpath d='M340 52 L346 66 L360 72 L346 78 L340 92 L334 78 L320 72 L334 66 Z' fill='%23ff5c8a' fill-opacity='.26'/%3E%3Cpolygon points='84,310 100,338 68,338' fill='none' stroke='%23ffaa2b' stroke-width='3' stroke-opacity='.35'/%3E%3Crect x='312' y='284' width='22' height='22' rx='6' transform='rotate(24 323 295)' fill='none' stroke='%237c5cff' stroke-width='3' stroke-opacity='.26'/%3E%3Ccircle cx='215' cy='190' r='5' fill='%2310c98f' fill-opacity='.35'/%3E%3Ccircle cx='185' cy='360' r='7' fill='%23ff5c8a' fill-opacity='.22'/%3E%3Ccircle cx='385' cy='180' r='6' fill='%2300b8f4' fill-opacity='.28'/%3E%3C/svg%3E");
+  background-size: 420px 420px;
+  animation: popShapesFloat 12s ease-in-out infinite;
+}
+
+/* ---------- 顶部流动彩虹制片通栏 ---------- */
+
+[data-theme='pop'] .sidebar {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: auto;
+  min-height: 64px;
+  padding: 10px 24px;
+  border-right: 0;
+  border-bottom: 0;
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 6px 24px rgba(102, 82, 186, 0.08);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex: none;
+}
+
+[data-theme='pop'] .sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+[data-theme='pop'] .sidebar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #00b8f4, #7c5cff, #ff5c8a, #ffaa2b, #10c98f, #00b8f4);
+  background-size: 260% 100%;
+  animation: popRainbowRun 8s linear infinite;
+  pointer-events: none;
+}
+
+[data-theme='pop'] .brand-lockup {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 4px 6px 4px 0;
+  text-decoration: none;
+}
+
+[data-theme='pop'] .brand-mark {
+  width: 28px;
+  height: 28px;
+  color: var(--pop-violet);
+  filter: drop-shadow(0 3px 8px rgba(124, 92, 255, 0.32));
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme='pop'] .brand-lockup:hover .brand-mark {
+  transform: rotate(-8deg) scale(1.1);
+}
+
+[data-theme='pop'] .brand-text b {
+  font-size: 16px;
+  font-weight: 800;
+  background: var(--pop-grad);
+  background-size: 200% 200%;
+  animation: popRainbowRun 7s ease infinite;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='pop'] .project-switch {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid rgba(124, 92, 255, 0.24);
+  border-radius: 999px;
+  background: linear-gradient(120deg, rgba(0, 184, 244, 0.08), rgba(255, 92, 138, 0.08));
+  max-width: 260px;
+  text-decoration: none;
+}
+
+[data-theme='pop'] .project-switch b {
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 145px;
+}
+
+[data-theme='pop'] .project-switch-meta {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 1px solid rgba(124, 92, 255, 0.25);
+  color: var(--pop-violet);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+[data-theme='pop'] .side-nav {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  min-width: max-content;
+}
+
+[data-theme='pop'] .side-nav-utility {
+  flex: none;
+  justify-content: flex-end;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  gap: 4px;
+}
+
+[data-theme='pop'] .nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-left: 0;
+  border-radius: 999px;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+[data-theme='pop'] .nav-item:hover {
+  background: rgba(124, 92, 255, 0.1);
+  color: var(--pop-violet);
+  transform: translateY(-2px) scale(1.03);
+  text-decoration: none;
+}
+
+[data-theme='pop'] .nav-item.active {
+  background: linear-gradient(125deg, #00b8f4 0%, #7c5cff 56%, #ff5c8a 100%);
+  background-size: 180% 180%;
+  animation: popRainbowRun 8s ease infinite;
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(124, 92, 255, 0.34);
+}
+
+[data-theme='pop'] .nav-icon {
+  color: var(--text-faint);
+}
+
+[data-theme='pop'] .nav-item:hover .nav-icon {
+  color: var(--pop-violet);
+}
+
+[data-theme='pop'] .nav-item.active .nav-icon {
+  color: #ffffff;
+}
+
+[data-theme='pop'] .nav-count {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(124, 92, 255, 0.12);
+  color: var(--pop-violet);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+[data-theme='pop'] .nav-item.active .nav-count {
+  background: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+}
+
+[data-theme='pop'] .nav-count-danger {
+  background: #ffe4e8;
+  color: #e11d48;
+  box-shadow: 0 0 0 1px rgba(244, 63, 94, 0.35);
+}
+
+[data-theme='pop'] .sidebar-foot {
+  flex: none;
+  margin: 0;
+  padding: 0 0 0 10px;
+  border-top: 0;
+  border-left: 1px solid var(--border);
+}
+
+[data-theme='pop'] .save-pill {
+  border-color: rgba(16, 201, 143, 0.36);
+  background: #ecfdf5;
+  color: #059669;
+}
+
+[data-theme='pop'] .save-pill .save-dot {
+  animation: popPulseRing 2.4s ease-out infinite;
+}
+
+/* ---------- 宽屏主画布 ---------- */
+
+[data-theme='pop'] .main {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 36px 96px;
+  overflow-y: auto;
+  background: transparent;
+}
+
+/* ---------- 悬浮彩虹 AI 副导演能量胶囊 ---------- */
+
+[data-theme='pop'] .chat-panel {
+  position: fixed;
+  z-index: 45;
+  right: 22px;
+  bottom: 22px;
+  top: 80px;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  border: 2px solid rgba(124, 92, 255, 0.26);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: 0 22px 52px rgba(92, 72, 180, 0.2);
+  overflow: hidden;
+  animation: popDrawerSpring 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme='pop'] .chat-panel.collapsed {
+  top: auto;
+  width: auto;
+  height: 48px;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(125deg, #00b8f4 0%, #7c5cff 50%, #ff5c8a 100%);
+  background-size: 200% 200%;
+  animation:
+    popRainbowRun 6s ease infinite,
+    popFabFloat 3.4s ease-in-out infinite;
+}
+
+[data-theme='pop'] .chat-panel.collapsed:hover {
+  transform: translateY(-4px) scale(1.06);
+}
+
+[data-theme='pop'] .chat-panel.collapsed .chat-toggle {
+  width: auto;
+  height: 100%;
+  padding: 0 20px;
+  flex-direction: row;
+  gap: 7px;
+  border-right: 0;
+  background: transparent;
+  color: #ffffff;
+}
+
+[data-theme='pop'] .chat-panel.collapsed .chat-toggle-label {
+  writing-mode: horizontal-tb;
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+[data-theme='pop'] .chat-panel:not(.collapsed) .chat-toggle {
+  width: 30px;
+  background: #f5f3ff;
+  border-right: 1px solid var(--border);
+  color: var(--pop-violet);
+}
+
+[data-theme='pop'] .chat-panel:not(.collapsed) .chat-body {
+  width: calc(100% - 30px);
+}
+
+[data-theme='pop'] .chat-bubble.user {
+  background: linear-gradient(125deg, #7c5cff, #ff5c8a);
+  color: #ffffff;
+}
+
+/* ---------- 卡片、按钮、表单、标签（高活力弹性交互） ---------- */
+
+[data-theme='pop'] .card,
+[data-theme='pop'] .panel,
+[data-theme='pop'] .start-card,
+[data-theme='pop'] .saved-table,
+[data-theme='pop'] .tools-drawer,
+[data-theme='pop'] .issue {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.2s ease,
+    box-shadow 0.22s ease;
+}
+
+[data-theme='pop'] .btn {
+  background: #ffffff;
+  border: 1px solid rgba(124, 92, 255, 0.26);
+  border-radius: 999px;
+  color: var(--text);
+  font-weight: 600;
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.2s ease,
+    border-color 0.2s ease;
+}
+
+[data-theme='pop'] .btn:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.03);
+  border-color: var(--pop-violet);
+  background: #f5f3ff;
+  box-shadow: 0 8px 18px rgba(124, 92, 255, 0.16);
+}
+
+[data-theme='pop'] .btn-primary,
+[data-theme='pop'] .btn-blue {
+  border: 0;
+  background: linear-gradient(125deg, #00b8f4 0%, #7c5cff 52%, #ff5c8a 100%);
+  background-size: 200% 200%;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 8px 22px rgba(124, 92, 255, 0.34);
+}
+
+[data-theme='pop'] .btn-primary:hover:not(:disabled),
+[data-theme='pop'] .btn-blue:hover:not(:disabled) {
+  background-position: 100% 50%;
+  transform: translateY(-3px) scale(1.04);
+  box-shadow: 0 12px 28px rgba(255, 92, 138, 0.36);
+}
+
+[data-theme='pop'] .btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  box-shadow: none;
+}
+
+[data-theme='pop'] .btn-ghost:hover:not(:disabled) {
+  background: rgba(124, 92, 255, 0.1);
+  color: var(--pop-violet);
+  box-shadow: none;
+}
+
+[data-theme='pop'] input[type='text'],
+[data-theme='pop'] input[type='number'],
+[data-theme='pop'] textarea,
+[data-theme='pop'] select,
+[data-theme='pop'] .select-trigger {
+  background: #ffffff;
+  border-color: rgba(124, 92, 255, 0.24);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+}
+
+[data-theme='pop'] input:focus,
+[data-theme='pop'] textarea:focus,
+[data-theme='pop'] select:focus,
+[data-theme='pop'] .select-trigger:focus-visible {
+  border-color: var(--pop-violet);
+  box-shadow: 0 0 0 4px rgba(124, 92, 255, 0.14);
+}
+
+[data-theme='pop'] .tag-error {
+  background: #ffe4e8;
+  border-color: rgba(244, 63, 94, 0.34);
+  color: #e11d48;
+}
+
+[data-theme='pop'] .tag-warning {
+  background: #fef3c7;
+  border-color: rgba(245, 158, 11, 0.34);
+  color: #b45309;
+}
+
+[data-theme='pop'] .tag-info {
+  background: #e0f2fe;
+  border-color: rgba(0, 184, 244, 0.34);
+  color: #0369a1;
+}
+
+[data-theme='pop'] .tag-ok {
+  background: #d1fae5;
+  border-color: rgba(16, 201, 143, 0.34);
+  color: #047857;
+}
+
+/* ---------- 重点页面：作品主页（阳光波普彩绘总控台） ---------- */
+
+[data-theme='pop'] .home-head h1,
+[data-theme='pop'] .hub-hero h1,
+[data-theme='pop'] .start-head h1,
+[data-theme='pop'] .page-head h1 {
+  font-weight: 800;
+  background: linear-gradient(120deg, #1b1734 0%, #7c5cff 52%, #ff5c8a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='pop'] .stage-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+[data-theme='pop'] .stage-step {
+  padding: 13px 16px;
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(82, 66, 160, 0.08);
+  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+[data-theme='pop'] .stage-step:hover {
+  transform: translateY(-3px) scale(1.02);
+}
+
+[data-theme='pop'] .stage-step:nth-child(1) {
+  border-color: rgba(0, 184, 244, 0.32);
+}
+[data-theme='pop'] .stage-step:nth-child(2) {
+  border-color: rgba(124, 92, 255, 0.32);
+}
+[data-theme='pop'] .stage-step:nth-child(3) {
+  border-color: rgba(255, 92, 138, 0.32);
+}
+[data-theme='pop'] .stage-step:nth-child(4) {
+  border-color: rgba(16, 201, 143, 0.32);
+}
+
+[data-theme='pop'] .stage-step.is-now {
+  background: linear-gradient(135deg, #ffffff 0%, #f3efff 100%);
+  border-color: var(--pop-violet);
+  box-shadow: 0 10px 26px rgba(124, 92, 255, 0.2);
+}
+
+[data-theme='pop'] .stage-step.is-now .stage-step-dot {
+  background: var(--pop-violet);
+  animation: popPulseRing 2s ease-out infinite;
+}
+
+/* 英雄行动卡：旋转彩虹描边 + 右侧彩色星芒几何图腾 */
+[data-theme='pop'] .next-card {
+  position: relative;
+  padding: 24px 28px;
+  border: 2px solid transparent;
+  border-radius: 20px;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='120' viewBox='0 0 180 120'%3E%3Ccircle cx='145' cy='26' r='22' fill='%23ffd43b' fill-opacity='.34'/%3E%3Cpath d='M108 18 L113 30 L125 35 L113 40 L108 52 L103 40 L91 35 L103 30 Z' fill='%23ff5c8a' fill-opacity='.35'/%3E%3Ccircle cx='126' cy='86' r='12' fill='none' stroke='%2300b8f4' stroke-width='3' stroke-opacity='.42'/%3E%3C/svg%3E")
+      right 12px center / 180px 120px no-repeat,
+    linear-gradient(130deg, #ffffff 0%, #f4f2ff 55%, #fff0f6 100%);
+  box-shadow: 0 14px 36px rgba(124, 92, 255, 0.14);
+  overflow: hidden;
+}
+
+[data-theme='pop'] .next-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 2px;
+  border-radius: inherit;
+  background: linear-gradient(120deg, #00b8f4, #7c5cff, #ff5c8a, #ffaa2b, #00b8f4);
+  background-size: 260% 260%;
+  animation: popRainbowRun 6s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+[data-theme='pop'] .next-label {
+  display: inline-flex;
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: linear-gradient(120deg, rgba(0, 184, 244, 0.15), rgba(124, 92, 255, 0.16));
+  color: var(--pop-violet);
+  font-weight: 700;
+}
+
+[data-theme='pop'] .shot-tile {
+  transition: transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme='pop'] .shot-tile:hover {
+  transform: translateY(-5px) rotate(-0.6deg);
+}
+
+[data-theme='pop'] .shot-tile-frame {
+  background: linear-gradient(145deg, #1f1b3d 0%, #31255a 100%);
+  border: 2px solid rgba(124, 92, 255, 0.24);
+  border-radius: var(--radius);
+}
+
+[data-theme='pop'] .shot-tile:hover .shot-tile-frame {
+  border-color: var(--pop-pink);
+  box-shadow: 0 14px 28px rgba(255, 92, 138, 0.2);
+}
+
+[data-theme='pop'] .home-rhythm-seg {
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+  font-weight: 700;
+  background: linear-gradient(135deg, #00b8f4, #38bdf8);
+  box-shadow: 0 4px 12px rgba(0, 184, 244, 0.26);
+}
+
+[data-theme='pop'] .home-rhythm-seg small {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme='pop'] .home-rhythm-seg:nth-child(4n + 2) {
+  background: linear-gradient(135deg, #7c5cff, #a78bfa);
+  box-shadow: 0 4px 12px rgba(124, 92, 255, 0.26);
+}
+
+[data-theme='pop'] .home-rhythm-seg:nth-child(4n + 3) {
+  background: linear-gradient(135deg, #ff5c8a, #fb7185);
+  box-shadow: 0 4px 12px rgba(255, 92, 138, 0.26);
+}
+
+[data-theme='pop'] .home-rhythm-seg:nth-child(4n + 4) {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.26);
+}
+
+[data-theme='pop'] .home-rhythm-seg:hover {
+  transform: translateY(-3px) scale(1.03);
+}
+
+[data-theme='pop'] .hub-tab.active,
+[data-theme='pop'] .guide-step-pill.active,
+[data-theme='pop'] .aspect-card.active {
+  background: linear-gradient(125deg, #00b8f4 0%, #7c5cff 58%, #ff5c8a 100%);
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 6px 18px rgba(124, 92, 255, 0.3);
+}
+
+[data-theme='pop'] .aspect-card.active small,
+[data-theme='pop'] .guide-step-pill.active .guide-step-no {
+  color: rgba(255, 255, 255, 0.88);
+}
+
+[data-theme='pop'] .aspect-card.active .aspect-frame-icon {
+  border-color: #ffffff;
+}
+
+/* ---------- 重点页面：分镜与质检（高饱和糖果吸顶时间轴 + 彩带三步卡） ---------- */
+
+[data-theme='pop'] .shot-strip {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 12px -8px 16px;
+  padding: 12px 14px;
+  border: 2px solid rgba(124, 92, 255, 0.2);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 12px 28px rgba(92, 72, 180, 0.12);
+}
+
+[data-theme='pop'] .shot-strip-ruler {
+  color: var(--pop-violet);
+  font-weight: 700;
+}
+
+[data-theme='pop'] .shot-strip-track {
+  height: 46px;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid rgba(124, 92, 255, 0.16);
+  border-radius: var(--radius);
+  background: #f5f3ff;
+}
+
+[data-theme='pop'] .shot-strip-seg {
+  border: 0;
+  border-radius: 10px;
+  color: #ffffff;
+  font-weight: 700;
+  background: linear-gradient(135deg, #00b8f4, #38bdf8);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.18s ease;
+}
+
+[data-theme='pop'] .shot-strip-seg:nth-child(4n + 2) {
+  background: linear-gradient(135deg, #7c5cff, #a78bfa);
+}
+
+[data-theme='pop'] .shot-strip-seg:nth-child(4n + 3) {
+  background: linear-gradient(135deg, #ff5c8a, #fb7185);
+}
+
+[data-theme='pop'] .shot-strip-seg:nth-child(4n + 4) {
+  background: linear-gradient(135deg, #f59e0b, #fbbf24);
+}
+
+[data-theme='pop'] .shot-strip-seg:hover {
+  transform: translateY(-2px) scale(1.02);
+  filter: brightness(1.08);
+}
+
+[data-theme='pop'] .shot-strip-seg.is-open {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px var(--pop-violet);
+}
+
+[data-theme='pop'] .shot-strip-dur {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+[data-theme='pop'] .shot-card {
+  border: 1px solid rgba(124, 92, 255, 0.18);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(82, 66, 160, 0.08);
+  transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+[data-theme='pop'] .shot-card:hover {
+  border-color: rgba(124, 92, 255, 0.44);
+  box-shadow: 0 12px 30px rgba(124, 92, 255, 0.13);
+}
+
+[data-theme='pop'] .shot-card:has(.expand-toggle[aria-expanded='true']) {
+  border: 2px solid var(--pop-violet);
+  box-shadow: 0 18px 40px rgba(124, 92, 255, 0.18);
+}
+
+[data-theme='pop'] .shot-card.shot-located {
+  animation: popLocatePop 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+[data-theme='pop'] .shot-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 66px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: linear-gradient(125deg, #00b8f4, #7c5cff);
+  color: #ffffff;
+  font-family: var(--mono);
+  font-weight: 700;
+}
+
+/* 三步脚本：电青 / 紫罗兰 / 珊瑚粉 鲜明彩带区分 */
+[data-theme='pop'] .shot-flow-step {
+  background: #ffffff;
+  border-width: 1px;
+  border-left-width: 4px;
+}
+
+[data-theme='pop'] .shot-flow-step:nth-child(2) {
+  border-left-color: var(--pop-cyan);
+}
+[data-theme='pop'] .shot-flow-step:nth-child(2) .shot-step-badge {
+  background: #e0f7ff;
+  color: #0284c7;
+}
+
+[data-theme='pop'] .shot-flow-step:nth-child(3) {
+  border-left-color: var(--pop-violet);
+}
+[data-theme='pop'] .shot-flow-step:nth-child(3) .shot-step-badge {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+[data-theme='pop'] .shot-flow-step:nth-child(4) {
+  border-left-color: var(--pop-pink);
+}
+[data-theme='pop'] .shot-flow-step:nth-child(4) .shot-step-badge {
+  background: #ffe4ec;
+  color: #db2777;
+}
+
+[data-theme='pop'] .shot-continuity-box {
+  background: linear-gradient(135deg, #f8f7ff 0%, #fff5f9 100%);
+  border-color: rgba(124, 92, 255, 0.26);
+}
+
+[data-theme='pop'] .shot-visual-col {
+  background: linear-gradient(145deg, #f6f8ff 0%, #fdf4ff 100%);
+  border: 1px solid rgba(124, 92, 255, 0.22);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+[data-theme='pop'] .shot-frame-pipeline {
+  background: #ffffff;
+  border-color: rgba(124, 92, 255, 0.22);
+}
+
+[data-theme='pop'] .guide-preview-stage {
+  background: linear-gradient(135deg, #f0f9ff 0%, #fdf2f8 100%);
+}
+
+[data-theme='pop'] .guide-preview-frame {
+  border-color: var(--pop-violet);
+  background: #ffffff;
+  color: var(--pop-violet);
+  box-shadow: 0 6px 16px rgba(124, 92, 255, 0.14);
+}
+
+/* ---------- 响应式与减弱动效 ---------- */
+
+@media (max-width: 960px) {
+  [data-theme='pop'] .sidebar {
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    gap: 8px 12px;
+  }
+
+  [data-theme='pop'] .side-nav {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-top: 6px;
+    border-top: 1px solid var(--border);
+  }
+
+  [data-theme='pop'] .side-nav-utility {
+    order: 2;
+    margin-left: auto;
+    border-left: 0;
+    padding-left: 0;
+  }
+
+  [data-theme='pop'] .sidebar-foot {
+    display: none;
+  }
+
+  [data-theme='pop'] .main {
+    padding: 18px 16px 88px;
+  }
+
+  [data-theme='pop'] .stage-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme='pop'] .app::before,
+  [data-theme='pop'] .app::after,
+  [data-theme='pop'] .sidebar::after,
+  [data-theme='pop'] .brand-text b,
+  [data-theme='pop'] .nav-item.active,
+  [data-theme='pop'] .next-card::before,
+  [data-theme='pop'] .stage-step.is-now .stage-step-dot,
+  [data-theme='pop'] .save-pill .save-dot,
+  [data-theme='pop'] .chat-panel,
+  [data-theme='pop'] .shot-card.shot-located {
+    animation: none !important;
+  }
+
+  [data-theme='pop'] *,
+  [data-theme='pop'] *::before,
+  [data-theme='pop'] *::after {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- 彩绘棱镜：创建与导入双主卡 ---------- */
+
+[data-theme='pop'] .start-card-create,
+[data-theme='pop'] .start-card-import {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 220px;
+  background: linear-gradient(135deg, #ffffff 0%, #f3f0ff 100%);
+  border: 2px solid rgba(124, 92, 255, 0.24);
+}
+
+[data-theme='pop'] .start-card-import {
+  background: linear-gradient(135deg, #ffffff 0%, #fff1f7 100%);
+  border-color: rgba(255, 92, 138, 0.26);
+}
+
+[data-theme='pop'] .start-sample-bar {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(124, 92, 255, 0.24);
+}

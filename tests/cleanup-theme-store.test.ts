@@ -22,10 +22,10 @@ beforeEach(() => {
 });
 
 describe('主题初始化', () => {
-  it('没有保存过时用默认 studio', async () => {
+  it('没有保存过时用默认 prism', async () => {
     const mod = await import('../src/store/theme');
-    expect(mod.useTheme.getState().theme).toBe('studio');
-    expect(document.documentElement.dataset.theme).toBe('studio');
+    expect(mod.useTheme.getState().theme).toBe('prism');
+    expect(document.documentElement.dataset.theme).toBe('prism');
   });
 
   it('保存过 night 时按 night 初始化', async () => {
@@ -38,7 +38,7 @@ describe('主题初始化', () => {
   it('**保存的是非法值时退回默认**（旧版本/被改坏的 localStorage）', async () => {
     localStorage.setItem('aniguide.theme', 'neon-disco');
     const mod = await import('../src/store/theme');
-    expect(mod.useTheme.getState().theme).toBe('studio');
+    expect(mod.useTheme.getState().theme).toBe('prism');
   });
 });
 

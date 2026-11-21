@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
-import { Field, WhyDetails, Info } from '../components/bits';
+import { Field, Info } from '../components/bits';
 import {
   CHARACTER_ROLE_LABEL,
   LOCK_ASPECT_LABEL,
@@ -62,7 +62,7 @@ function makeCharacter(name: string): CharacterCard {
   };
 }
 
-export function CharactersPage() {
+export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}) {
   const project = useAppStore((s) => s.project);
   const upsertCharacter = useAppStore((s) => s.upsertCharacter);
   const removeCharacter = useAppStore((s) => s.removeCharacter);
@@ -100,13 +100,11 @@ export function CharactersPage() {
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>角色设定</h1>
-          <p>角色分三层：身份 / 变体 / 连续性锁。</p>
-        </div>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          + 加一个角色
+      <div className={`page-head${embedded ? ' page-head-compact' : ''}`}>
+        {embedded ? <span /> : <h1>角色设定</h1>}
+        <button type="button" className="btn btn-primary btn-sm" onClick={add}>
+          <Icon name="plus" size={14} />
+          <span>角色</span>
         </button>
       </div>
 
@@ -504,14 +502,6 @@ export function CharactersPage() {
                   assets={galleryFor(character.id)}
                   emptyHint="还没有生成过形象图。"
                 />
-
-                <WhyDetails>
-                  种子（seed）是模型内部的随机数起点。同一个种子 + 同一段提示词，理论上能复现同一张图。
-                  <br />
-                  <br />
-                  但要注意：<b>换了动作或构图之后，种子也保不住形象</b>。它只能让「同样一段提示词」的结果稳定，
-                  不能让「不同提示词」生成同一个人。所以它只是连续性锁的补充，不是替代。
-                </WhyDetails>
               </div>
             </Reveal>
           </div>

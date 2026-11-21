@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { cloneAsNewProject, useAppStore } from '../store/app';
 import { useImage } from '../store/image';
@@ -11,32 +11,29 @@ import {
   SHOT_SIZE_LABEL,
 } from '../types/model';
 import { listProjects, loadProject, type ProjectRecord } from '../services/storage';
+import { importProjectFile } from '../services/storage/importBundle';
 
 /**
- * 作品主页（C 方向）
+ * 作品主页（三区可视化制片总控台）
  *
- * 目标用户是第一次做 AI 动画的人。他打开工具时心里不是「我要用某个模块」，
- * 而是「我现在该做什么」。所以这一页只回答三件事：
- * 1. 这个片子现在到哪了；
- * 2. 下一步做哪一件；
- * 3. 后面还排着哪几件。
- *
- * 没有把仪表盘搬进来：没有 KPI 卡、没有图表库，只有项目本身的数据和两条行动线。
+ * 去掉重复的文字待办，保留三个高信息量区块：
+ * 1. 顶部创作主线与唯一行动卡；
+ * 2. 中央片子视觉预览台与可点击时长节奏条；
+ * 3. 底部连贯性健康度三联卡（参考图、穿帮拦截、本机存档）。
  */
-
-type Tone = 'danger' | 'accent' | 'quiet' | 'done';
-
-interface TaskItem {
-  key: string;
-  tone: Tone;
-  title: string;
-  to: string;
-  action: string;
-}
 
 function fmtSeconds(value: number): string {
   if (!Number.isFinite(value)) return '0';
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
+function fmtDate(iso: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(
+    d.getMinutes(),
+  ).padStart(2, '0')}`;
 }
 
 export function HomePage() {
@@ -53,22 +50,19 @@ export function HomePage() {
 
   const [records, setRecords] = useState<ProjectRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
-  /** 打开存档失败时的提示。不能静默：点了没反应，用户会以为项目丢了。 */
   const [openError, setOpenError] = useState<string | null>(null);
-  /** 存档列表读取失败时保留已有列表，只在上方提示，不清空用户看到的数据。 */
   const [listError, setListError] = useState<string | null>(null);
-  /** 删除项目失败时的提示。走 store 的 removeProject，异常已经翻成人话。 */
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
     try {
       setRecords(await listProjects());
       setListError(null);
     } catch {
-      // 读不出来时不要把列表清空：已经显示的项目还在，只是这次没刷新成功
-      setListError(
-        '项目列表没读出来。可能是浏览器本地数据正被别的标签页占用，刷新一下再试；已经打开的项目不受影响。',
-      );
+      setListError('项目列表暂时没读出来，刷新页面再试；当前项目不受影响。');
     }
     setLoaded(true);
   }
@@ -88,8 +82,14 @@ export function HomePage() {
   const durationOff = shots.length > 0 && Math.abs(diff) > tolerance;
 
   const errorCount = report?.counts.error ?? 0;
+  const warningCount = report?.counts.warning ?? 0;
 
-  // 图库是懒加载的：角色、场景、镜头都要拉，缺一个都会让「下一步」误判。
+  const shotErrorSet = new Set(
+    (report?.issues ?? [])
+      .filter((issue) => issue.location.kind === 'shot' && issue.severity === 'error')
+      .map((issue) => issue.location.id),
+  );
+
   const galleryRefIds = [...characters, ...scenes, ...shots].map((item) => item.id);
   const assetIds = galleryRefIds.join('|');
   useEffect(() => {
@@ -97,7 +97,6 @@ export function HomePage() {
     for (const id of galleryRefIds) {
       if (!gallery[id]) void loadGallery(id);
     }
-    // 只按项目里的对象集合加载；gallery 变化不重新拉一遍。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project?.id, assetIds, loadGallery]);
 
@@ -116,31 +115,44 @@ export function HomePage() {
     navigate('/guide');
   }
 
-  /**
-   * 新建项目（**已经打开一个项目时**也走这里）。
-   *
-   * 【为什么必须先落盘】切项目会把 store 里的当前项目整个换掉。
-   * 自动保存是延迟触发的，如果用户刚改完就点新建，最后一次改动还没写进
-   * IndexedDB 就没了——而界面上刚显示过「已保存到本机」，他会以为存住了。
-   *
-   * 所以：先 await persist()，再切。persist 失败（配额用尽等）就**不切**，
-   * 让用户先把备份做掉，而不是带着一个没存住的项目继续往下走。
-   */
+  async function handleImportFile(file: File) {
+    setImportError(null);
+    setImporting(true);
+    try {
+      const result = await importProjectFile(file);
+      if (!result.ok || !result.project) {
+        setImportError(result.error ?? '导入失败，请检查文件格式。');
+        return;
+      }
+      setProject(result.project);
+      if ((result.restoredImages ?? 0) > 0) {
+        const ids = [
+          ...result.project.characters,
+          ...result.project.scenes,
+          ...result.project.shots,
+        ].map((item) => item.id);
+        for (const id of ids) void loadGallery(id);
+      }
+      await refresh();
+      navigate('/');
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function startNewProject() {
-    const { dirty, saveError, persist } = useAppStore.getState();
-    if (project && (dirty || saveError)) {
-      if (saveError) {
+    const { dirty: isDirty, saveError: err, persist } = useAppStore.getState();
+    if (project && (isDirty || err)) {
+      if (err) {
         const go = window.confirm(
-          `当前项目没能存到本机：\n${saveError}\n\n` +
-            '现在新建项目，这次的改动可能会丢。要先导出备份吗？\n' +
-            '（点「取消」回到项目里，去「导出」页做备份）',
+          `当前项目没能存到本机：\n${err}\n\n现在新建项目，这次改动可能会丢。要先导出备份吗？`,
         );
         if (!go) return;
       } else {
         await persist();
         const after = useAppStore.getState();
         if (after.saveError) {
-          window.alert(`当前项目保存失败：${after.saveError}\n\n先别新建，去「导出」页做个备份。`);
+          window.alert(`当前项目保存失败：${after.saveError}\n\n先去交付中心做个备份。`);
           return;
         }
       }
@@ -148,43 +160,25 @@ export function HomePage() {
     openBlank();
   }
 
-  /**
-   * 打开一条存档。
-   *
-   * loadProject 会读 IndexedDB 再走 normalizeProject + setProject；后两步都可能
-   * 因为旧数据/坏数据抛异常。原样 void 掉的结果是「点了没反应」，用户以为项目没了。
-   * 所以这里整段兜住，失败时在「已有项目」列表上方给人话提示。
-   */
   async function open(id: string) {
     setOpenError(null);
     try {
       const next = await loadProject(id);
       if (!next) {
-        setOpenError(
-          '这个项目读不出来：本机里没有找到它。可能已经被删除，或者浏览器的本地数据被清理过。',
-        );
+        setOpenError('本机里没有找到这个项目，可能已被删除或清理。');
         return;
       }
       setProject(next);
       navigate('/');
     } catch {
-      setOpenError(
-        '这个项目读不出来。可能是浏览器本地数据损坏，或者项目来自旧版本；可以试试重新导入一次「项目数据.json」。',
-      );
+      setOpenError('项目数据读不出来，可以去交付中心重新导入备份文件。');
     }
   }
 
-  /**
-   * 删除存档。
-   *
-   * 走 store 的 removeProject 而不是直接 deleteProject：store 会把
-   * IndexedDB 异常翻成 { ok, error }，页面才有机会告诉用户「没删掉、东西还在」。
-   * 直接 void 掉的结果是点了「确认删除」之后什么都不发生。
-   */
   async function remove(id: string) {
     const result = await removeProject(id);
     if (!result.ok) {
-      setDeleteError(result.error ?? '删除没成功，刷新页面后再试一次。项目和图片都还在。');
+      setDeleteError(result.error ?? '删除没成功，刷新页面后再试。');
       return;
     }
     setDeleteError(null);
@@ -193,10 +187,10 @@ export function HomePage() {
 
   const storyDone = !!story?.body.trim();
   const settingDone = characters.length > 0 && scenes.length > 0;
-  const storyboardDone = shots.length > 0 && !durationOff;
+  const storyboardDone = shots.length > 0 && !durationOff && errorCount === 0;
   const framesAll = shots.length > 0 && coverage.framesReady === shots.length;
-  // 交付的完成条件纳入图片进度：参考图和每镜三帧都齐了才算能导出
   const deliveryDone = shots.length > 0 && errorCount === 0 && coverage.imagesReady;
+
   const deliveryState = deliveryDone
     ? '可以导出'
     : !storyDone || !settingDone || shots.length === 0
@@ -207,505 +201,486 @@ export function HomePage() {
           ? '待出帧'
           : '待完成';
 
-
-  // 下一步：按用户真正会卡住的地方排序，而不是按模块编号。
-  // 图片没出齐时不能推荐导出：先补参考图，再补三帧，最后才是导出。
-  let next: { title: string; cta: string; to: string };
+  let next: { label: string; title: string; detail: string; cta: string; to: string };
   if (!project) {
-    next = { title: '项目', cta: '看示例项目', to: '/' };
+    next = {
+      label: '开始',
+      title: '先打开示例项目看看成品结构',
+      detail: '不用配 API Key，直接浏览完整分镜、设定卡与提示词。',
+      cta: '看示例项目',
+      to: '/',
+    };
   } else if (!storyDone) {
-    next = { title: '故事', cta: '去写故事', to: '/guide' };
+    next = {
+      label: '阶段 01 · 故事',
+      title: '先写下你的故事与画风',
+      detail: '填好故事梗概、画幅和风格后，后续设定和分镜才能对齐。',
+      cta: '去写故事',
+      to: '/guide',
+    };
   } else if (!settingDone) {
     next = {
-      title: '角色与场景',
-      cta: '去建设定',
+      label: '阶段 02 · 设定集',
+      title: '补齐角色与场景设定',
+      detail: '先锁定角色服装和场景固定元素，跨镜出图更稳定。',
+      cta: '去设定集',
       to: characters.length === 0 ? '/characters' : '/scenes',
     };
   } else if (shots.length === 0) {
-    next = { title: '分镜', cta: '去生成分镜', to: '/storyboard' };
-  } else if (errorCount > 0) {
-    next = { title: '穿帮检查', cta: `去修这 ${errorCount} 条`, to: '/checks' };
-  } else if (durationOff) {
-    next = { title: '时长', cta: '去调分镜', to: '/storyboard' };
-  } else if (!coverage.loaded || !coverage.referencesReady) {
-    // 懒加载没完成时按「参考图未齐」保守处理：宁可多一步，也不能直接推荐导出
     next = {
-      title: '参考图',
-      cta: '去出图',
+      label: '阶段 03 · 分镜',
+      title: '把故事拆成可执行分镜',
+      detail: '每镜只写起点、一个动作、终点，可用 AI 自动生成初稿。',
+      cta: '去生成分镜',
+      to: '/storyboard',
+    };
+  } else if (errorCount > 0) {
+    next = {
+      label: '质检拦截',
+      title: `先修这 ${errorCount} 个必改项`,
+      detail: '这些问题会导致角色或场景前后穿帮，修完后再出图更省成本。',
+      cta: `去修这 ${errorCount} 条`,
+      to: '/storyboard?qc=1',
+    };
+  } else if (durationOff) {
+    next = {
+      label: '节奏校准',
+      title: diff > 0 ? `总时长超出 ${fmtSeconds(diff)} 秒` : `总时长还差 ${fmtSeconds(-diff)} 秒`,
+      detail: `当前 ${fmtSeconds(total)} 秒，目标 ${fmtSeconds(target)} 秒，在分镜时间轴调整。`,
+      cta: '去调分镜',
+      to: '/storyboard',
+    };
+  } else if (!coverage.loaded || !coverage.referencesReady) {
+    next = {
+      label: '阶段 02 · 参考图',
+      title: '先出齐角色形象图与场景参考板',
+      detail: '参考图是分镜三帧的视觉锚点，先出齐能显著减少返工。',
+      cta: '去设定集出图',
       to: coverage.charsReady < characters.length ? '/characters' : '/scenes',
     };
   } else if (!framesAll) {
-    next = { title: '分镜三帧', cta: '去出帧', to: '/storyboard' };
+    next = {
+      label: '阶段 03 · 关键帧',
+      title: `补齐分镜三帧（${coverage.framesReady} / ${shots.length} 镜）`,
+      detail: '按首帧、动作关键帧、尾帧顺序生成，锁住构图与人物。',
+      cta: '去分镜出帧',
+      to: '/storyboard',
+    };
   } else {
-    next = { title: '导出', cta: '去导出', to: '/export' };
+    next = {
+      label: '阶段 04 · 交付',
+      title: '前期方案齐备，可以复制提示词并导出',
+      detail: '在交付中心复制各平台提示词，并下载压缩包做好本机备份。',
+      cta: '去交付中心',
+      to: '/delivery',
+    };
   }
 
-  const tasks: TaskItem[] = [];
-  if (project) {
-    if (errorCount > 0) {
-      tasks.push({
-        key: 'errors',
-        tone: 'danger',
-        title: `必改项 ${errorCount} 个`,
-        to: '/checks',
-        action: '去修',
-      });
-    }
-    if (durationOff) {
-      tasks.push({
-        key: 'duration',
-        tone: 'accent',
-        title: diff > 0 ? `减 ${fmtSeconds(Math.abs(diff))} 秒镜头` : `再补 ${fmtSeconds(Math.abs(diff))} 秒`,
-        to: '/storyboard',
-        action: '去改',
-      });
-    }
-    if (!storyDone) {
-      tasks.push({
-        key: 'story',
-        tone: 'accent',
-        title: '故事',
-        to: '/guide',
-        action: '去写',
-      });
-    }
-    if (!settingDone) {
-      tasks.push({
-        key: 'setting',
-        tone: 'quiet',
-        title: '角色与场景',
-        to: '/characters',
-        action: '去定',
-      });
-    }
-    if (shots.length === 0) {
-      tasks.push({
-        key: 'shots',
-        tone: 'quiet',
-        title: '分镜',
-        to: '/storyboard',
-        action: '去拆',
-      });
-    }
-    tasks.push({
-      key: 'prompts',
-      tone: 'quiet',
-      title: '提示词',
-      to: '/prompts',
-      action: '去看',
-    });
-    tasks.push({
-      key: 'export',
-      tone: 'quiet',
-      title: '导出',
-      to: '/export',
-      action: '去导出',
-    });
-  }
-  const visibleTasks = tasks;
-  const recentShots = shots.slice(-3);
+  const previewShots = shots.slice(0, 6);
 
   return (
-    <div className="home">
+    <div className="home home-v2">
       {project ? (
         <>
           <header className="home-head">
             <div>
               <div className="home-crumb">
-                {isSample ? '示例项目' : '项目'} · {project.brief.aspectRatio}
+                {isSample ? '示例项目' : '当前项目'} · {project.brief.aspectRatio}
               </div>
               <h1>{project.name}</h1>
-              <p className="home-logline">{project.logline || '还没有一句话简介。'}</p>
-              <p className="home-meta">
-                {fmtSeconds(target)} 秒目标 · {shots.length} 个镜头 ·{' '}
-                {project.brief.platforms.map((p) => PLATFORM_LABEL[p]).join(' / ') || '未选平台'}
+              <p className="home-logline">{project.logline || '还没有填写一句话简介。'}</p>
+              <p className="home-meta home-meta-icons">
+                <span>
+                  <Icon name="clock" size={13} />
+                  {fmtSeconds(target)}s
+                </span>
+                <span>
+                  <Icon name="movie" size={13} />
+                  {shots.length} 镜
+                </span>
+                <span>{project.brief.platforms.map((p) => PLATFORM_LABEL[p]).join(' / ') || '未选平台'}</span>
               </p>
             </div>
             <div className="home-actions">
-              <Link className="btn" to="/storyboard">
-                看分镜
+              <Link className="btn btn-sm" to="/delivery" title="交付中心">
+                <Icon name="download" size={14} />
+                <span>导出</span>
               </Link>
-              <Link className="btn" to="/export">
-                导出
-              </Link>
-              {/*
-                【为什么要这个按钮】原来「新建项目」只在没打开项目时出现，
-                一旦打开了一个项目就再也建不了新的——只能去关掉当前项目（而界面上没有这个操作），
-                或者清浏览器数据。这是一个死路。
-              */}
-              <button type="button" className="btn" onClick={() => void startNewProject()}>
-                新建项目
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void startNewProject()}
+                title="新建项目"
+              >
+                <Icon name="plus" size={14} />
+                <span>新建</span>
               </button>
             </div>
           </header>
 
-          {/*
-            四步进度的紧凑版。改之前是四张等高卡片，每张带进度条和两行说明，
-            占掉第一屏三分之一的竖向空间；而「现在做什么」在下面已经说了。
-            这里只留「走到哪、下一步是谁」，点一下直接进对应页面。
-          */}
-          <section className="stage-strip" aria-label="四步进度">
-            {[
-              {
-                key: 'story',
-                name: '故事',
-                to: '/guide',
-                done: storyDone,
-                prevDone: true,
-                state: storyDone ? '完成' : '待写',
-              },
-              {
-                key: 'setting',
-                name: '角色与场景',
-                to: '/characters',
-                done: settingDone,
-                prevDone: storyDone,
-                state: settingDone ? '完成' : '待定',
-              },
-              {
-                key: 'storyboard',
-                name: '分镜',
-                to: '/storyboard',
-                done: storyboardDone,
-                prevDone: settingDone,
-                state: storyboardDone
-                  ? '时长吻合'
-                  : shots.length === 0
-                    ? '待开始'
-                    : `差 ${fmtSeconds(Math.abs(diff))} 秒`,
-              },
-              {
-                key: 'delivery',
-                name: '交付',
-                to: '/export',
-                done: deliveryDone,
-                prevDone: storyboardDone,
-                state: deliveryState,
-              },
-            ].map((step) => (
-              <Link
-                key={step.key}
-                to={step.to}
-                className={`stage-step ${step.done ? 'is-done' : step.prevDone ? 'is-now' : 'is-todo'}`}
-              >
-                <i className="stage-step-dot" aria-hidden="true" />
-                <span className="stage-step-name">{step.name}</span>
-                <span className="stage-step-state">{step.state}</span>
-              </Link>
-            ))}
-          </section>
+          {/* 区块 1：创作主线 + 唯一聚焦行动卡 */}
+          <section className="home-command" aria-label="创作进度与下一步">
+            <div className="stage-strip" aria-label="四步进度">
+              {[
+                {
+                  key: 'story',
+                  stepNo: '01',
+                  name: '故事',
+                  to: '/guide',
+                  done: storyDone,
+                  prevDone: true,
+                  state: storyDone ? '已完成' : '待写',
+                },
+                {
+                  key: 'setting',
+                  stepNo: '02',
+                  name: '设定集',
+                  to: '/assets',
+                  done: settingDone,
+                  prevDone: storyDone,
+                  state: settingDone ? `${characters.length}角 · ${scenes.length}景` : '待建立',
+                },
+                {
+                  key: 'storyboard',
+                  stepNo: '03',
+                  name: '分镜与质检',
+                  to: '/storyboard',
+                  done: storyboardDone,
+                  prevDone: settingDone,
+                  state:
+                    errorCount > 0
+                      ? `${errorCount} 处必改`
+                      : storyboardDone
+                        ? '时长吻合'
+                        : shots.length === 0
+                          ? '待拆镜'
+                          : diff > 0
+                            ? `超 ${fmtSeconds(diff)} 秒`
+                            : `差 ${fmtSeconds(-diff)} 秒`,
+                },
+                {
+                  key: 'delivery',
+                  stepNo: '04',
+                  name: '交付中心',
+                  to: '/delivery',
+                  done: deliveryDone,
+                  prevDone: storyboardDone,
+                  state: deliveryState,
+                },
+              ].map((step) => (
+                <Link
+                  key={step.key}
+                  to={step.to}
+                  className={`stage-step ${step.done ? 'is-done' : step.prevDone ? 'is-now' : 'is-todo'}`}
+                >
+                  <i className="stage-step-dot" aria-hidden="true" />
+                  <span className="stage-step-name">
+                    {step.stepNo} {step.name}
+                  </span>
+                  <span className="stage-step-state">{step.state}</span>
+                </Link>
+              ))}
+            </div>
 
-          <div className="home-grid">
-            <section className="next-card">
-              <div className="next-top">
-                <span className="next-label">下一步</span>
-              </div>
-              <h2>{next.title}</h2>
+            <div className="next-card home-hero-next">
+              <div className="home-hero-next-copy">
+                <span className="next-label">{next.label}</span>
+                <h2>{next.title}</h2>
+                              </div>
               <div className="next-foot">
                 <Link className="btn btn-blue" to={next.to}>
                   {next.cta}
                 </Link>
               </div>
-            </section>
+            </div>
+          </section>
 
-            <section className="tasks-card">
-              <div className="panel-head">
-                <h3>待办</h3>
+          {/* 区块 2：片子视觉预览台 + 可点击节奏条 */}
+          <section className="panel shots-panel home-filmstrip-stage" aria-label="片子视觉预览">
+            <div className="panel-head">
+              <div>
+                <h3>镜头预览</h3>
               </div>
-              <ul className="task-list">
-                {visibleTasks.map((task) => (
-                  <li key={task.key}>
-                    <Link className="task-row" to={task.to}>
-                      <i className={`task-dot ${task.tone}`} aria-hidden="true" />
-                      <div className="task-main">
-                        <b>{task.title}</b>
+              <Link to="/storyboard">全部 {shots.length} 镜 →</Link>
+            </div>
+
+            {previewShots.length > 0 ? (
+              <div className="shot-grid home-shot-grid">
+                {previewShots.map((shot) => {
+                  const scene = scenes.find((s) => s.id === shot.sceneId);
+                  const assets = gallery[shot.id] ?? [];
+                  const thumb =
+                    assets.find((a) => a.kind === 'first-frame' && a.dataUrl) ??
+                    assets.find((a) => a.dataUrl);
+                  const hasErr = shotErrorSet.has(shot.id);
+                  return (
+                    <Link
+                      className={`shot-tile${hasErr ? ' has-error' : ''}`}
+                      to={`/storyboard?shot=${shot.id}`}
+                      key={shot.id}
+                    >
+                      <div className={`shot-tile-frame${thumb ? ' has-thumb' : ''}`}>
+                        {thumb?.dataUrl ? (
+                          <img
+                            src={thumb.dataUrl}
+                            alt={`第 ${shot.number} 镜首帧`}
+                            className="shot-tile-img"
+                          />
+                        ) : null}
+                        <div className="shot-tile-top">
+                          <span>S{String(shot.number).padStart(2, '0')}</span>
+                          <span>{shot.duration}s</span>
+                        </div>
+                        {!thumb?.dataUrl ? (
+                          <p>{shot.action || shot.startState || '尚未填写这一镜动作。'}</p>
+                        ) : null}
+                        {hasErr ? <span className="shot-tile-alert">待修</span> : null}
+                      </div>
+                      <div className="shot-tile-meta">
+                        <b>{scene?.name ?? '未指定场景'}</b>
+                        <span>
+                          {SHOT_SIZE_LABEL[shot.shotSize]} · {CAMERA_MOVE_LABEL[shot.cameraMove]}
+                        </span>
                       </div>
                     </Link>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          </div>
-
-          <div className="home-lower">
-            <section className="panel shots-panel">
-              <div className="panel-head">
-                <h3>最近镜头</h3>
-                <Link to="/storyboard">看全部 {shots.length} 镜 →</Link>
+                  );
+                })}
               </div>
+            ) : (
+              <div className="empty">
+                还没有镜头。
+                <Link to="/storyboard">去分镜与质检生成第一版 →</Link>
+              </div>
+            )}
 
-              {recentShots.length > 0 ? (
-                <div className="shot-grid">
-                  {recentShots.map((shot) => {
-                    const scene = scenes.find((s) => s.id === shot.sceneId);
+            <div className="runtime">
+              <div className="runtime-head">
+                <span>时长节奏</span>
+                <b>
+                  {fmtSeconds(total)} <small>/ {fmtSeconds(target)} 秒</small>
+                </b>
+              </div>
+              <div className="runtime-bars home-rhythm-track" role="list" aria-label="镜头时长分布">
+                {shots.length > 0 ? (
+                  shots.map((shot) => {
+                    const dur = Math.max(Number(shot.duration) || 1, 0.5);
+                    const hasErr = shotErrorSet.has(shot.id);
                     return (
-                      <Link className="shot-tile" to={`/storyboard?shot=${shot.id}`} key={shot.id}>
-                        <div className="shot-tile-frame">
-                          <div className="shot-tile-top">
-                            <span>第 {shot.number} 镜</span>
-                            <span>{shot.duration}s</span>
-                          </div>
-                          <p>{shot.action || shot.startState || '这一镜还没有写动作。'}</p>
-                        </div>
-                        <div className="shot-tile-meta">
-                          <b>{scene?.name ?? '未指定场景'}</b>
-                          <span>
-                            {SHOT_SIZE_LABEL[shot.shotSize]} · {CAMERA_MOVE_LABEL[shot.cameraMove]}
-                          </span>
-                        </div>
+                      <Link
+                        key={shot.id}
+                        to={`/storyboard?shot=${shot.id}`}
+                        className={`home-rhythm-seg${hasErr ? ' is-error' : ''}`}
+                        style={{ flexGrow: dur }}
+                        title={`第 ${shot.number} 镜 · ${shot.duration} 秒${hasErr ? ' · 有必改项' : ''}`}
+                      >
+                        <span>{String(shot.number).padStart(2, '0')}</span>
+                        <small>{shot.duration}s</small>
                       </Link>
                     );
-                  })}
-                </div>
-              ) : (
-                <div className="empty">
-                  还没有镜头。
-                  <Link to="/storyboard">去分镜表生成第一版 →</Link>
-                </div>
-              )}
-
-              <div className="runtime">
-                <div className="runtime-head">
-                  <span>总时长</span>
-                  <b>
-                    {fmtSeconds(total)} <small>/ {fmtSeconds(target)} 秒</small>
-                  </b>
-                </div>
-                <div className="runtime-bars" aria-hidden="true">
-                  {shots.slice(0, 12).map((shot, index, arr) => (
-                    <i
-                      key={shot.id}
-                      className={index === arr.length - 1 ? 'on' : ''}
-                      style={{ height: `${Math.min(30, 8 + (Number(shot.duration) || 0) * 3)}px` }}
-                    />
-                  ))}
-                  {shots.length === 0 ? <i style={{ height: 4 }} /> : null}
-                </div>
-                <div className="runtime-foot">
-                  <span>{shots.length} 个镜头</span>
-                  <span>
-                    {shots.length === 0
-                      ? '还没有排时长'
-                      : Math.abs(diff) <= tolerance
-                        ? '时长吻合'
-                        : diff > 0
-                          ? `超 ${fmtSeconds(diff)} 秒`
-                          : `还差 ${fmtSeconds(-diff)} 秒`}
-                  </span>
-                </div>
+                  })
+                ) : (
+                  <div className="home-rhythm-empty">添加镜头后这里会显示时长节奏分布</div>
+                )}
               </div>
-            </section>
+              <div className="runtime-foot">
+                <span>
+                  {shots.length} 个镜头 · 已出帧 {coverage.framesReady} 镜
+                </span>
+                <span>
+                  {shots.length === 0
+                    ? '尚未排时长'
+                    : Math.abs(diff) <= tolerance
+                      ? '时长吻合'
+                      : diff > 0
+                        ? `超出目标 ${fmtSeconds(diff)} 秒`
+                        : `距离目标还差 ${fmtSeconds(-diff)} 秒`}
+                </span>
+              </div>
+            </div>
+          </section>
 
-            <aside className="home-rail">
-              <Link className="panel panel-link" to="/checks">
-                <div className="panel-head">
-                  <h3>穿帮检查</h3>
-                </div>
-                <div className="check-total">
-                  <b className={errorCount > 0 ? 'bad' : ''}>{errorCount}</b>
-                  <span>{errorCount > 0 ? '个必改项，修完才能导出' : '个必改项'}</span>
-                </div>
-              </Link>
-
-              <section className="panel">
-                <div className="panel-head">
-                  <h3>参考图</h3>
-                </div>
-                <div className="assets">
-                  <Link
-                    className="asset"
-                    to="/characters"
-                    aria-label={`角色设定：角色形象图 ${coverage.charsReady} / ${characters.length}`}
-                  >
-                    <b>
-                      {coverage.charsReady} / {characters.length}
-                    </b>
-                    <span>角色形象图</span>
-                  </Link>
-                  <Link
-                    className="asset"
-                    to="/scenes"
-                    aria-label={`场景设定：场景参考板 ${coverage.scenesReady} / ${scenes.length}`}
-                  >
-                    <b>
-                      {coverage.scenesReady} / {scenes.length}
-                    </b>
-                    <span>场景参考板</span>
-                  </Link>
-                </div>
-              </section>
-
-              <Link className="panel panel-link save-panel" to="/export">
-                <div className="panel-head">
-                  <h3>存档</h3>
-                </div>
-                <div className="save-row">
-                  <span>保存状态</span>
-                  <b className={saveError ? 'bad' : ''}>
-                    {saveError ? '没存上' : dirty ? '保存中…' : '已保存'}
+          {/* 区块 3：连贯性健康度三联卡 */}
+          <section className="home-health-grid" aria-label="连贯性健康度">
+            <div className="panel health-card">
+              <div className="panel-head">
+                <h3 className="icon-title"><Icon name="photo" size={14} />参考图</h3>
+                <Link to="/assets">去设定集 →</Link>
+              </div>
+              <div className="assets">
+                <Link
+                  className="asset"
+                  to="/characters"
+                  aria-label={`角色设定：角色形象图 ${coverage.charsReady} / ${characters.length}`}
+                >
+                  <b>
+                    {coverage.charsReady} / {characters.length}
                   </b>
-                </div>
-                {saveError ? <p className="asset-note">{saveError}</p> : null}
-              </Link>
-            </aside>
-          </div>
+                  <span>角色形象图</span>
+                </Link>
+                <Link
+                  className="asset"
+                  to="/scenes"
+                  aria-label={`场景设定：场景参考板 ${coverage.scenesReady} / ${scenes.length}`}
+                >
+                  <b>
+                    {coverage.scenesReady} / {scenes.length}
+                  </b>
+                  <span>场景参考板</span>
+                </Link>
+              </div>
+            </div>
+
+            <Link className="panel panel-link health-card" to="/storyboard?qc=1">
+              <div className="panel-head">
+                <h3 className="icon-title"><Icon name="alert-triangle" size={14} />穿帮检查</h3>
+                <span>打开质检 →</span>
+              </div>
+              <div className="check-total">
+                <b className={errorCount > 0 ? 'bad' : ''}>{errorCount}</b>
+                <span>
+                  {errorCount > 0
+                    ? `个必改项，另有 ${warningCount} 条建议`
+                    : `个必改项，${warningCount} 条建议项`}
+                </span>
+              </div>
+            </Link>
+
+            <Link className="panel panel-link health-card save-panel" to="/export">
+              <div className="panel-head">
+                <h3 className="icon-title"><Icon name="device-floppy" size={14} />本机存档</h3>
+                <span>去打包 →</span>
+              </div>
+              <div className="save-row">
+                <span>保存状态</span>
+                <b className={saveError ? 'bad' : ''}>
+                  {saveError ? '没存上' : dirty ? '保存中…' : '已存本机'}
+                </b>
+              </div>
+              {saveError ? <p className="asset-note">{saveError}</p> : null}
+            </Link>
+          </section>
         </>
       ) : (
         <>
           <header className="start-head">
-            <div className="home-crumb">AniGuide · 免注册 · 数据在本机</div>
-            <h1>从故事到分镜</h1>
-            <p>
-              这里只做前期：故事、角色、场景、分镜和提示词。视频生成去即梦、可灵或 Seedance。
-            </p>
+            <h1>开始制作</h1>
           </header>
 
           <div className="start-grid">
-            <section className="start-card start-card-sample">
+            <section className="start-card start-card-create">
               <div className="start-card-top">
-                <span>示例项目</span>
-                <span>不用配 API Key</span>
+                <span>新作品</span>
               </div>
-              <h2>林教头风雪山神庙</h2>
-              <p className="start-quote">一个被诬陷的武人被发配草料场，在风雪夜里听见门外三人密谋，推门而出。</p>
-              <div className="start-stats">
-                <div>
-                  <b>40</b>
-                  <span>秒</span>
-                </div>
-                <div>
-                  <b>7</b>
-                  <span>个镜头</span>
-                </div>
-                <div>
-                  <b>2 + 2</b>
-                  <span>角色 / 场景</span>
-                </div>
-                <div>
-                  <b>23</b>
-                  <span>条检查</span>
-                </div>
+              <h2>创建新项目</h2>
+              <div className="start-steps">
+                <span>01 故事</span>
+                <span>02 设定集</span>
+                <span>03 分镜与质检</span>
+                <span>04 交付中心</span>
               </div>
-              <button type="button" className="btn btn-blue" onClick={() => void openSample()}>
-                打开示例项目
+              <button type="button" className="btn btn-blue" onClick={openBlank}>
+                <Icon name="plus" size={15} />
+                <span>创建新项目</span>
               </button>
             </section>
 
-            <section className="start-card">
+            <section className="start-card start-card-import">
               <div className="start-card-top">
-                <span>新建项目</span>
-                <span>约 15 分钟</span>
+                <span>恢复备份</span>
               </div>
-              <h2>新项目</h2>
-              <p className="start-quote">
-                先回答四个问题：故事从哪来、故事是什么、什么风格、最后怎么交付。每一步都可以回头改。
-              </p>
-              <div className="start-steps">
-                <span>故事</span>
-                <span>角色与场景</span>
-                <span>分镜</span>
-                <span>交付</span>
-              </div>
-              <button type="button" className="btn btn-primary" onClick={openBlank}>
-                新建空项目
+              <h2>导入项目</h2>
+              <p className="start-quote">支持本工具导出的 .zip 压缩包或 项目数据.json，导入后自动存至本机。</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".zip,.json,application/zip,application/json"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  e.target.value = '';
+                  if (f) void handleImportFile(f);
+                }}
+              />
+              {importError ? (
+                <div className="issue error" style={{ marginBottom: 10 }}>
+                  {importError}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={importing}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Icon name="download" size={15} />
+                <span>{importing ? '导入中…' : '选择文件导入'}</span>
               </button>
             </section>
           </div>
 
-          <section className="start-guide">
-            <div className="start-guide-copy">
-              <h2>四步流程</h2>
-              <p>每一步都只问当前必须回答的问题；不知道选哪个，就按默认值走。</p>
-            </div>
-            <div className="start-guide-steps">
-              <div>
-                <b>故事</b>
-                <span>谁、在哪、发生什么、停在哪一帧</span>
-              </div>
-              <div>
-                <b>角色与场景</b>
-                <span>锁住不会变的外观和空间</span>
-              </div>
-              <div>
-                <b>分镜</b>
-                <span>一镜只做一件事：起点 → 动作 → 终点</span>
-              </div>
-              <div>
-                <b>交付</b>
-                <span>分镜表、提示词、检查单一起带走</span>
-              </div>
-            </div>
-          </section>
+          <div className="start-sample-bar">
+            <span>想先看成品结构？</span>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openSample()}>
+              打开示例项目（林教头风雪山神庙） →
+            </button>
+          </div>
         </>
       )}
 
-      <section className="saved">
-        <div className="panel-head">
-          <h3>已有项目</h3>
-        </div>
-        {listError ? (
-          <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
-            <div className="issue-title">项目列表没读出来</div>
-            <div className="issue-line">{listError}</div>
+      {loaded && (records.length > 0 || listError || openError || deleteError) ? (
+        <section className="saved-section" aria-label="本机已有项目">
+          <div className="panel-head">
+            <h3>本机已有项目（{records.length}）</h3>
           </div>
-        ) : null}
-        {openError ? (
-          <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
-            <div className="issue-title">打不开这个项目</div>
-            <div className="issue-line">{openError}</div>
-          </div>
-        ) : null}
-        {deleteError ? (
-          <div className="issue error" style={{ marginTop: 0, marginBottom: 12 }}>
-            <div className="issue-title">删除失败</div>
-            <div className="issue-line">{deleteError}</div>
-          </div>
-        ) : null}
-        {!loaded ? (
-          <div className="empty">读取中…</div>
-        ) : records.length === 0 ? (
-          <div className="empty">还没有保存过的项目。</div>
-        ) : (
-          <div className="saved-table">
-            <div className="saved-row saved-head">
-              <span>项目</span>
-              <span>简介</span>
-              <span>最后修改</span>
-              <span />
-            </div>
-            {records.map((record) => (
-              <div className="saved-row" key={record.id}>
-                <a
-                  href="#/"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    void open(record.id);
-                  }}
-                >
-                  {record.name}
-                </a>
-                <span>{record.logline || '—'}</span>
-                <span>{new Date(record.updatedAt).toLocaleString('zh-CN')}</span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-icon is-danger"
-                  aria-label={`删除项目「${record.name}」`}
-                  title="删除"
-                  onClick={() => {
-                    if (window.confirm(`确定删除「${record.name}」吗？此操作不可撤销。`)) {
-                      void remove(record.id);
-                    }
-                  }}
-                >
-                  <Icon name="trash" size={14} />
-                </button>
+          {listError ? <div className="issue warning">{listError}</div> : null}
+          {openError ? <div className="issue error">{openError}</div> : null}
+          {deleteError ? <div className="issue error">{deleteError}</div> : null}
+          {records.length > 0 ? (
+            <div className="saved-table">
+              <div className="saved-head">
+                <span>项目名称</span>
+                <span>最近修改</span>
+                <span>操作</span>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+              {records.map((rec) => {
+                const isCurrent = project?.id === rec.id;
+                return (
+                  <div className="saved-row" key={rec.id}>
+                    <div className="saved-name">
+                      <b>{rec.name}</b>
+                      {isCurrent ? <span className="tag tag-ok">当前打开</span> : null}
+                    </div>
+                    <span className="saved-date">{fmtDate(rec.updatedAt)}</span>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={isCurrent}
+                        onClick={() => void open(rec.id)}
+                      >
+                        {isCurrent ? '已打开' : '打开'}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon btn-sm is-danger"
+                        title="删除项目"
+                        aria-label={`删除项目 ${rec.name}`}
+                        onClick={() => {
+                          if (window.confirm(`确定删除项目「${rec.name}」及关联图片？`)) {
+                            void remove(rec.id);
+                          }
+                        }}
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }
-
-

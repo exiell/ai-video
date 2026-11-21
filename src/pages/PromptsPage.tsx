@@ -1,4 +1,4 @@
-import { CopyFallbackDialog, Info } from '../components/bits';
+import { CopyFallbackDialog } from '../components/bits';
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
@@ -17,7 +17,7 @@ import { buildAllPrompts } from '../domain/prompt';
  * 所以中文对照和说明不是可选项，是必选项。
  */
 
-export function PromptsPage() {
+export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [params] = useSearchParams();
   const project = useAppStore((s) => s.project);
   const [platform, setPlatform] = useState<TargetPlatform | null>(null);
@@ -56,17 +56,8 @@ export function PromptsPage() {
         {copied ? '已复制到剪贴板' : ''}
       </span>
       <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />
-      <div className="page-head">
-        <div>
-          <h1>提示词</h1>
-          <p>
-            英文正文，中文对照
-            <Info label="为什么正文是英文">
-              模型对英文提示词的理解更稳，所以正文用英文。
-              但每一镜下面都有中文对照和逐项说明，你能看懂要生成什么、每个词为什么这么写。
-            </Info>
-          </p>
-        </div>
+      <div className={`page-head${embedded ? ' page-head-compact' : ''}`}>
+        {embedded ? <span /> : <h1>提示词</h1>}
         <div className="row">
           <label className="row" style={{ gap: 6, fontSize: 12, cursor: 'pointer' }}>
             <input

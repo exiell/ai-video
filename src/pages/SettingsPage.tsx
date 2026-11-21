@@ -659,7 +659,7 @@ export function SettingsPage() {
       <div className="card">
         <h2 className="card-title">界面外观</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          只换配色、字体和底纹，不改功能，也不影响数据与导出。切换后会立刻应用，下次打开保持。
+          只换界面风格与布局，不改功能，也不影响数据与导出。切换后会立刻应用，下次打开保持。
         </p>
         <div className="appearance-grid">
           {THEMES.map((item) => (
@@ -694,8 +694,16 @@ export function SettingsPage() {
         </div>
         <div className="settings-next-grid" style={{ marginTop: 18 }}>
           <div>
+            <b>棱镜霓虹</b>
+            <span>默认。深靛星空底、流光多色强调与顶部制片导航，释放大屏画布。</span>
+          </div>
+          <div>
+            <b>彩绘棱镜</b>
+            <span>明亮奶油底、彩虹流光、彩色几何图形与弹性动效，活泼奔放。</span>
+          </div>
+          <div>
             <b>工作台</b>
-            <span>默认。最亮、对比最清楚，第一次用从这套开始。</span>
+            <span>浅色高亮、对比清楚，适合白天阅读与整理长表单。</span>
           </div>
           <div>
             <b>暗房</b>

@@ -6,6 +6,7 @@ import { assessStyleChange } from '../domain/help/styleChange';
 import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
 import { currentLlmName } from '../services/llm/readiness';
 import { ConfirmDialog, RichText } from './bits';
+import { Icon } from './Icon';
 import type { Project } from '../types/model';
 
 /**
@@ -88,27 +89,32 @@ export function ChatSidebar() {
         aria-expanded={open}
         aria-controls="chat-panel"
       >
-        <span className="chat-toggle-icon">{open ? '›' : '‹'}</span>
-        {!open ? <span className="chat-toggle-label">AI</span> : null}
+        {open ? (
+          <span className="chat-toggle-icon">›</span>
+        ) : (
+          <>
+            <Icon name="sparkles" size={15} />
+            <span className="chat-toggle-label">AI</span>
+          </>
+        )}
       </button>
 
       {open ? (
         <div className="chat-body">
           <div className="chat-head">
-            <div>
-              <b style={{ fontSize: 13 }}>问 AI 怎么改</b>
-              <div className="hint" style={{ marginTop: 2 }}>
-                用大白话说你想改什么，它给建议，你点头才改。
-              </div>
+            <div className="row" style={{ gap: 6 }}>
+              <Icon name="sparkles" size={15} />
+              <b style={{ fontSize: 13 }}>AI 副导演</b>
             </div>
             {bubbles.length > 0 ? (
               <button
                 type="button"
-                className="btn btn-ghost btn-sm"
+                className="btn btn-ghost btn-icon btn-sm"
                 onClick={reset}
-                title="清空这次对话（不会改项目内容）"
+                title="清空对话"
+                aria-label="清空对话"
               >
-                清空
+                <Icon name="trash" size={14} />
               </button>
             ) : null}
           </div>

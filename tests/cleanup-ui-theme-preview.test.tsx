@@ -23,7 +23,7 @@ import { sampleProject } from '../src/data/samples/sampleProject';
  * 结果：设置页外观里的夜间、蓝图两张预览卡退回了工作台配色。
  *
  * 这条测试同时锁两件事：
- *  1. CSS 里必须存在这三块规则（否则主题预览就退化了）；
+ *  1. CSS 里必须存在这些规则（否则主题预览就退化了）；
  *  2. 页面渲染出的预览类名必须和 THEMES 的 id 一一对应。
  * 以后再有「无引用类清理」，删到这里会直接红。
  */
@@ -64,8 +64,13 @@ beforeEach(() => {
 });
 
 describe('主题预览的动态类名', () => {
-  it('CSS 保留夜间/蓝图配色与蓝图 serif 标题，页面类名和主题 id 对得上', () => {
-    // 1) 三块规则必须存在，且关键变量不能丢
+  it('CSS 保留棱镜/夜间/蓝图配色与蓝图 serif 标题，页面类名和主题 id 对得上', () => {
+    // 1) 四套主题里的非默认样式规则必须存在，且关键变量不能丢
+    const prism = cssBlock('.preview-prism');
+    expect(prism).toBeTruthy();
+    expect(prism).toContain('--tp-bg: #080b16;');
+    expect(prism).toContain('--tp-accent: #38bdf8;');
+
     const night = cssBlock('.preview-night');
     expect(night).toBeTruthy();
     expect(night).toContain('--tp-bg: #0b0d10;');
@@ -84,7 +89,7 @@ describe('主题预览的动态类名', () => {
     expect(css).toContain('preview-${item.id}');
     expect(css).toMatch(/别按「无引用」删/);
 
-    // 2) 页面渲染的预览类名 = THEMES 的 id，且夜间/蓝图都有对应 CSS 规则
+    // 2) 页面渲染的预览类名 = THEMES 的 id，且棱镜/夜间/蓝图都有对应 CSS 规则
     const el = renderAppearance();
     const previews = [...el.querySelectorAll('.theme-preview')];
     expect(previews.length).toBe(THEMES.length);
@@ -92,7 +97,9 @@ describe('主题预览的动态类名', () => {
       [...node.classList].find((name) => name.startsWith('preview-')),
     );
     expect(previewClasses).toEqual(THEMES.map((theme) => `preview-${theme.id}`));
-    expect(THEMES.map((theme) => theme.id)).toEqual(['studio', 'night', 'blueprint']);
+    expect(THEMES.map((theme) => theme.id)).toEqual(['prism', 'pop', 'studio', 'night', 'blueprint']);
+    expect(cssBlock('.preview-pop')).toBeTruthy();
+    expect(cssBlock('.preview-prism')).toBeTruthy();
     expect(cssBlock('.preview-night')).toBeTruthy();
     expect(cssBlock('.preview-blueprint')).toBeTruthy();
   });

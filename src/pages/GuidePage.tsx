@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
-import { ConfirmDialog, Field, WhyDetails } from '../components/bits';
-import { RichText } from '../components/bits';
+import { ConfirmDialog, Field } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { Icon } from '../components/Icon';
 import { TermHint } from '../components/TermHint';
-import { SelectMenu } from '../components/SelectMenu';
 import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
 import { assessStyleChange } from '../domain/help/styleChange';
 import { useImage } from '../store/image';
@@ -17,142 +15,44 @@ import { PLATFORM_LABEL } from '../types/model';
 import { newId } from '../services/storage';
 
 /**
- * M1 引导向导（方案.md v0.6 §3.2）
+ * 故事立项向导（3 步聚焦流 + 右侧实时立项预览卡）
  *
- * 设计要点：一次只问一个问题。每一步都带「为什么问这个」的折叠说明。
- *
- * P0a 阶段不接 LLM，所以「让工具生成」这条路会明确告知用户：
- * 现在需要你自己填，P0b 接上模型后才会自动生成。
- * 不装作能生成——那会让用户在按下按钮后一头雾水。
+ * 第 1 步：写故事（自己写 / AI 起草，可选补四格与场次）；
+ * 第 2 步：画风与规格（视觉化画幅比例框、时长胶囊、平台点选、画风预设）；
+ * 第 3 步：启动制作（直接进入 AI 拆镜或手动设定集）。
  */
 
-const STEPS = ['故事来源', '故事正文', '风格与规格', '完成'] as const;
-
-interface GuideStep {
-  title: string;
-  how: string;
-  done: string;
-  why?: string;
-  route: string;
-  routeLabel: string;
-  optional?: boolean;
-}
-
-/**
- * 向导结束后的操作顺序。
- *
- * 为什么要有这个：向导做完，用户面临的是「然后呢」。
- * 光给一句「去分镜表」是不够的——他不知道点哪个按钮、不知道做完该看到什么、
- * 更不知道什么时候可以往下走。
- *
- * 所以每一步都写三件事：点哪里、会发生什么、**做完怎么判断可以往下走**。
- * 最后那条最关键：新手卡住往往不是因为不会操作，而是不知道该不该继续。
- */
-const STEPS_AFTER_GUIDE: GuideStep[] = [
-  {
-    title: '建场景',
-    how: '去「场景设定」，点右上角「加一个场景」。每个场景至少写三样：固定元素（3-5 个英文短语，例如 rows of wooden desks）、主光方向（例如 傍晚，暖光从右侧窗户斜射）、主色调（例如 暖橙 + 灰绿）。',
-    done: '每个场景的卡片上显示「设定完整」而不是「缺：…」就可以往下走。',
-    why: '为什么先建场景：分镜里的每一个镜头都要挂到一个场景上。先有场景，写分镜时才能直接选；反过来做会让你在分镜表里反复停下来去建场景。固定元素和光线是场景一致性的锚点。不写下来，模型每个镜头都会重新布置一遍这个空间。',
-    route: '/scenes',
-    routeLabel: '场景设定',
-  },
-  {
-    title: '建角色',
-    how: '去「角色设定」，点「加一个角色」。填身份描述（中文给你自己看 + 英文给模型看），然后**至少加 2 条连续性锁**。只锁不会随剧情改变、而且观众看得出不一致的特征，例如 a worn padded cotton robe in faded indigo。锁面写成能直接贴进提示词的英文短语。',
-    done: '每个角色卡片上显示「N 条锁」而不是「没有连续性锁」。',
-    why: '为什么锁这么重要：跨镜穿帮多数是服装颜色、手里的东西、湿没湿变了，不是脸变了。锁面会被原样写进每一镜的提示词，这是角色不走样的主要手段。',
-    route: '/characters',
-    routeLabel: '角色设定',
-  },
-  {
-    title: '生成分镜表',
-    how: '去「分镜表」，点卡片里的「② 生成分镜表」。模型会把故事拆成镜头，并自动挂好场景、角色和连续性锁。',
-    done: '看到分镜列表出来，并且镜号连续。',
-    why: '如果提示里有「模型漏勾了 N 处连续性锁，已自动补上」是正常的。系统按「这一镜有谁、在哪个场景」机械补齐，比漏掉安全。',
-    route: '/storyboard',
-    routeLabel: '分镜表',
-  },
-  {
-    title: '跑一次穿帮检查',
-    how: '去「穿帮检查」看一眼。有问题的话，页面上方会出现「自动修复」卡片。点它可以看见每条修改的前后对照，勾选你认可的，确认后才生效，而且能撤销。',
-    done: '「必改项」那一档清零，或剩下的都是你认可的。',
-    why: '这一步在你花钱出图之前，把必须保持一致的地方列成清单。',
-    route: '/checks',
-    routeLabel: '穿帮检查',
-  },
-  {
-    title: '生成角色形象图',
-    how: '回「角色设定」，用「批量生成」卡片里的按钮，或逐个角色点「① 生成全身多视图」和「② 生成头部特写」。建议先全身再多视图。头部特写会拿全身图当参考，顺序反了效果打折。',
-    done: '点开图放大看，六个视角里是同一个人，面部特征一致。不满意就改锁面重出。',
-    why: '头部特写是锁脸的关键：全身图里的脸只有几十像素，模型从这里学不到面部特征。',
-    route: '/characters',
-    routeLabel: '角色设定',
-  },
-  {
-    title: '生成场景参考板',
-    how: '去「场景设定」，用「批量生成」一次跑完，或逐个场景点按钮。',
-    done: '每张图里能看到你登记的固定元素，光线方向与场景卡一致。',
-    optional: true,
-    why: '场景板不是必须的，但有了它，后续关键帧的空间感会稳很多。',
-    route: '/scenes',
-    routeLabel: '场景设定',
-  },
-  {
-    title: '逐镜生成关键帧',
-    how: '回「分镜表」，用「批量生成」里的「全部关键帧」，或逐个镜头点「生成关键帧（锁角色）」。带参考图锚定的那一档效果最好。',
-    done: '逐张扫一遍：同一个人在不同镜头里认不认得出、同一处地方像不像同一个地方。',
-    why: '这是最花时间和钱的一步。先把形象图跑满意再来，能省不少返工。',
-    route: '/storyboard',
-    routeLabel: '分镜表',
-  },
-  {
-    title: '导出并开始做视频',
-    how: '去「导出」点「打包下载」。解压后先打开「先看这里.txt」，按它说的拿文件；再用「参考文档/拍摄进度表.md」逐镜执行，从「视频提示词★/即梦.md」里复制英文正文到即梦/可灵等平台生成视频；拿不准的地方翻「参考文档/一致性总览.md」和「参考文档/穿帮检查单.md」。',
-    done: '到这里，本工具的部分结束。视频生成和剪辑在平台完成。',
-    why: '导出的压缩包同时也是你唯一的备份：所有数据只在本机浏览器里，浏览器清理磁盘时可能整个清空。',
-    route: '/export',
-    routeLabel: '导出',
-  },
-];
+const STEPS = ['定故事', '画风与规格', '启动制作'] as const;
 
 const PLATFORM_OPTIONS: TargetPlatform[] = ['jimeng', 'kling', 'seedance'];
-const ASPECT_OPTIONS = [
-  { value: '9:16', label: '9:16 竖屏（抖音 / 快手 / 视频号）' },
-  { value: '16:9', label: '16:9 横屏（B站 / YouTube）' },
-  { value: '1:1', label: '1:1 方形' },
-  { value: '4:3', label: '4:3' },
+const DURATION_PRESETS = [15, 30, 45, 60];
+
+const ASPECT_CARDS = [
+  { value: '9:16', label: '9:16 竖屏', sub: '抖音 / 视频号', w: 18, h: 30 },
+  { value: '16:9', label: '16:9 横屏', sub: 'B站 / YouTube', w: 32, h: 18 },
+  { value: '1:1', label: '1:1 方形', sub: '社交方图', w: 24, h: 24 },
+  { value: '4:3', label: '4:3 经典', sub: '复古番剧', w: 28, h: 21 },
 ];
 
 export function GuidePage() {
   const navigate = useNavigate();
   const project = useAppStore((s) => s.project);
   const patchBrief = useAppStore((s) => s.patchBrief);
-  const assetCount = useImage((s) => s.assetCount);
-  const refreshAssetCount = useImage((s) => s.refreshAssetCount);
-  /**
-   * 待确认的风格改动。null 表示没有挂起的对话。
-   *
-   * 两种来源都要走同一个对话框：
-   *  - `preset`：点了预设，一步替换整套风格词
-   *  - `generate`：点了「用这段中文生成英文关键词」
-   *
-   * 后者尤其容易漏——它的写入发生在 store 里（runStyleTags 会 patchBrief），
-   * 页面的守卫根本拦不到。所以这里先用闸门挡住生成，确认之后才真正跑。
-   */
-  const [pendingStyle, setPendingStyle] = useState<
-    { kind: 'preset'; tags: string[] } | { kind: 'generate' } | null
-  >(null);
-  const runStyleTags = useGeneration((s) => s.runStyleTags);
-
-  // 进页面时统计一次图片总数：改风格提示要用它说「有多少张图会是旧风格」
-  useEffect(() => {
-    void refreshAssetCount();
-  }, [refreshAssetCount]);
   const patchStory = useAppStore((s) => s.patchStory);
   const patchProject = useAppStore((s) => s.patchProject);
   const createEmptyProject = useAppStore((s) => s.createEmptyProject);
+  const assetCount = useImage((s) => s.assetCount);
+  const refreshAssetCount = useImage((s) => s.refreshAssetCount);
+  const runStyleTags = useGeneration((s) => s.runStyleTags);
+
   const [step, setStep] = useState(0);
+  const [pendingStyle, setPendingStyle] = useState<
+    { kind: 'preset'; tags: string[] } | { kind: 'generate' } | null
+  >(null);
+
+  useEffect(() => {
+    void refreshAssetCount();
+  }, [refreshAssetCount]);
 
   if (!project) {
     return (
@@ -188,45 +88,20 @@ export function GuidePage() {
     patchStory({ scenes: story.scenes.filter((s) => s.id !== id) });
   }
 
-  /**
-   * 每一步是否真的完成，按内容判断，不看当前停在第几步。
-   *
-   * 之前用 `index < step` 推导「已完成」：只要点过下一步，上一步就自动变成已完成；
-   * 再切回去，又因为 `index < step` 不成立而消失。这会误导用户，也把「导航位置」
-   * 和「内容是否写完」混成了一件事。
-   *
-   * 第 0 步默认已经选中「我自己的故事」，这是一个有效选择，所以算完成；
-   * 第 3 步是总结/下一步，不是表单，不参与完成判定。
-   */
+  const matchedPreset = matchStylePreset(project.brief.styleTags);
   const completed = [
-    story.source === 'original' || story.source === 'generated',
     story.body.trim().length > 0,
-    // 默认的 30 秒 / 9:16 / 即梦 / anime style 是能直接用的起点，
-    // 但“填过这一步”至少要有用户自己写的一句话简介、风格倾向，
-    // 或者点过一套风格预设；否则空项目一进来就会显示“已完成”，还是在骗人。
     project.logline.trim().length > 0 ||
       project.brief.styleTone.trim().length > 0 ||
-      matchStylePreset(project.brief.styleTags) !== undefined,
+      matchedPreset !== undefined ||
+      project.brief.styleTags.length > 0,
     false,
   ];
 
-  function stepState(index: number): string {
-    if (index === step) return completed[index] ? '当前 · 已完成' : '当前';
-    if (completed[index]) return '已完成';
-    if (index < step && index < STEPS.length - 1) return '未完成';
-    return '';
-  }
-
-  /**
-   * 改风格的影响。
-   *
-   * 三条路径共用这份评估：手动改关键词、点预设、以及「问 AI」改稿。
-   * 三处各写一份文案必然分叉，所以判定和措辞都在 domain/help/styleChange.ts 里。
-   */
   const styleImpact = assessStyleChange({
-    characters: project?.characters.length ?? 0,
-    scenes: project?.scenes.length ?? 0,
-    shots: project?.shots.length ?? 0,
+    characters: project.characters.length,
+    scenes: project.scenes.length,
+    shots: project.shots.length,
     imageCount: assetCount,
   });
 
@@ -237,575 +112,487 @@ export function GuidePage() {
     story.ending,
   ].filter((value) => value.trim().length > 0).length;
 
-  return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>故事</h1>
-          <p>一次只问一个问题。</p>
-        </div>
-      </div>
+  const estShots = Math.max(1, Math.round((project.brief.targetDuration || 30) / 4));
+  const activeAspect =
+    ASPECT_CARDS.find((a) => a.value === project.brief.aspectRatio) ?? ASPECT_CARDS[1];
 
-      <div className="guide-layout">
-        <aside className="guide-rail" aria-label="故事步骤">
-          <div className="guide-rail-title">
-            写故事 · {step + 1} / {STEPS.length}
-          </div>
+  return (
+    <div className="guide-v2">
+      <header className="hub-hero guide-hero">
+        <h1>故事</h1>
+
+        <nav className="guide-stepper" aria-label="故事步骤">
           {STEPS.map((label, index) => {
             const done = completed[index];
-            const pending = index < step && !done && index < STEPS.length - 1;
             return (
               <button
                 key={label}
                 type="button"
-                className={`wizard-step${index === step ? ' active' : ''}${done ? ' done' : ''}${
-                  pending ? ' pending' : ''
-                }`}
+                className={`guide-step-pill${index === step ? ' active' : ''}${done ? ' done' : ''}`}
                 aria-current={index === step ? 'step' : undefined}
                 onClick={() => setStep(index)}
               >
-                <span className="wizard-dot" aria-hidden="true" />
+                <span className="guide-step-no">0{index + 1}</span>
                 <span>{label}</span>
-                {done ? <Icon name="circle-check" size={14} className="wizard-state-icon" /> : null}
-                {/* 状态文字只留给读屏；视觉上是勾 / 圆环 / 橙点 */}
-                <span className="wizard-state">{stepState(index)}</span>
+                {done ? <Icon name="circle-check" size={14} /> : null}
               </button>
             );
           })}
-        </aside>
+        </nav>
+      </header>
 
+      <div className="guide-workspace">
         <div className="guide-main">
           {step === 0 ? (
             <div className="card">
-              <h2 className="card-title">故事来源</h2>
-              <div className="choice-row">
-                <button
-                  type="button"
-                  className={`choice${story.source === 'original' ? ' active' : ''}`}
-                  onClick={() => patchStory({ source: 'original' })}
-                >
-                  <b>我自己的故事</b>
-                  <span>直接粘贴或写下你已经想好的故事，不会被模型改写。</span>
-                </button>
-                <button
-                  type="button"
-                  className={`choice${story.source === 'generated' ? ' active' : ''}`}
-                  onClick={() => patchStory({ source: 'generated' })}
-                >
-                  <b>给个主题，让工具生成</b>
-                  <span>给一句话主题，模型起草，你再逐字改。</span>
-                </button>
+              <div className="guide-section-head">
+                <h2 className="card-title">写下你的故事</h2>
+                <div className="guide-source-switch" role="group" aria-label="故事来源">
+                  <button
+                    type="button"
+                    className={`btn btn-sm${story.source === 'original' ? ' btn-primary' : ''}`}
+                    onClick={() => patchStory({ source: 'original' })}
+                  >
+                    自己写
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm${story.source === 'generated' ? ' btn-primary' : ''}`}
+                    onClick={() => patchStory({ source: 'generated' })}
+                  >
+                    AI 帮我起草
+                  </button>
+                </div>
               </div>
-              <WhyDetails>
-            这两种来源后面要填的东西不一样。选「我自己的故事」，下一步你直接粘贴或写下来就行；
-            选「给工具生成」，你只需要给一个主题，剩下交给模型去写。
-            <br />
-            <br />
-            选「给工具生成」，下一步你只要给一句话主题，模型会把故事写出来，并顺手拆好场次。
-            写完的东西可以逐字改。模型起草，你决定。
-          </WhyDetails>
 
-          {story.source === 'generated' ? (
-            <div style={{ marginTop: 14 }}>
-              <Field label="你想讲什么主题？" hint="一句话就够，例如：一个外卖员在雨天捡到一只会说话的猫">
-                <input
-                  type="text"
-                  value={story.theme ?? ''}
-                  onChange={(e) => patchStory({ theme: e.target.value })}
-                  placeholder="一句话主题"
+              {story.source === 'generated' ? (
+                <div className="guide-ai-box">
+                  <Field label="一句话主题" hint="例如：雨夜里外卖员在巷口捡到一只会说话的猫">
+                    <input
+                      type="text"
+                      value={story.theme ?? ''}
+                      onChange={(e) => patchStory({ theme: e.target.value })}
+                      placeholder="输入想讲的主题，让模型先起草初稿"
+                    />
+                  </Field>
+                  <GenerateBar
+                    task="story"
+                    label="让模型帮我写故事并拆场次"
+                   
+                  />
+                </div>
+              ) : null}
+
+              <Field
+                label="故事正文"
+               
+              >
+                <textarea
+                  rows={8}
+                  value={story.body}
+                  onChange={(e) => patchStory({ body: e.target.value })}
+                  placeholder="例：林冲被陷害发配沧州看守草料场。风雪夜沽酒回来见草厅压塌，宿进山神庙，听见门外三人密谋后提枪推门而出……"
                 />
               </Field>
-              <GenerateBar
-                task="story"
-                label="让模型帮我写这个故事"
-                hint="会同时拆出场次。写完之后你仍然可以逐字修改。"
-              />
-            </div>
-          ) : null}
 
-          <div className="guide-sample">
-            <div className="aside-label">一个写好的开头长这样</div>
-            <p>一个被诬陷的武人被发配草料场，在风雪夜里听见门外三人密谋，推门而出。</p>
-            <span>一句话里有主角、处境、转折，和最后一个动作。</span>
-          </div>
-        </div>
-      ) : null}
+              <details className="card-fold">
+                <summary>
+                  <span className="card-fold-title">四要素（可选）</span>
+                  <span className="card-fold-count">{storyFilledCount} / 4 已填</span>
+                </summary>
+                <div className="grid-2" style={{ marginTop: 10 }}>
+                  <Field label="主要人物">
+                    <textarea
+                      rows={2}
+                      value={story.charactersNote}
+                      onChange={(e) => patchStory({ charactersNote: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="时间与地点">
+                    <textarea
+                      rows={2}
+                      value={story.setting}
+                      onChange={(e) => patchStory({ setting: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="核心冲突">
+                    <textarea
+                      rows={2}
+                      value={story.conflict}
+                      onChange={(e) => patchStory({ conflict: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="结局定格">
+                    <textarea
+                      rows={2}
+                      value={story.ending}
+                      onChange={(e) => patchStory({ ending: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </details>
 
-      {step === 1 ? (
-        <div className="card">
-          <h2 className="card-title">故事正文</h2>
-          <Field
-            label="故事正文"
-            hint="可以只写一段话，也可以粘贴整篇小说。写清楚：谁、在哪、发生了什么、最后怎么了。"
-          >
-            <textarea
-              rows={8}
-              value={story.body}
-              onChange={(e) => patchStory({ body: e.target.value })}
-              placeholder="例：林冲被陷害发配沧州，看守草料场。这夜大雪，他沽酒回来见草厅被压塌，只得宿在山神庙。半夜听见门外有人密谋要烧死他……"
-            />
-          </Field>
-
-          {/*
-            四个补充格子默认收起：这一页的主任务是「把故事写下来」。
-            四格是给检查引擎核对「该拍的是不是都拍了」用的，没想好可以先空着，
-            所以做成可选的一段，而不是一上来就五个输入框。
-          */}
-          <details className="card-fold">
-            <summary>
-              <span className="card-fold-title">补充四个格子（可选）</span>
-              <span className="card-fold-count">{storyFilledCount} / 4 已填</span>
-            </summary>
-            <p className="card-fold-desc">写清楚这四格，检查引擎才能核对分镜有没有漏拍。</p>
-            <div className="grid-2">
-            <Field label="主要人物" hint="谁在这个故事里，他们是什么关系">
-              <textarea
-                rows={3}
-                value={story.charactersNote}
-                onChange={(e) => patchStory({ charactersNote: e.target.value })}
-              />
-            </Field>
-            <Field label="发生在哪 / 什么时候" hint="地点和时代背景">
-              <textarea
-                rows={3}
-                value={story.setting}
-                onChange={(e) => patchStory({ setting: e.target.value })}
-              />
-            </Field>
-            <Field label="冲突是什么" hint="主角想要什么，什么挡着他">
-              <textarea
-                rows={3}
-                value={story.conflict}
-                onChange={(e) => patchStory({ conflict: e.target.value })}
-              />
-            </Field>
-            <Field label="结局" hint="最后停在哪一帧画面上">
-              <textarea
-                rows={3}
-                value={story.ending}
-                onChange={(e) => patchStory({ ending: e.target.value })}
-              />
-            </Field>
-            </div>
-
-            <WhyDetails>
-              分镜引擎要靠它们决定「哪些内容必须拍出来」，
-              穿帮检查也会拿它们核对「你说要讲的事，分镜里是不是真的都有镜头承载」。
-              没想好可以先空着，后面回来补。
-            </WhyDetails>
-          </details>
-
-          <h2 className="card-title" style={{ marginTop: 22 }}>
-            场次拆分
-          </h2>
-          {story.scenes.length === 0 ? (
-            <div className="empty">还没有场次。可以先不分，等写完分镜再回来补。</div>
-          ) : (
-            story.scenes.map((scene) => (
-              <div className="row" key={scene.id} style={{ marginBottom: 8, alignItems: 'flex-start' }}>
-                <input
-                  type="text"
-                  aria-label="场次名"
-                  style={{ maxWidth: 220 }}
-                  value={scene.label}
-                  onChange={(e) => updateStoryScene(scene.id, { label: e.target.value })}
-                  placeholder="场次名，例：教室 · 傍晚"
-                />
-                <input
-                  type="text"
-                  aria-label="这一场发生了什么"
-                  style={{ flex: 1, minWidth: 200 }}
-                  value={scene.summary}
-                  onChange={(e) => updateStoryScene(scene.id, { summary: e.target.value })}
-                  placeholder="这一场发生了什么"
-                />
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-icon is-danger"
-                  aria-label={`删除场次「${scene.label}」`}
-                  title="删除"
-                  onClick={() => removeStoryScene(scene.id)}
-                >
-                  <Icon name="trash" size={14} />
-                </button>
-              </div>
-            ))
-          )}
-          <button type="button" className="btn btn-sm" style={{ marginTop: 8 }} onClick={addStoryScene}>
-            + 加一场
-          </button>
-        </div>
-      ) : null}
-
-      {step === 2 ? (
-        <div className="card">
-          <h2 className="card-title">风格与规格</h2>
-
-          <Field
-            label="片名"
-            hint="只是给你自己看的项目名，可以随时改"
-          >
-            <input
-              type="text"
-              value={project.name}
-              onChange={(e) => patchProject({ name: e.target.value })}
-              placeholder="我的动漫短片"
-            />
-          </Field>
-
-          <Field label="一句话简介" hint="写完你自己回看时，一眼知道这个项目是干什么的">
-            <input
-              type="text"
-              value={project.logline}
-              onChange={(e) => patchProject({ logline: e.target.value })}
-            />
-          </Field>
-
-          <div className="grid-2">
-            <Field label="目标时长（秒）" hint="新手建议 30–60 秒">
-              <input
-                type="number"
-                min={5}
-                max={600}
-                value={project.brief.targetDuration}
-                onChange={(e) => patchBrief({ targetDuration: Number(e.target.value) || 0 })}
-              />
-            </Field>
-
-            <Field label="画面比例" hint="竖屏选 9:16，横屏选 16:9">
-              <SelectMenu
-                value={project.brief.aspectRatio}
-                options={ASPECT_OPTIONS}
-                ariaLabel="画面比例"
-                onChange={(value) => patchBrief({ aspectRatio: value })}
-              />
-            </Field>
-          </div>
-
-          <Field
-            label="打算用哪个平台生成？"
-            hint="可以多选。选了之后，提示词会同时按这几个平台的格式各出一份。"
-          >
-            <div className="row">
-              {PLATFORM_OPTIONS.map((p) => {
-                const on = project.brief.platforms.includes(p);
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    className={`btn${on ? ' btn-primary' : ''}`}
-                    onClick={() => {
-                      const next = on
-                        ? project.brief.platforms.filter((x) => x !== p)
-                        : [...project.brief.platforms, p];
-                      patchBrief({ platforms: next });
-                    }}
-                  >
-                    {PLATFORM_LABEL[p]}
+              <details className="card-fold" style={{ marginTop: 10 }}>
+                <summary>
+                  <span className="card-fold-title">场次拆分（可选）</span>
+                  <span className="card-fold-count">{story.scenes.length} 场</span>
+                </summary>
+                <div style={{ marginTop: 10 }}>
+                  {story.scenes.map((scene) => (
+                    <div
+                      className="row"
+                      key={scene.id}
+                      style={{ marginBottom: 8, alignItems: 'flex-start' }}
+                    >
+                      <input
+                        type="text"
+                        aria-label="场次名"
+                        style={{ maxWidth: 200 }}
+                        value={scene.label}
+                        onChange={(e) => updateStoryScene(scene.id, { label: e.target.value })}
+                        placeholder="例：山神庙 · 风雪夜"
+                      />
+                      <input
+                        type="text"
+                        aria-label="这一场发生了什么"
+                        style={{ flex: 1, minWidth: 180 }}
+                        value={scene.summary}
+                        onChange={(e) => updateStoryScene(scene.id, { summary: e.target.value })}
+                        placeholder="这一场发生了什么"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-icon is-danger"
+                        aria-label={`删除场次 ${scene.label}`}
+                        onClick={() => removeStoryScene(scene.id)}
+                      >
+                        <Icon name="trash" size={14} />
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" className="btn btn-sm" onClick={addStoryScene}>
+                    + 加一场
                   </button>
-                );
-              })}
-            </div>
-          </Field>
-
-          {/*
-            改风格的影响提示（v0.42）。
-
-            为什么常驻显示而不是弹窗：风格这一节的三个入口（中文意图、生成关键词、
-            点预设）都可能被改，弹窗只能在某个具体动作上拦；而用户真正需要知道的是
-            「在已经做出内容之后改风格，代价是什么」——这件事在他动手之前就该看见。
-
-            弹窗只留给「点预设」这种一步替换整套词的离散动作。
-          */}
-          {styleImpact.needed ? (
-            <div className="issue warning" style={{ marginBottom: 14 }}>
-              <div className="issue-title">
-                已经做过内容了，改风格会影响角色、场景和镜头
-              </div>
-              <div className="issue-line">
-                改风格不会自动更新已经做好的角色、场景和镜头。
-              </div>
-              <details className="why">
-                <summary>看会受哪些影响、按这个顺序做</summary>
-                <div className="why-body">
-                  <div className="issue-line">
-                    你的项目里已经有
-                    {[
-                      project.characters.length > 0 ? `${project.characters.length} 个角色` : '',
-                      project.scenes.length > 0 ? `${project.scenes.length} 个场景` : '',
-                      project.shots.length > 0 ? `${project.shots.length} 个镜头` : '',
-                      assetCount > 0 ? `${assetCount} 张图` : '',
-                    ]
-                      .filter(Boolean)
-                      .join('、')}
-                    。改风格不会自动更新它们：
-                  </div>
-                  <ul className="issue-line" style={{ paddingLeft: 20, margin: '4px 0 0' }}>
-                    {styleImpact.risks.map((risk) => (
-                      <li key={risk}>
-                        <RichText>{risk}</RichText>
-                      </li>
-                    ))}
-                  </ul>
-                  <div style={{ marginTop: 8 }}>要改的话，按这个顺序做：</div>
-                  <ol style={{ paddingLeft: 20, margin: 0 }}>
-                    {styleImpact.steps.map((step) => (
-                      <li key={step} style={{ marginBottom: 4 }}>
-                        <RichText>{step}</RichText>
-                      </li>
-                    ))}
-                  </ol>
                 </div>
               </details>
             </div>
           ) : null}
 
-          <Field
-            label="风格倾向（随便写，中文就行）"
-            hint="这一段是你自己的备忘，也告诉模型整部片子的调子。模型会据此写角色和场景描述。"
-          >
-            <textarea
-              rows={2}
-              value={project.brief.styleTone}
-              onChange={(e) => patchBrief({ styleTone: e.target.value })}
-              placeholder="例如：水墨写意 + 国漫赛璐璐，冷色调，大雪，厚重衣物质感"
-            />
-          </Field>
+          {step === 1 ? (
+            <div className="card">
+              <h2 className="card-title">画风与成片规格</h2>
 
-          {/*
-            【为什么要这个按钮】「风格倾向」是中文，而真正进提示词的是下面的英文关键词。
-            新手写得出中文、写不出英文，于是这里写了一堆、实际生成时风格词还是空的——
-            风格根本没生效。这个按钮把两者接上。
-          */}
-          <div style={{ marginTop: -4 }}>
-            <GenerateBar
-              task="style"
-              label="用这段中文生成英文关键词"
-              hint="会写进下面的「风格关键词」，之后出的图都带上"
-              /*
-                已经做过内容时，先弹确认再调模型。
+              <div className="grid-2">
+                <Field label="片名">
+                  <input
+                    type="text"
+                    value={project.name}
+                    onChange={(e) => patchProject({ name: e.target.value })}
+                    placeholder="我的动漫短片"
+                  />
+                </Field>
+                <Field label="一句话简介">
+                  <input
+                    type="text"
+                    value={project.logline}
+                    onChange={(e) => patchProject({ logline: e.target.value })}
+                    placeholder="主角、处境与转折"
+                  />
+                </Field>
+              </div>
 
-                为什么把闸门放在**生成之前**而不是拿到结果之后：
-                确认要回答的是「我要不要换风格」，那件事在点按钮时就已经在发生了。
-                放到之后会让用户先花钱生成、再被告知「你可以不要」——
-                而且取消就等于白花一次调用。
-              */
-              gate={() => {
-                if (styleImpact.needed) {
-                  setPendingStyle({ kind: 'generate' });
-                  return false;
-                }
-                return true;
-              }}
-            />
-          </div>
+              <div className="guide-spec-block">
+                <span className="field-label">画面比例</span>
+                <div className="aspect-card-grid">
+                  {ASPECT_CARDS.map((item) => {
+                    const active = project.brief.aspectRatio === item.value;
+                    return (
+                      <button
+                        key={item.value}
+                        type="button"
+                        className={`aspect-card${active ? ' active' : ''}`}
+                        onClick={() => patchBrief({ aspectRatio: item.value })}
+                        aria-pressed={active}
+                      >
+                        <span
+                          className="aspect-frame-icon"
+                          style={{ width: item.w, height: item.h }}
+                          aria-hidden="true"
+                        />
+                        <b>{item.label}</b>
+                        <small>{item.sub}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
 
-          <div className="field-label" style={{ marginBottom: 6 }}>风格</div>
-          <p className="hint" style={{ marginTop: 0, marginBottom: 10 }}>
-            点一下配好整套风格词，再点一下取消。
-          </p>
-          <div className="row" style={{ marginBottom: 12 }}>
-            {STYLE_PRESETS.map((preset) => {
-              const active = matchStylePreset(project.brief.styleTags)?.id === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={`btn${active ? ' btn-primary' : ''}`}
-                  /*
-                    【v0.41】选中之后必须能取消。
-                    原来点已选中的预设只是把同一套词再写一遍，等于没法退回「不用预设」。
-                    用户想改回空白、或想完全手写关键词时就没有出路了。
-                  */
-                  /*
-                    已经做过内容时，点预设等于**一步替换整套风格词**——
-                    这是最容易被低估的操作（看起来只是换个按钮）。
-                    所以它走确认对话框；手动改关键词则用上面那块常驻提示，
-                    不会每敲一个字弹一次。
-                  */
-                  onClick={() => {
-                    const next = active ? [] : [...preset.tags];
-                    if (styleImpact.needed) setPendingStyle({ kind: 'preset', tags: next });
-                    else patchBrief({ styleTags: next });
-                  }}
-                  title={active ? '再点一下取消这个预设' : preset.description}
-                  aria-pressed={active}
-                >
-                  {preset.label}
-                  {active ? ' · 已选' : ''}
-                </button>
-              );
-            })}
-          </div>
+              <div className="grid-2" style={{ marginTop: 14 }}>
+                <Field label="目标时长（秒）">
+                  <div className="row" style={{ gap: 6, marginBottom: 8 }}>
+                    {DURATION_PRESETS.map((sec) => (
+                      <button
+                        key={sec}
+                        type="button"
+                        className={`btn btn-sm${project.brief.targetDuration === sec ? ' btn-primary' : ''}`}
+                        onClick={() => patchBrief({ targetDuration: sec })}
+                      >
+                        {sec}s
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    min={5}
+                    max={600}
+                    value={project.brief.targetDuration}
+                    onChange={(e) => patchBrief({ targetDuration: Number(e.target.value) || 0 })}
+                  />
+                </Field>
 
-          <div className="row" style={{ marginBottom: 8 }}>
-            <TermHint term="画幅比例" />
-            <TermHint term="主色调" />
-            <TermHint term="主光方向" />
-          </div>
+                <Field label="目标视频平台">
+                  <div className="row" style={{ marginTop: 2 }}>
+                    {PLATFORM_OPTIONS.map((p) => {
+                      const on = project.brief.platforms.includes(p);
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          className={`btn${on ? ' btn-primary' : ''}`}
+                          onClick={() => {
+                            const next = on
+                              ? project.brief.platforms.filter((x) => x !== p)
+                              : [...project.brief.platforms, p];
+                            patchBrief({ platforms: next });
+                          }}
+                        >
+                          {PLATFORM_LABEL[p]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Field>
+              </div>
 
-          <Field
-            label="风格关键词（英文，真正进提示词的就是这几行）"
-            hint="每行一条。预设就是往这里填内容。"
-          >
-            <textarea
-              rows={6}
-              value={project.brief.styleTags.join('\n')}
-              onChange={(e) =>
-                patchBrief({
-                  styleTags: e.target.value
-                    .split('\n')
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-                })
-              }
-              placeholder={'anime style\ncel shading\ncold blue palette'}
-            />
-          </Field>
+              {styleImpact.needed ? (
+                <div className="issue warning" style={{ margin: '12px 0' }}>
+                  <div className="issue-title">已有设定或图片，改风格不会自动更新旧图</div>
+                  <div className="issue-line">切换风格后，建议重新核对角色、场景与关键帧。</div>
+                </div>
+              ) : null}
 
-          {project.brief.styleTags.length === 0 ? (
-            <div className="issue warning" style={{ marginBottom: 12 }}>
-              <div className="issue-title">还没有选风格</div>
-              <div className="issue-line">
-                不选也能生成，但各镜质感可能不统一。
+              <div className="guide-spec-block" style={{ marginTop: 14 }}>
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+                  <span className="field-label" style={{ marginBottom: 0 }}>
+                    画风预设
+                  </span>
+                  <div className="row" style={{ gap: 6 }}>
+                    <TermHint term="画幅比例" />
+                    <TermHint term="主色调" />
+                    <TermHint term="主光方向" />
+                  </div>
+                </div>
+                <div className="row" style={{ marginBottom: 12 }}>
+                  {STYLE_PRESETS.map((preset) => {
+                    const active = matchedPreset?.id === preset.id;
+                    return (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className={`btn${active ? ' btn-primary' : ''}`}
+                        onClick={() => {
+                          const next = active ? [] : [...preset.tags];
+                          if (styleImpact.needed) setPendingStyle({ kind: 'preset', tags: next });
+                          else patchBrief({ styleTags: next });
+                        }}
+                        title={preset.description}
+                        aria-pressed={active}
+                      >
+                        {preset.label}
+                        {active ? ' · 已选' : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <Field label="中文风格描述">
+                <textarea
+                  rows={2}
+                  value={project.brief.styleTone}
+                  onChange={(e) => patchBrief({ styleTone: e.target.value })}
+                  placeholder="例：水墨写意混合国漫赛璐璐，冷蓝灰主调，大雪，厚重布料质感"
+                />
+              </Field>
+
+              <GenerateBar
+                task="style"
+                label="用这段中文生成英文风格词"
+               
+                gate={() => {
+                  if (styleImpact.needed) {
+                    setPendingStyle({ kind: 'generate' });
+                    return false;
+                  }
+                  return true;
+                }}
+              />
+
+              <details className="card-fold" style={{ marginTop: 12 }}>
+                <summary>
+                  <span className="card-fold-title">英文风格词与负向词</span>
+                  <span className="card-fold-count">{project.brief.styleTags.length} 条风格词</span>
+                </summary>
+                <div style={{ marginTop: 10 }}>
+                  <Field label="风格关键词（英文，每行一条）">
+                    <textarea
+                      rows={5}
+                      value={project.brief.styleTags.join('\n')}
+                      onChange={(e) =>
+                        patchBrief({
+                          styleTags: e.target.value
+                            .split('\n')
+                            .map((s) => s.trim())
+                            .filter(Boolean),
+                        })
+                      }
+                      placeholder={'anime style\ncel shading\ncold blue palette'}
+                    />
+                  </Field>
+                  <Field label="负向词（所有镜头共用）">
+                    <textarea
+                      rows={2}
+                      value={project.brief.negativePrompt}
+                      onChange={(e) => patchBrief({ negativePrompt: e.target.value })}
+                    />
+                  </Field>
+                </div>
+              </details>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="guide-launch">
+              <AiFlowGuide />
+
+              <div className="guide-launch-cards">
+                <div className="card guide-launch-primary">
+                  <span className="next-label">推荐路径</span>
+                  <h3>进入分镜与质检，让 AI 拆设定与分镜</h3>
+
+                  <button
+                    type="button"
+                    className="btn btn-blue"
+                    onClick={() => navigate('/storyboard')}
+                  >
+                    进入分镜与质检 →
+                  </button>
+                </div>
+
+                <div className="card">
+                  <span className="next-label">手动路径</span>
+                  <h3>先去设定集，亲手定制角色与场景</h3>
+
+                  <div className="row">
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => navigate('/assets')}
+                    >
+                      去设定集 →
+                    </button>
+                    <Link className="btn btn-ghost" to="/help">
+                      查看分镜术语
+                    </Link>
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
 
-          <Field
-            label="负向词（你不想要的东西）"
-            hint="会单独放进平台的负向词框里，不要混进正文。"
-          >
-            <textarea
-              rows={2}
-              value={project.brief.negativePrompt}
-              onChange={(e) => patchBrief({ negativePrompt: e.target.value })}
-            />
-          </Field>
-
-          <WhyDetails>
-            <RichText>
-              {'风格关键词和负向词会自动加到**每一镜**的提示词里。写一次，后面每一镜不用再重复写「动漫风、冷色调」。'}
-            </RichText>
-            <br />
-            <br />
-            时长和画幅主要给模型看。不写画幅，模型可能把竖屏短视频出成横屏。
-          </WhyDetails>
-        </div>
-      ) : null}
-
-      {step === 3 ? (
-        <>
-          {/*
-            AI 生成路线放在**最前面**。
-            原来这一页只有手动流程（一个一个建场景、建角色、逐条写锁），
-            但实际创作时几乎都会先让模型把场景/角色/分镜拆出来再改。
-            新手照着手动流程做到一半才发现旁边有「① 从故事里拆角色与场景」，
-            然后就不确定该用哪个、已经做的会不会白费。
-          */}
-          <AiFlowGuide />
-
-          <details className="why manual-guide">
-            <summary>也可以全程手动：一步步来</summary>
-            <div className="why-body">
-            <p style={{ color: 'var(--text-dim)', marginTop: 0 }}>
-              <RichText>
-                {'不想让 AI 生成，或者生成结果你不满意想自己重来，就按这个顺序走。每一步都写清了**点哪里、会发生什么、做完怎么判断可以往下走**。卡在哪一步就回到这一步看。'}
-              </RichText>
-            </p>
-
-            <ol style={{ fontSize: 13, paddingLeft: 0, margin: 0, listStyle: 'none' }}>
-              {STEPS_AFTER_GUIDE.map((item, index) => (
-                <li
-                  key={item.title}
-                  style={{
-                    borderLeft: '3px solid var(--border-strong)',
-                    paddingLeft: 14,
-                    marginBottom: 16,
-                  }}
-                >
-                  <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                    第 {index + 1} 步 · {item.title}
-                    {item.optional ? <span className="tag" style={{ marginLeft: 8 }}>可选</span> : null}
-                  </div>
-                  <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                    <b>怎么做：</b>
-                    <RichText>{item.how}</RichText>
-                  </div>
-                  <div style={{ color: 'var(--text-dim)', lineHeight: 1.7 }}>
-                    <b>做完了怎么判断可以往下走：</b>
-                    <RichText>{item.done}</RichText>
-                  </div>
-                  {item.why ? (
-                    <div className="hint" style={{ marginTop: 4 }}>
-                      {item.why}
-                    </div>
-                  ) : null}
-                  <div className="row" style={{ marginTop: 8 }}>
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={() => navigate(item.route)}
-                    >
-                      去「{item.routeLabel}」
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-
-            <div className="row" style={{ marginTop: 6 }}>
-              <button type="button" className="btn" onClick={() => navigate('/storyboard')}>
-                从 AI 流程第 1 步开始
-              </button>
-              <Link className="btn" to="/help">
-                看帮助与术语
-              </Link>
-            </div>
-            </div>
-          </details>
-        </>
-      ) : null}
-
-      <div className="wizard-actions">
-        <button
-          type="button"
-          className="btn btn-icon"
-          disabled={step === 0}
-          aria-label="上一步"
-          title="上一步"
-          onClick={() => setStep((s) => Math.max(0, s - 1))}
-        >
-          <Icon name="chevron-left" size={16} />
-        </button>
-        <div className="row">
-          <span className="wizard-actions-note">
-            {step === STEPS.length - 1 ? '故事写完后，下一步是把故事拆成分镜' : ''}
-          </span>
-          {step < STEPS.length - 1 ? (
+          <div className="wizard-actions">
             <button
               type="button"
-              className="btn btn-blue"
-              onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+              className="btn btn-icon"
+              disabled={step === 0}
+              title="上一步"
+              aria-label="上一步"
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
             >
-              下一步
+              <Icon name="chevron-left" size={16} />
             </button>
-          ) : (
-            <button type="button" className="btn btn-blue" onClick={() => navigate('/storyboard')}>
-              去分镜表 →
-            </button>
-          )}
+            <div className="row">
+              {step < STEPS.length - 1 ? (
+                <button
+                  type="button"
+                  className="btn btn-blue"
+                  onClick={() => setStep((s) => Math.min(STEPS.length - 1, s + 1))}
+                >
+                  下一步：{STEPS[step + 1]}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-blue"
+                  onClick={() => navigate('/storyboard')}
+                >
+                  进入分镜与质检 →
+                </button>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* 右侧常驻：实时立项摘要卡 */}
+        <aside className="card guide-preview" aria-label="立项实时预览">
+          <div className="guide-preview-head">
+                        <h3>{project.name || '未命名短片'}</h3>
+            <p>{project.logline || '填写简介后会显示在这里。'}</p>
+          </div>
+
+          <div className="guide-preview-stage">
+            <div
+              className="guide-preview-frame"
+              style={{ aspectRatio: project.brief.aspectRatio.replace(':', ' / ') }}
+            >
+              <span>{activeAspect.label}</span>
+              <small>预计约 {estShots} 镜</small>
+            </div>
+          </div>
+
+          <dl className="guide-preview-meta">
+            <div>
+              <dt>故事字数</dt>
+              <dd>{story.body.trim().length} 字</dd>
+            </div>
+            <div>
+              <dt>目标时长</dt>
+              <dd>{project.brief.targetDuration} 秒</dd>
+            </div>
+            <div>
+              <dt>目标平台</dt>
+              <dd>
+                {project.brief.platforms.map((p) => PLATFORM_LABEL[p]).join(' / ') || '未选择'}
+              </dd>
+            </div>
+            <div>
+              <dt>风格预设</dt>
+              <dd>{matchedPreset?.label ?? (project.brief.styleTags.length > 0 ? '自定义' : '未选')}</dd>
+            </div>
+          </dl>
+
+          {project.brief.styleTags.length > 0 ? (
+            <div className="guide-preview-tags">
+              {project.brief.styleTags.slice(0, 6).map((tag) => (
+                <span key={tag} className="tag tag-info">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </aside>
       </div>
-    </div>
-  </div>
 
-      {/*
-        点预设的确认（v0.42）。
-
-        只在这一步弹窗：它是一步替换整套风格词的离散动作，点错了代价很大。
-        手动改关键词不弹（那会变成每敲一个字弹一次），改为用上面那块常驻提示。
-      */}
       <ConfirmDialog
         open={pendingStyle !== null}
         title="改风格会影响已经做好的内容"
@@ -821,7 +608,7 @@ export function GuidePage() {
         }}
       >
         <div>
-          你的项目里已经有
+          当前项目已有
           {[
             project.characters.length > 0 ? `${project.characters.length} 个角色` : '',
             project.scenes.length > 0 ? `${project.scenes.length} 个场景` : '',
@@ -830,27 +617,9 @@ export function GuidePage() {
           ]
             .filter(Boolean)
             .join('、')}
-          。换成新风格之后：
+          ，更换风格后旧图不会自动重画。
         </div>
-        <ul>
-          {styleImpact.risks.map((risk) => (
-            <li key={risk}>
-              <RichText>{risk}</RichText>
-            </li>
-          ))}
-        </ul>
-        <div style={{ marginTop: 12, color: 'var(--text)' }}>要改的话，按这个顺序：</div>
-        <ol>
-          {styleImpact.steps.map((step) => (
-            <li key={step}>
-              <RichText>{step}</RichText>
-            </li>
-          ))}
-        </ol>
       </ConfirmDialog>
-    </>
+    </div>
   );
 }
-
-
-

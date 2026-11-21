@@ -4592,7 +4592,7 @@ table.simple tbody tr:last-child td {
 /* 设置里的外观卡片 */
 .appearance-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 14px;
   margin-top: 14px;
 }
@@ -4646,6 +4646,53 @@ table.simple tbody tr:last-child td {
   静态引用扫描看不到 .preview-night / .preview-blueprint——删了夜间和蓝图预览卡会退回
   工作台配色，蓝图的 serif 标题也会丢。
 */
+.preview-prism {
+  --tp-bg: #080b16;
+  --tp-surface: #121a34;
+  --tp-rail: #0d142c;
+  --tp-ink: #f1f5ff;
+  --tp-accent: #38bdf8;
+  --tp-border: #2a3966;
+  flex-direction: column;
+  background: radial-gradient(circle at 18% 15%, rgba(34, 211, 238, 0.25), transparent 55%),
+    radial-gradient(circle at 86% 20%, rgba(244, 114, 182, 0.22), transparent 55%),
+    var(--tp-bg);
+}
+
+.preview-prism .tp-rail {
+  flex: 0 0 14px;
+  width: 100%;
+  border-color: rgba(129, 140, 248, 0.35);
+}
+
+.preview-prism .tp-accent {
+  background: linear-gradient(90deg, #22d3ee, #818cf8, #f472b6);
+}
+
+.preview-pop {
+  --tp-bg: #faf9ff;
+  --tp-surface: #ffffff;
+  --tp-rail: #ffffff;
+  --tp-ink: #1b1734;
+  --tp-accent: #7c5cff;
+  --tp-border: #dcd6ff;
+  flex-direction: column;
+  background: radial-gradient(circle at 18% 18%, rgba(0, 184, 244, 0.28), transparent 55%),
+    radial-gradient(circle at 86% 22%, rgba(255, 92, 138, 0.25), transparent 55%),
+    radial-gradient(circle at 74% 88%, rgba(255, 212, 59, 0.28), transparent 55%),
+    var(--tp-bg);
+}
+
+.preview-pop .tp-rail {
+  flex: 0 0 14px;
+  width: 100%;
+  border-bottom: 2px solid #ff5c8a;
+}
+
+.preview-pop .tp-accent {
+  background: linear-gradient(90deg, #00b8f4, #7c5cff, #ff5c8a, #ffaa2b);
+}
+
 .preview-night {
   --tp-bg: #0b0d10;
   --tp-surface: #141920;

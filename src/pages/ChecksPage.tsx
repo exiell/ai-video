@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_TAG } from '../domain/checks';
 import { Icon } from '../components/Icon';
-import { SummaryBar, Info } from '../components/bits';
+import { SummaryBar } from '../components/bits';
 import type { CheckIssue, CheckSeverity } from '../types/model';
 import { AutoFixPanel } from '../components/AutoFixPanel';
 import { IssueBody } from '../components/IssueViews';
@@ -62,13 +62,7 @@ export function ChecksPage() {
       <div className="page-head">
         <div>
           <h1>穿帮检查</h1>
-          <p>
-            在花钱出图之前，先看出哪里会穿帮
-            <Info label="这个检查管什么、不管什么">
-              它检查的是「该一致的地方有没有写下来」，<b>不是</b>「生成出来一定没问题」。
-              生成模型仍然可能出错。把事实写清楚，能让大部分穿帮在出图之前就暴露出来。
-            </Info>
-          </p>
+          
         </div>
         <button type="button" className="btn" onClick={refreshChecks}>
           重新检查
