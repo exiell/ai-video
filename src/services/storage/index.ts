@@ -12,7 +12,7 @@ import type {
   StoryScene,
   Variant,
 } from '../../types/model';
-import { SCHEMA_VERSION } from '../../types/model';
+import { CHARACTER_FORMS, SCHEMA_VERSION } from '../../types/model';
 import type { VideoClipRecord, VideoJobRecord } from '../../types/video';
 
 /**
@@ -443,6 +443,8 @@ function normalizeCharacter(value: unknown, now: string): CharacterCard | null {
     role: oneOf(value.role, CHARACTER_ROLES, 'supporting'),
     identity: {
       ...(identity as unknown as CharacterCard['identity']),
+      form: oneOf(identity.form, CHARACTER_FORMS, 'human'),
+      species: text(identity.species),
       face: text(identity.face),
       hair: text(identity.hair),
       bodyType: text(identity.bodyType),

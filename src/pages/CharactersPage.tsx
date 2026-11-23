@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/app';
 import { Field, Info } from '../components/bits';
 import {
+  CHARACTER_FORM_LABEL,
   CHARACTER_ROLE_LABEL,
   LOCK_ASPECT_LABEL,
   SCHEMA_VERSION,
   type CharacterCard,
+  type CharacterForm,
   type ContinuityLock,
   type LockAspect,
 } from '../types/model';
 import { newId } from '../services/storage';
+import { characterFormOf } from '../domain/image/characterForm';
 import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { BatchGenerateCard } from '../components/BatchGenerateCard';
 import { AiFlowGuide } from '../components/AiFlowGuide';
@@ -27,6 +30,10 @@ const LOCK_ASPECT_OPTIONS = Object.entries(LOCK_ASPECT_LABEL).map(([value, label
   value,
   label,
 }));
+
+const CHARACTER_FORM_OPTIONS = (Object.entries(CHARACTER_FORM_LABEL) as [CharacterForm, string][]).map(
+  ([value, label]) => ({ value, label }),
+);
 
 /**
  * M3 角色设定卡（方案.md v0.6 §6.2）
@@ -49,6 +56,8 @@ function makeCharacter(name: string): CharacterCard {
     name,
     role: 'supporting',
     identity: {
+      form: 'human',
+      species: '',
       face: '',
       hair: '',
       bodyType: '',
@@ -189,7 +198,39 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
               >
                 <h2 style={{ fontSize: 13, margin: '0 0 8px' }}>① 身份（跨集不变）</h2>
                 <div className="grid-2">
-                  <Field label="面部特征">
+                  <Field label="角色形态">
+                    <SelectMenu
+                      value={characterFormOf(character.identity)}
+                      options={CHARACTER_FORM_OPTIONS}
+                      ariaLabel={`角色「${character.name}」的形态`}
+                      onChange={(value) =>
+                        upsertCharacter({
+                          ...character,
+                          identity: { ...character.identity, form: value as CharacterForm },
+                        })
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="物种/形态"
+                    hint="非人类必填：金鱼、机械狗、云朵等；人类可留空。"
+                  >
+                    <input
+                      type="text"
+                      aria-label="物种/形态"
+                      value={character.identity.species ?? ''}
+                      onChange={(e) =>
+                        upsertCharacter({
+                          ...character,
+                          identity: { ...character.identity, species: e.target.value },
+                        })
+                      }
+                      placeholder="例：金鱼 / 机械狗 / 云朵"
+                    />
+                  </Field>
+                </div>
+                <div className="grid-2">
+                  <Field label={characterFormOf(character.identity) === 'human' ? '面部特征' : '头部/主体特征（可选）'}>
                     <input
                       type="text"
                       value={character.identity.face}
@@ -202,7 +243,7 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
                       placeholder="例：方脸，眉浓而压，眼窝深"
                     />
                   </Field>
-                  <Field label="发型发色">
+                  <Field label={characterFormOf(character.identity) === 'human' ? '发型发色' : '表面特征（毛发/鳞片/羽毛/材质）'}>
                     <input
                       type="text"
                       value={character.identity.hair}
@@ -214,7 +255,7 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
                       }
                     />
                   </Field>
-                  <Field label="体型">
+                  <Field label={characterFormOf(character.identity) === 'human' ? '体型' : '体型/轮廓'}>
                     <input
                       type="text"
                       value={character.identity.bodyType}
@@ -226,7 +267,7 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
                       }
                     />
                   </Field>
-                  <Field label="年龄段">
+                  <Field label={characterFormOf(character.identity) === 'human' ? '年龄段' : '年龄/尺度（可选）'}>
                     <input
                       type="text"
                       value={character.identity.ageRange}
@@ -239,6 +280,12 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
                     />
                   </Field>
                 </div>
+                {characterFormOf(character.identity) !== 'human' ? (
+                  <div className="hint" style={{ marginTop: 4, marginBottom: 8 }}>
+                    非人类请写清物种与解剖（如鱼鳍、尾、翅、外壳）以及是否允许人类四肢；
+                    下方英文身份描述也要写明，模型会原样读它。
+                  </div>
+                ) : null}
                 <Field label="一句话概述（中文，给你自己看）">
                   <input
                     type="text"
@@ -482,12 +529,18 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
                   label="角色形象图"
                   options={[
                     {
-                      label: '① 生成全身多视图',
+                      label:
+                        characterFormOf(character.identity) === 'human'
+                          ? '① 生成全身多视图'
+                          : '① 生成整体多视图',
                       useReference: false,
                       sheetKind: 'turnaround',
                     },
                     {
-                      label: '② 生成头部特写',
+                      label:
+                        characterFormOf(character.identity) === 'human'
+                          ? '② 生成头部特写'
+                          : '② 生成主体特写',
                       useReference: false,
                       sheetKind: 'face',
                     },

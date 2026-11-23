@@ -106,6 +106,9 @@ export const assetsSchema = z.object({
         name: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
         role: z.enum(['protagonist', 'antagonist', 'supporting', 'cameo']).default('supporting'),
         identity: z.object({
+          // 可选：老模型输出没有这两项时保持兼容，运行时按 human/'' 处理
+          form: z.enum(['human', 'animal', 'creature', 'object']).default('human'),
+          species: z.string().max(MAX_IDENTITY_CHARS).default(''),
           face: z.string().max(MAX_IDENTITY_CHARS).default(''),
           hair: z.string().max(MAX_IDENTITY_CHARS).default(''),
           bodyType: z.string().max(MAX_IDENTITY_CHARS).default(''),
@@ -157,7 +160,23 @@ export const assetsSchema = z.object({
     .default([]),
 });
 
-export type GeneratedAssets = z.infer<typeof assetsSchema>;
+type InferredAssets = z.infer<typeof assetsSchema>;
+type InferredGeneratedCharacter = InferredAssets['characters'][number];
+
+/**
+ * 对外类型保留 form/species 可选：老调用方/测试构造的 GeneratedAssets 没有这两个字段。
+ * 运行时 assetsSchema 会补默认 human/''，保存/归一化也按 human 处理。
+ */
+export type GeneratedAssets = Omit<InferredAssets, 'characters'> & {
+  characters: Array<
+    Omit<InferredGeneratedCharacter, 'identity'> & {
+      identity: Omit<InferredGeneratedCharacter['identity'], 'form' | 'species'> & {
+        form?: 'human' | 'animal' | 'creature' | 'object';
+        species?: string;
+      };
+    }
+  >;
+};
 
 // ---------------------------------------------------------------------------
 

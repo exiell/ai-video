@@ -120,12 +120,14 @@ export const ASSETS_SCHEMA_TEXT = `{
       "name": "中文名，如 林冲",
       "role": "protagonist | antagonist | supporting | cameo",
       "identity": {
-        "face": "面部特征，中文",
-        "hair": "发型发色，中文",
-        "bodyType": "体型，中文",
+        "form": "human | animal | creature | object，默认 human",
+        "species": "物种/形态，中文；animal/creature/object 必填，人类可空",
+        "face": "面部特征，中文；非人类写头部/主体识别特征",
+        "hair": "发型发色，中文；非人类写表面特征（鳞片/羽毛/毛发/材质）",
+        "bodyType": "体型，中文；非人类写体型/轮廓",
         "ageRange": "年龄段，中文",
         "summary": "一句话中文概述",
-        "summaryEn": "英文身份描述，格式：Name, 年龄体型, 面部特征。这一段会被直接写进画面提示词"
+        "summaryEn": "英文身份描述，格式：Name, 年龄体型, 面部特征；非人类必须写清物种与解剖，不要默认人类四肢"
       },
       "continuityLocks": [
         { "label": "锁的中文名，如 旧棉袍", "phrase": "英文短语，能被直接贴进提示词，如 a worn padded cotton robe in faded indigo", "appliesTo": "look" }
@@ -190,6 +192,8 @@ export function buildAssetsMessages(project: Project): ChatMessage[] {
         '  它会被拿去和每一镜的画面描述比对，写虚了这条检查就没有意义。',
         '- 场景不要太多，短片通常 2-4 个场景。',
         '- summaryEn 与 phrase 必须是英文，其余字段用中文。',
+        '- **非人类角色**：form 填 animal/creature/object，species 必填，summaryEn 写清物种与解剖' +
+          '（如 fins, tail, wings, shell, mechanical parts），不要写人类四肢；human 角色 form 填 human。',
         '- 不要给次要角色写变体，变体只留给主角。',
         '',
         JSON_RULES,

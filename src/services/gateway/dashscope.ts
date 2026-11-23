@@ -193,6 +193,10 @@ export interface ReferenceInstructionInput {
    * 不传时退回旧行为（兼容只给了张数的调用点）。
    */
   sheetDetails?: ('full-body' | 'face')[];
+  /** v0.66：本镜角色形态（与参考图/角色顺序无关，只用于判断是否非人类） */
+  characterForms?: ('human' | 'animal' | 'creature' | 'object')[];
+  /** v0.66：本镜角色物种（可选，用于正向说明） */
+  characterSpecies?: string[];
   /**
    * 几个角色同框（v0.46）。两个以上时要额外提醒「这是不同的人」。
    *
@@ -219,12 +223,23 @@ export function withReferenceInstruction(
   if (input.referenceCount <= 0) return prompt;
 
   const parts: string[] = [];
+  const hasNonHuman = (input.characterForms ?? []).some((form) => form !== 'human');
+  const species = (input.characterSpecies ?? []).map((item) => item.trim()).filter(Boolean);
+  const roles = (input.roles ?? []).slice(0, input.referenceCount);
+  const safeRoles = hasNonHuman
+    ? roles.map((role) =>
+        /character design sheet|head reference|facial features|hairstyle|body proportions|face and build/i.test(
+          role,
+        )
+          ? 'a reference of this non-human subject, defining its species, anatomy, silhouette, surface pattern and proportions'
+          : role,
+      )
+    : roles;
 
   // 逐张说明职责，顺序必须与传图顺序一致
-  if (input.roles && input.roles.length > 0) {
+  if (safeRoles.length > 0) {
     parts.push(
-      input.roles
-        .slice(0, input.referenceCount)
+      safeRoles
         .map((role, index) => `Image ${index + 1} is ${role}.`)
         .join(' '),
     );
@@ -238,8 +253,10 @@ export function withReferenceInstruction(
    */
   if ((input.characterCount ?? 0) > 1) {
     parts.push(
-      'Those character references are different people. ' +
-        'Keep each of them as a separate individual with their own face and build, and never blend them into one person.',
+      hasNonHuman
+        ? 'Those references are different individuals. Keep each as a separate non-human subject with its own species, anatomy and silhouette; never mix their bodies into one.'
+        : 'Those character references are different people. ' +
+            'Keep each of them as a separate individual with their own face and build, and never blend them into one person.',
     );
   }
 
@@ -296,7 +313,15 @@ export function withReferenceInstruction(
    * 画面里没有人，却要求「保持人物面部特征」，只会让模型硬塞一个人进去。
    */
   const details = input.sheetDetails;
-  if (!details) {
+  if (hasNonHuman) {
+    parts.push(
+      'Keep the species, anatomy, silhouette, surface markings/colours and proportions of the non-human subject exactly as shown in the reference image(s). ' +
+        'Do not add human arms, legs, hands, a human torso or anthropomorphic limbs unless the reference images explicitly show them.',
+    );
+    if (species.length > 0) {
+      parts.push(`The subject species / form is: ${[...new Set(species)].join(', ')}.`);
+    }
+  } else if (!details) {
     // 旧调用点只给了张数，不知道参考图是什么，沿用原来那句
     parts.push(
       'Keep the facial features, hairstyle and body proportions of the person in the character reference image exactly.',

@@ -6,6 +6,12 @@ import type {
 } from '../../types/model';
 import { SCENE_ANGLE_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
 import {
+  characterFormOf,
+  characterSubjectDescription,
+  isHumanForm,
+  nonHumanNegative,
+} from './characterForm';
+import {
   buildCharacterSheetSpec,
   type CharacterSheetKind,
 } from './characterSheet';
@@ -73,6 +79,27 @@ const OCCLUSION = 'objects in front of the character overlap and hide part of th
 export function subjectHeightShare(shotSize: ShotSize): string {
   return SUBJECT_HEIGHT_SHARE[shotSize];
 }
+
+/**
+ * 非人类主体的占比：不写 head/feet/waist/shoulders，改为完整轮廓/主体特征。
+ * 人类仍走 SUBJECT_HEIGHT_SHARE，逐字不变。
+ */
+const NON_HUMAN_HEIGHT_SHARE: Record<ShotSize, string> = {
+  'extreme-wide': 'the subject occupies about one eighth of the frame height',
+  wide: 'the subject occupies about one quarter of the frame height',
+  full: 'the subject occupies about three quarters of the frame height, showing its complete silhouette and the proportions natural to its form',
+  medium: 'the subject occupies most of the frame height, cropped around the middle of its body',
+  'close-up': "the subject's main identifying features occupy most of the frame height",
+  'extreme-close-up': "the subject's main identifying features fill the frame",
+};
+
+export function nonHumanSubjectHeightShare(shotSize: ShotSize): string {
+  return NON_HUMAN_HEIGHT_SHARE[shotSize];
+}
+
+const NON_HUMAN_GROUND_CONTACT =
+  'the subject rests on or makes contact with the same ground plane in a way natural to its form, without assuming human feet';
+
 
 /**
  * 出图提示词引擎（方案.md §3.2 M3/M4）
@@ -240,7 +267,13 @@ export interface BuildImagePromptOptions {
     characters: {
       id: string;
       name: string;
-      identity: { summaryEn: string; summary: string };
+      identity: {
+        summaryEn: string;
+        summary: string;
+        /** v0.66 角色形态/物种；老数据缺省按 human */
+        form?: 'human' | 'animal' | 'creature' | 'object';
+        species?: string;
+      };
       continuityLocks: { id: string; phrase: string; appliesTo: string }[];
       negativePrompt?: string;
     }[];
@@ -294,21 +327,31 @@ export function buildCharacterSheetPrompt(
   if (!character) return null;
 
   const locks = character.continuityLocks.map((l) => l.phrase);
-  const spec = buildCharacterSheetSpec(
-    kind,
-    character.identity.summaryEn || `${character.name}, an anime character`,
-    locks,
-    project.brief.styleTags,
-  );
+  const form = characterFormOf(character.identity);
+  const species = character.identity.species?.trim() ?? '';
+  const formInfo = { form, species };
+  const identityEn = isHumanForm(character.identity)
+    ? character.identity.summaryEn || `${character.name}, an anime character`
+    : characterSubjectDescription(character);
+  const spec = buildCharacterSheetSpec(kind, identityEn, locks, project.brief.styleTags, formInfo);
 
   const positive = [spec.positive, QUALITY_TAIL].filter(Boolean).join(', ');
-  const negative = [project.brief.negativePrompt, character.negativePrompt]
+  const negative = [
+    project.brief.negativePrompt,
+    character.negativePrompt,
+    spec.negative,
+  ]
     .filter(Boolean)
     .join(', ');
 
   return {
-    subjectLabel:
-      kind === 'face' ? `角色「${character.name}」头部特写` : `角色「${character.name}」全身多视图`,
+    subjectLabel: isHumanForm(character.identity)
+      ? kind === 'face'
+        ? `角色「${character.name}」头部特写`
+        : `角色「${character.name}」全身多视图`
+      : kind === 'face'
+        ? `角色「${character.name}」主体特写`
+        : `角色「${character.name}」整体多视图`,
     positive,
     negative,
     // 头部特写用竖构图更合适：横构图会把三个头挤在一起，脸变小
@@ -512,6 +555,12 @@ export function buildFramePrompt(
 
   const scene = project.scenes.find((s) => s.id === shot.sceneId);
   const characters = project.characters.filter((c) => shot.characterIds.includes(c.id));
+  const hasNonHuman = characters.some((c) => !isHumanForm(c.identity));
+  const heightShare = hasNonHuman
+    ? nonHumanSubjectHeightShare(shot.shotSize as ShotSize)
+    : SUBJECT_HEIGHT_SHARE[shot.shotSize as ShotSize] ?? '';
+  const groundContact = hasNonHuman ? NON_HUMAN_GROUND_CONTACT : GROUND_CONTACT;
+  const subjectShareLabel = hasNonHuman ? '主体占比' : '人物占比';
 
   // 只取「本镜声明生效」的锁
   const locks: { phrase: string; appliesTo: string }[] = [];
@@ -612,10 +661,10 @@ export function buildFramePrompt(
 
   if (characters.length > 0) {
     notes.push({
-      fragment: SUBJECT_HEIGHT_SHARE[shot.shotSize as ShotSize] ?? '',
-      label: '人物占比',
+      fragment: heightShare,
+      label: subjectShareLabel,
       reason:
-        '这一档景别里人物应该占画面高度的多少。' +
+        (hasNonHuman ? '这一档景别里非人类主体应该占画面高度的多少。' : '这一档景别里人物应该占画面高度的多少。') +
         '**这是本工具自定的换算，不是行业标准**，各家摄影教材给的数字有出入，' +
         '这里取的是「一眼看过去对不对」的常用值，写出来只是为了让模型有个能对齐的数。' +
         '原来这一句写的是「相对大小不随镜头改变（as in other shots）」，' +
@@ -665,9 +714,7 @@ export function buildFramePrompt(
    * 不是「把外观整个删掉」。** 压缩掉该保留的信息，比重复更有害——
    * 重复只是让模型在两个版本之间摇，而缺失是让模型自己编。
    */
-  const characterDescriptions = characters.map(
-    (c) => c.identity.summaryEn || `${c.name}, an anime character`,
-  );
+  const characterDescriptions = characters.map((c) => characterSubjectDescription(c));
 
   /**
    * 去重：同一件事只说一遍。
@@ -746,7 +793,7 @@ export function buildFramePrompt(
     // 它含有固定元素名，但**不能被去重删掉**——它是一句独立的指令，
     // 不是元素的重复列举。（删掉它就会退回「桌椅随手放大缩小」的老问题。）
     scene && scene.fixedElements.length > 0
-      ? 'fixed objects keep their true size relative to the character'
+      ? `fixed objects keep their true size relative to the ${hasNonHuman ? 'subject' : 'character'}`
       : '',
     // 人物占比 + 接触 + 遮挡（v0.44）。
     // 画面里没有角色时全部跳过——空镜里要求「人物占四分之一画高」
@@ -758,8 +805,8 @@ export function buildFramePrompt(
     // 以后有人改一边就会让「说明里讲了、正文里没讲」悄悄发生。
     ...(characters.length > 0
       ? [
-          SUBJECT_HEIGHT_SHARE[shot.shotSize as ShotSize] ?? '',
-          GROUND_VISIBLE.has(shot.shotSize as ShotSize) ? GROUND_CONTACT : '',
+          heightShare,
+          GROUND_VISIBLE.has(shot.shotSize as ShotSize) ? groundContact : '',
           OCCLUSION,
         ]
       : []),
@@ -780,7 +827,11 @@ export function buildFramePrompt(
     shotSizeEn: SHOT_SIZE_EN[shot.shotSize as keyof typeof SHOT_SIZE_EN] ?? shot.shotSize,
     ...(shot.cameraPosition ? { cameraPositionEn: shot.cameraPosition } : {}),
     positive,
-    negative: project.brief.negativePrompt,
+    negative: hasNonHuman
+      ? [project.brief.negativePrompt, ...characters.map((c) => nonHumanNegative(c.identity))]
+          .filter(Boolean)
+          .join(', ')
+      : project.brief.negativePrompt,
     aspectRatio: project.brief.aspectRatio,
     lockPhrases: locks.map((l) => l.phrase),
     notes,

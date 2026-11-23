@@ -1,4 +1,10 @@
 import type { ImageRequest, ModelCapabilities } from '../../types/model';
+import {
+  characterFormOf,
+  nonHumanNegative,
+  subjectNoun,
+  type CharacterFormInfo,
+} from './characterForm';
 
 /**
  * 角色形象图的提示词规格
@@ -91,6 +97,83 @@ export interface CharacterSheetSpec {
   positive: string;
   notes: { fragment: string; label: string; reason: string }[];
   kind: CharacterSheetKind;
+  /** 非人类才有的负向词；人类不填，保持既有请求逐字不变 */
+  negative?: string;
+}
+
+/** 非人类形象图：不套人类解剖/取景模板（鱼不能长四肢）。 */
+function buildNonHumanCharacterSheetSpec(
+  kind: CharacterSheetKind,
+  identityEn: string,
+  lockPhrases: string[],
+  styleTags: string[],
+  formInfo: CharacterFormInfo,
+): CharacterSheetSpec {
+  const isFace = kind === 'face';
+  const subject = subjectNoun(formInfo);
+  const views: ViewSpec[] = isFace
+    ? [
+        { en: "front-facing close-up of the subject's main identifying features", zh: 'FRONT' },
+        { en: "side close-up of the subject's main identifying features", zh: 'SIDE' },
+        { en: 'back view showing the species-specific tail, fins, wings, shell or markings', zh: 'BACK' },
+      ]
+    : [
+        { en: 'front view', zh: 'FRONT 正面' },
+        { en: 'side profile view', zh: 'SIDE 侧面' },
+        { en: 'back view', zh: 'BACK 背面' },
+        { en: 'three-quarter view', zh: '3/4 VIEW' },
+        { en: 'high angle view from above', zh: 'TOP 俯视' },
+        { en: 'low angle view from below', zh: 'BOTTOM 仰视' },
+      ];
+  const viewText = views.map((v) => v.en).join(', ');
+  const framing = isFace
+    ? `close-up of the subject's main identifying features only, showing surface texture, markings, scales, feathers, fur or material; do not invent human shoulders or collarbone`
+    : `complete ${subject} shown in full, natural anatomy and natural resting pose for this species; include fins, tail, wings, shell, mechanical parts or other species-specific structures only as appropriate; evenly spaced panels`;
+  const labelInstruction = isFace
+    ? 'each view labelled underneath with small clean uppercase captions reading FRONT, SIDE, BACK'
+    : 'each view labelled underneath with small clean uppercase captions reading FRONT, SIDE, BACK, 3/4 VIEW, TOP, BOTTOM';
+  const tail =
+    'plain flat neutral grey background, even soft studio lighting, no shadow on the background, ' +
+    'no watermark, no logo, consistent proportions across all views, ' +
+    `photorealistic ${subject} reference sheet quality`;
+  const positive = [
+    isFace ? `${subject} species reference sheet, identifying-feature close-up sheet` : `${subject} species reference sheet, full-subject turnaround`,
+    identityEn,
+    ...lockPhrases,
+    `${views.length} views arranged in one row: ${viewText}`,
+    framing,
+    labelInstruction,
+    tail,
+    ...styleTags,
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const negative = nonHumanNegative(formInfo);
+  const notes = [
+    {
+      fragment: viewText,
+      label: `${views.length} 个视角`,
+      reason: '非人类按物种/物体自身结构取景；不套人类的头部、四肢或着装模板。',
+    },
+    {
+      fragment: framing,
+      label: '取景范围',
+      reason: '完整主体、自然姿态；鱼鳍/尾/翅膀/外壳等只按该物种真实结构出现，不默认人类四肢。',
+    },
+    {
+      fragment: tail,
+      label: '纯灰背景 + 均匀打光',
+      reason: '参考图只负责把物种结构说清楚，背景与光影保持简单。',
+    },
+  ];
+  if (lockPhrases.length > 0) {
+    notes.push({
+      fragment: lockPhrases.join(', '),
+      label: '连续性锁',
+      reason: '来自角色设定卡；非人类同样要把物种结构相关锁写进形象图。',
+    });
+  }
+  return { positive, notes, kind, ...(negative ? { negative } : {}) };
 }
 
 /**
@@ -105,7 +188,11 @@ export function buildCharacterSheetSpec(
   identityEn: string,
   lockPhrases: string[],
   styleTags: string[],
+  formInfo: CharacterFormInfo = {},
 ): CharacterSheetSpec {
+  if (characterFormOf(formInfo) !== 'human') {
+    return buildNonHumanCharacterSheetSpec(kind, identityEn, lockPhrases, styleTags, formInfo);
+  }
   const isFace = kind === 'face';
   const views = isFace ? FACE_VIEWS : TURNAROUND_VIEWS;
   const viewText = views.map((v) => v.en).join(', ');

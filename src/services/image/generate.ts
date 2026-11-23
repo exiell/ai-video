@@ -272,6 +272,8 @@ export async function generateImages(
           ...(req.frameRole?.roles ? { roles: req.frameRole.roles } : {}),
           ...(req.frameRole ? { frameKind: req.frameRole.kind } : {}),
           ...(req.frameRole?.sheetDetails ? { sheetDetails: req.frameRole.sheetDetails } : {}),
+          ...(req.frameRole?.characterForms ? { characterForms: req.frameRole.characterForms } : {}),
+          ...(req.frameRole?.characterSpecies ? { characterSpecies: req.frameRole.characterSpecies } : {}),
           ...(req.frameRole?.characterCount !== undefined
             ? { characterCount: req.frameRole.characterCount }
             : {}),
@@ -521,6 +523,10 @@ export interface AssetDraft {
      * 「保持那张角色参考图里人物的脸与体型」的旧分支，哪怕那张图里没有人。
      */
     sheetDetails?: ('full-body' | 'face')[];
+    /** v0.66：本镜角色的形态（判断非人类参考图说明） */
+    characterForms?: ('human' | 'animal' | 'creature' | 'object')[];
+    /** v0.66：本镜角色物种，写进正向说明 */
+    characterSpecies?: string[];
     /** 这次传了几个角色的形象图（>1 时要明说「这些是不同的人」） */
     characterCount?: number;
     /** 用的哪张场景板；反打时为 'reverse' */

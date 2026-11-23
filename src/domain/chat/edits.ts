@@ -183,6 +183,12 @@ export const EDITABLE_FIELDS: Record<EditTarget['kind'], Record<string, FieldSpe
   },
   character: {
     name: { type: 'text', label: '名字' },
+    'identity.form': {
+      type: 'enum',
+      label: '角色形态',
+      options: ['human', 'animal', 'creature', 'object'],
+    },
+    'identity.species': { type: 'text', label: '物种/形态' },
     'identity.summary': { type: 'text', label: '身份概述（中文）' },
     'identity.summaryEn': { type: 'text', label: '身份描述（英文，给模型看）' },
     'identity.face': { type: 'text', label: '面部特征' },

@@ -68,8 +68,24 @@ export interface Variant {
 // 角色与场景（同级，同一套三层结构）
 // ---------------------------------------------------------------------------
 
+/** 角色形态（v0.66）：人类之外的动物/幻想生物/物体不能套人类解剖模板。 */
+export type CharacterForm = 'human' | 'animal' | 'creature' | 'object';
+
+export const CHARACTER_FORMS: readonly CharacterForm[] = ['human', 'animal', 'creature', 'object'];
+
+export const CHARACTER_FORM_LABEL: Record<CharacterForm, string> = {
+  human: '人类',
+  animal: '动物',
+  creature: '幻想生物',
+  object: '物体/其他',
+};
+
 /** 角色身份：跨集不变的部分 */
 export interface CharacterIdentity {
+  /** 角色形态；老数据缺省按 human，不改变人类提示词输出 */
+  form?: CharacterForm;
+  /** 物种/形态说明，例：金鱼、机械狗、云朵 */
+  species?: string;
   /** 面部特征 */
   face: string;
   /** 发型发色 */
@@ -619,6 +635,10 @@ export interface ImageRequest {
      * 是在要求模型保持它看不见的东西。见 `withReferenceInstruction`。
      */
     sheetDetails?: ('full-body' | 'face')[];
+    /** v0.66：本镜角色的形态（判断非人类参考图说明） */
+    characterForms?: CharacterForm[];
+    /** v0.66：本镜角色物种，用于参考图正向说明 */
+    characterSpecies?: string[];
     /** 几个角色同框（v0.46）。两个以上时要额外提醒「这是不同的人」 */
     characterCount?: number;
     /** 这一镜的景别（英文）。承接镜时用来明说「取景可以改、地方不能动」 */

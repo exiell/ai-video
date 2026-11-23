@@ -31,6 +31,7 @@ import {
 } from '../services/gateway/localModel';
 import { generateImages, toAssets, type GenerateImagesOutcome } from '../services/image/generate';
 import { prepareReference, type PreparePurpose } from '../services/image/prepare';
+import { characterFormOf } from '../domain/image/characterForm';
 import {
   buildCharacterSheetPrompt,
   buildFramePrompt,
@@ -402,6 +403,22 @@ export const useImage = create<ImageState>((set, get) => ({
         .map((a) => a.dataUrl);
     }
 
+    const character = project.characters.find((item) => item.id === characterId);
+    const characterForm = character ? characterFormOf(character.identity) : 'human';
+    const nonHuman = characterForm !== 'human';
+    const characterFrameRole =
+      useReference && referenceImages.length > 0
+        ? nonHuman && character
+          ? {
+              hasFirstFrameAnchor: false,
+              hasPreviousEndAnchor: false,
+              roles: [] as string[],
+              sheetDetails: (kind === 'face' ? ['full-body'] : ['face']) as ('full-body' | 'face')[],
+              characterForms: [characterForm],
+              characterSpecies: [character.identity.species?.trim() ?? ''],
+            }
+          : undefined
+        : undefined;
     await runGeneration({
       key,
       draft: {
@@ -411,6 +428,7 @@ export const useImage = create<ImageState>((set, get) => ({
         promptSnapshot: prompt.positive,
         lockPhrases: prompt.lockPhrases,
         styleTags: [...project.brief.styleTags],
+        ...(characterFrameRole ? { frameRole: characterFrameRole } : {}),
       },
       prompt,
       preferReference: useReference || referenceImages.length > 0,
@@ -828,6 +846,9 @@ export const useImage = create<ImageState>((set, get) => ({
       droppedRefs = plan.dropped;
       scenePlateFellBack = plan.scenePlateFellBack === true;
     }
+    const shotCharacters = project.characters.filter((character) =>
+      (project.shots.find((item) => item.id === shotId)?.characterIds ?? []).includes(character.id),
+    );
     const frameRole = {
       kind,
       hasFirstFrameAnchor: referenceRoles.includes('own-first-frame'),
@@ -841,6 +862,8 @@ export const useImage = create<ImageState>((set, get) => ({
        * 所以这里不能写成「没角色就不传」，那不传会退回旧行为。
        */
       sheetDetails,
+      characterForms: shotCharacters.map((character) => characterFormOf(character.identity)),
+      characterSpecies: shotCharacters.map((character) => character.identity.species?.trim() ?? ''),
       // 几个角色同框。两个以上时要额外提醒「这是不同的人，别混成一个」
       characterCount: sheetDetails.length,
       // 承接镜时用来明说「取景可以改、地方不能动」
@@ -960,6 +983,7 @@ export const useImage = create<ImageState>((set, get) => ({
       let kind: Asset['kind'];
       let targetLabel: string;
       let frameKind: FrameKind | undefined;
+      let targetCharacters: typeof project.characters = [];
       if (input.target === 'character') {
         const character = project.characters.find((item) => item.id === input.refId);
         if (!character) {
@@ -968,6 +992,7 @@ export const useImage = create<ImageState>((set, get) => ({
         }
         kind = 'character-sheet';
         targetLabel = `角色「${character.name}」`;
+        targetCharacters = [character];
       } else if (input.target === 'scene') {
         const scene = project.scenes.find((item) => item.id === input.refId);
         if (!scene) {
@@ -984,6 +1009,9 @@ export const useImage = create<ImageState>((set, get) => ({
         }
         frameKind = input.frameKind ?? 'first-frame';
         kind = frameKind;
+        targetCharacters = project.characters.filter((character) =>
+          shot.characterIds.includes(character.id),
+        );
         targetLabel = `第 ${shot.number} 镜 · ${
           frameKind === 'first-frame' ? '首帧' : frameKind === 'action-peak' ? '动作关键帧' : '尾帧'
         }`;
@@ -994,6 +1022,19 @@ export const useImage = create<ImageState>((set, get) => ({
         fail(`找不到${targetLabel}可用的编辑上下文。`);
         return;
       }
+      const targetForms = targetCharacters.map((character) => characterFormOf(character.identity));
+      const editFrameRole = targetForms.some((form) => form !== 'human')
+        ? {
+            hasFirstFrameAnchor: false,
+            hasPreviousEndAnchor: false,
+            roles: [] as string[],
+            sheetDetails: [] as ('full-body' | 'face')[],
+            characterForms: targetForms,
+            characterSpecies: targetCharacters.map(
+              (character) => character.identity.species?.trim() ?? '',
+            ),
+          }
+        : undefined;
       await runGeneration({
         key,
         prompt,
@@ -1006,6 +1047,7 @@ export const useImage = create<ImageState>((set, get) => ({
           lockPhrases: prompt.lockPhrases,
           styleTags: [...project.brief.styleTags],
           referenceCount: referenceImages.length,
+          ...(editFrameRole ? { frameRole: editFrameRole } : {}),
         },
         preferReference: true,
         referenceImages,

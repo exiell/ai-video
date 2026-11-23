@@ -202,6 +202,7 @@ ${renderFieldList()}
 # 新建时用哪些字段
 
 - 角色：name、identity.summary（中文概述）、identity.summaryEn（英文描述，给模型看）、
+  identity.form（human/animal/creature/object）、identity.species（非人类必填）、
   identity.face、identity.hair、identity.bodyType、identity.ageRange
 - 场景：name、identity.summary、identity.summaryEn、identity.placeType、
   identity.spatialStructure、lightDirection、mainColor、fixedElements（英文短语数组）
