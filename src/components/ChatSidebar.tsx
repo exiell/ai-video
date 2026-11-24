@@ -7,6 +7,7 @@ import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
 import { currentLlmName } from '../services/llm/readiness';
 import { ConfirmDialog, RichText } from './bits';
 import { Icon } from './Icon';
+import { KnowledgePanel, SourceCards } from './ResearchWidgets';
 import type { Project } from '../types/model';
 
 /**
@@ -42,6 +43,12 @@ const QUICK_ASKS = [
 export function ChatSidebar() {
   const open = useChat((s) => s.open);
   const toggle = useChat((s) => s.toggle);
+  const mode = useChat((s) => s.mode);
+  const setMode = useChat((s) => s.setMode);
+  const useRag = useChat((s) => s.useRag);
+  const toggleRag = useChat((s) => s.toggleRag);
+  const useWebSearch = useChat((s) => s.useWebSearch);
+  const toggleWebSearch = useChat((s) => s.toggleWebSearch);
   const bubbles = useChat((s) => s.bubbles);
   const pending = useChat((s) => s.pending);
   const draft = useChat((s) => s.draft);
@@ -106,17 +113,60 @@ export function ChatSidebar() {
               <Icon name="sparkles" size={15} />
               <b style={{ fontSize: 13 }}>AI 副导演</b>
             </div>
-            {bubbles.length > 0 ? (
-              <button
-                type="button"
-                className="btn btn-ghost btn-icon btn-sm"
-                onClick={reset}
-                title="清空对话"
-                aria-label="清空对话"
-              >
-                <Icon name="trash" size={14} />
-              </button>
-            ) : null}
+            <div className="row" style={{ gap: 4 }}>
+              <div className="chat-mode-switch" role="group" aria-label="对话模式">
+                <button
+                  type="button"
+                  className={`btn btn-sm${mode === 'discuss' ? ' btn-primary' : ' btn-ghost'}`}
+                  onClick={() => setMode('discuss')}
+                  title="先聊思路、剧情与科普知识，不强行改字段"
+                >
+                  探讨
+                </button>
+                <button
+                  type="button"
+                  className={`btn btn-sm${mode === 'edit' ? ' btn-primary' : ' btn-ghost'}`}
+                  onClick={() => setMode('edit')}
+                  title="输出可直接勾选应用的字段修改提议"
+                >
+                  改稿
+                </button>
+              </div>
+              {bubbles.length > 0 ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-icon btn-sm"
+                  onClick={reset}
+                  title="清空对话"
+                  aria-label="清空对话"
+                >
+                  <Icon name="trash" size={14} />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="chat-tools-bar">
+            <button
+              type="button"
+              className={`btn btn-sm${useRag ? ' btn-primary' : ' btn-ghost'}`}
+              onClick={toggleRag}
+              title="开启后优先检索本地资料库与内置创作知识"
+            >
+              资料库 {useRag ? '开' : '关'}
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm${useWebSearch ? ' btn-primary' : ' btn-ghost'}`}
+              onClick={toggleWebSearch}
+              title="开启后联网检索外部资料并附带可打开的来源网页"
+            >
+              联网搜索 {useWebSearch ? '开' : '关'}
+            </button>
+          </div>
+
+          <div className="chat-kb-wrap">
+            <KnowledgePanel projectId={project?.id} />
           </div>
 
           <div className="chat-scroll" ref={scrollRef}>
@@ -197,7 +247,7 @@ export function ChatSidebar() {
               {pending ? '…' : '发送'}
             </button>
           </div>
-          <div className="hint" style={{ marginTop: 6, textAlign: 'center' }}>
+          <div className="hint chat-foot-hint">
             对话内容不会保存，刷新就没了（项目内容照常保存）
           </div>
         </div>
@@ -598,6 +648,7 @@ function groupLabel(edit: ChatEditProposal, project: Project | null): string {
 
 function Bubble({ bubble }: { bubble: ChatBubble }) {
   const activeBubbleId = useChat((s) => s.activeBubbleId);
+  const projectId = useAppStore((s) => s.project?.id);
 
   if (bubble.role === 'user') {
     return (
@@ -641,6 +692,13 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
       ) : null}
 
       {edits.length > 0 ? <EditBatch bubble={bubble} isActive={isActive} /> : null}
+
+      <SourceCards
+        webSources={bubble.webSources}
+        ragSources={bubble.ragSources}
+        projectId={projectId}
+        warning={bubble.searchWarning}
+      />
     </div>
   );
 }

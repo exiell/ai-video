@@ -55,6 +55,113 @@ function platformContext(project: Project): string {
     .join('\n');
 }
 
+/**
+ * 把「故事共创对话与共识摘要」压缩成一段稳定、防超长的上下文块，
+ * 供「生成故事」「拆角色与场景」「生成分镜」共同读取。
+ */
+export function buildCreativeContextBlock(project: Project, maxChars = 1800): string {
+  const ctx = project.creativeContext;
+  if (!ctx) return '';
+
+  const parts: string[] = [];
+  const summary = ctx.consensusSummary.trim();
+  if (summary) {
+    parts.push(`前期与 AI 讨论达成的创作共识：\n${summary}`);
+  }
+
+  const recentTurns = ctx.storyChat.slice(-8);
+  if (recentTurns.length > 0) {
+    const dialogLines = recentTurns.map(
+      (turn) => `${turn.role === 'user' ? '作者' : 'AI'}：${turn.content.trim()}`,
+    );
+    parts.push(`故事共创对话记录（摘录）：\n${dialogLines.join('\n')}`);
+  }
+
+  if (parts.length === 0) return '';
+  const combined = parts.join('\n\n');
+  return combined.length > maxChars ? `${combined.slice(0, maxChars)}\n…（后续略）` : combined;
+}
+
+/**
+ * 故事页多轮共创对话消息构造（探讨模式，不强行要求输出 JSON）。
+ */
+export function buildStoryChatMessages(
+  project: Project,
+  userMessage: string,
+  referenceBlock?: string,
+): ChatMessage[] {
+  const history = (project.creativeContext?.storyChat ?? []).slice(-10);
+  const summary = project.creativeContext?.consensusSummary?.trim();
+  const storySnippet = project.story.body.trim();
+
+  const systemParts = [
+    '你是动漫短片的前期策划与编剧伙伴。你的任务是通过自然、高效的中文对话，帮创作者打磨故事思路、题材切入点、情节反转、人物亮点与视觉节奏。',
+    '',
+    '交流原则：',
+    '- 用清晰、口语化的中文回复，给出具体可拍的画面建议，不要空泛说教。',
+    '- 如果是科普、知识讲解或特定题材，优先帮用户找到「有画面感的比喻、核心冲突与开头 3 秒钩子」。',
+    '- 如果系统附带了「本地资料库参考」或「联网搜索参考资料」，请优先基于这些准确事实来构思，避免编造错误知识。',
+    '- 每次回复控制在 150-380 字，重点突出；结尾可以给 1-2 个推进方向供用户选择。',
+    '- 当故事脉络已经清晰时，可提醒用户点击「根据以上对话生成故事大纲」落盘。',
+  ];
+
+  const contextLines = [
+    platformContext(project),
+    storySnippet ? `当前已有故事正文：\n${storySnippet}` : '',
+    summary ? `已记录的创作共识：\n${summary}` : '',
+    referenceBlock?.trim() ? referenceBlock.trim() : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const messages: ChatMessage[] = [
+    { role: 'system', content: `${systemParts.join('\n')}\n\n当前项目背景：\n${contextLines}` },
+    ...history.map((turn) => ({ role: turn.role, content: turn.content })),
+    { role: 'user', content: userMessage.trim() },
+  ];
+  return messages;
+}
+
+export interface StoryChatResult {
+  ok: boolean;
+  reply?: string;
+  error?: string;
+  detail?: string;
+}
+
+/** 故事页多轮探讨对话调用（统一经 ModelGateway） */
+export async function discussStory(
+  project: Project,
+  userMessage: string,
+  ctx: GenerateContext,
+  referenceBlock?: string,
+): Promise<StoryChatResult> {
+  try {
+    const messages = buildStoryChatMessages(project, userMessage, referenceBlock);
+    const body = buildChatPayload({
+      model: ctx.profile.model ?? ctx.profile.id,
+      messages,
+      jsonMode: false,
+      temperature: 0.7,
+    });
+    const raw = await request({
+      profile: ctx.profile,
+      apiKey: ctx.apiKey,
+      body,
+      transport: ctx.transport,
+      fetchImpl: ctx.fetchImpl,
+    });
+    const reply = extractChatContent(raw).trim();
+    if (!reply) {
+      return { ok: false, error: '模型返回了空内容，请换个说法再试一次。' };
+    }
+    return { ok: true, reply };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, error: message, detail: message };
+  }
+}
+
 // ---------------------------------------------------------------------------
 // ① 生成故事
 // ---------------------------------------------------------------------------
@@ -72,13 +179,15 @@ export const STORY_SCHEMA_TEXT = `{
 
 export function buildStoryMessages(project: Project): ChatMessage[] {
   const isGenerated = project.story.source === 'generated';
+  const creativeCtx = buildCreativeContextBlock(project);
   const userInput = [
     isGenerated && project.story.theme ? `主题：${project.story.theme}` : '',
     project.story.body ? `已有的故事素材：${project.story.body}` : '',
     project.logline ? `一句话简介：${project.logline}` : '',
+    creativeCtx,
   ]
     .filter(Boolean)
-    .join('\n');
+    .join('\n\n');
 
   return [
     {
@@ -161,6 +270,7 @@ export const ASSETS_SCHEMA_TEXT = `{
 }`;
 
 export function buildAssetsMessages(project: Project): ChatMessage[] {
+  const creativeCtx = buildCreativeContextBlock(project);
   return [
     {
       role: 'system',
@@ -215,6 +325,13 @@ export function buildAssetsMessages(project: Project): ChatMessage[] {
         '',
         '场景背景：',
         project.story.setting || '（未填）',
+        ...(creativeCtx
+          ? [
+              '',
+              '补充要求（请务必落实对话中提到的角色特征、道具、场景细节与视觉偏好）：',
+              creativeCtx,
+            ]
+          : []),
       ].join('\n'),
     },
   ];
@@ -345,6 +462,7 @@ export function buildShotsMessages(project: Project): ChatMessage[] {
   const storyScenes = project.story.scenes
     .map((s, i) => `- index ${i} | ${s.label} | ${s.summary}`)
     .join('\n');
+  const creativeCtx = buildCreativeContextBlock(project);
 
   return [
     {
@@ -409,6 +527,13 @@ export function buildShotsMessages(project: Project): ChatMessage[] {
         '',
         '故事：',
         project.story.body || '（故事还没写）',
+        ...(creativeCtx
+          ? [
+              '',
+              '前期创作讨论上下文（请将对话中商定的情节节奏、镜头亮点、情绪与细节融入分镜）：',
+              creativeCtx,
+            ]
+          : []),
         '',
         '故事场次（sourceSceneIndex 请引用这里的 index）：',
         storyScenes || '（未拆场次）',

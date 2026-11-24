@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { ConfirmDialog, Field } from '../components/bits';
 import { GenerateBar } from '../components/GenerateBar';
+import { StoryChatPanel } from '../components/StoryChatPanel';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { Icon } from '../components/Icon';
 import { TermHint } from '../components/TermHint';
@@ -44,6 +45,9 @@ export function GuidePage() {
   const assetCount = useImage((s) => s.assetCount);
   const refreshAssetCount = useImage((s) => s.refreshAssetCount);
   const runStyleTags = useGeneration((s) => s.runStyleTags);
+  const pipeline = useGeneration((s) => s.pipeline);
+  const runFullPipeline = useGeneration((s) => s.runFullPipeline);
+  const clearPipeline = useGeneration((s) => s.clearPipeline);
 
   const [step, setStep] = useState(0);
   const [pendingStyle, setPendingStyle] = useState<
@@ -167,19 +171,7 @@ export function GuidePage() {
 
               {story.source === 'generated' ? (
                 <div className="guide-ai-box">
-                  <Field label="一句话主题" hint="例如：雨夜里外卖员在巷口捡到一只会说话的猫">
-                    <input
-                      type="text"
-                      value={story.theme ?? ''}
-                      onChange={(e) => patchStory({ theme: e.target.value })}
-                      placeholder="输入想讲的主题，让模型先起草初稿"
-                    />
-                  </Field>
-                  <GenerateBar
-                    task="story"
-                    label="让模型帮我写故事并拆场次"
-                   
-                  />
+                  <StoryChatPanel />
                 </div>
               ) : null}
 
@@ -479,15 +471,109 @@ export function GuidePage() {
               <div className="guide-launch-cards">
                 <div className="card guide-launch-primary">
                   <span className="next-label">推荐路径</span>
-                  <h3>进入分镜与质检，让 AI 拆设定与分镜</h3>
+                  <h3>连续生成角色、场景与分镜</h3>
+                  <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
+                    自动结合你的故事大纲、画风设定与前期对话上下文，依次补齐英文风格词、拆出角色/场景锚点并生成完整分镜表。
+                  </p>
 
-                  <button
-                    type="button"
-                    className="btn btn-blue"
-                    onClick={() => navigate('/storyboard')}
-                  >
-                    进入分镜与质检 →
-                  </button>
+                  {pipeline ? (
+                    <div className="pipeline-status">
+                      <div className="pipeline-steps">
+                        {(
+                          [
+                            ['style', '01 风格词'],
+                            ['assets', '02 角色与场景'],
+                            ['shots', '03 分镜表'],
+                          ] as const
+                        ).map(([stage, label]) => {
+                          const done = pipeline.completed.includes(stage);
+                          const active = pipeline.currentStage === stage;
+                          const failed = pipeline.failedStage === stage;
+                          return (
+                            <span
+                              key={stage}
+                              className={`tag${done ? ' tag-ok' : active ? ' tag-info' : failed ? ' tag-error' : ''}`}
+                            >
+                              {label}
+                              {active ? ' 进行中…' : done ? ' 完成' : failed ? ' 失败' : ''}
+                            </span>
+                          );
+                        })}
+                      </div>
+
+                      {pipeline.error ? (
+                        <div className="issue error" style={{ marginTop: 10, marginBottom: 0 }}>
+                          <div className="issue-title">生成中断</div>
+                          <div className="issue-line">{pipeline.error}</div>
+                          {pipeline.failedStage ? (
+                            <div className="row" style={{ marginTop: 8 }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={pipeline.running}
+                                onClick={() => void runFullPipeline({ startFrom: pipeline.failedStage })}
+                              >
+                                从失败步骤继续
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                onClick={clearPipeline}
+                              >
+                                关闭提示
+                              </button>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {pipeline.summary ? (
+                        <div className="issue info" style={{ marginTop: 10, marginBottom: 0 }}>
+                          <div className="issue-title">全部生成完成</div>
+                          <div className="issue-line">{pipeline.summary}</div>
+                          <div className="row" style={{ marginTop: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => navigate('/storyboard')}
+                            >
+                              查看分镜与质检 →
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={() => navigate('/assets')}
+                            >
+                              查看设定集
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', gap: 8 }}>
+                    <button
+                      type="button"
+                      className="btn btn-blue"
+                      disabled={Boolean(pipeline?.running) || !story.body.trim()}
+                      onClick={() => void runFullPipeline()}
+                    >
+                      <Icon name="sparkles" size={15} />
+                      <span>
+                        {pipeline?.running
+                          ? '正在按序生成中…'
+                          : '连续生成角色、场景与分镜'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => navigate('/storyboard')}
+                    >
+                      直接进分镜与质检 →
+                    </button>
+                  </div>
                 </div>
 
                 <div className="card">

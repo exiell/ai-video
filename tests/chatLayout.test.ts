@@ -92,6 +92,18 @@ describe('对话框的布局契约', () => {
     expect(panel).toContain('display: flex');
     expect(panel).toContain('flex-direction: row');
   });
+
+  it('**悬浮抽屉（prism / pop）覆盖 height: auto，防止 top + height: 100% 顶出窗口底部**', () => {
+    const prismCss = readFileSync(resolve(__dirname, '../src/styles/prism.css'), 'utf8');
+    const popCss = readFileSync(resolve(__dirname, '../src/styles/pop.css'), 'utf8');
+    const prismPanel = /\[data-theme='prism'\]\s*\.chat-panel\s*\{([^}]*)\}/.exec(prismCss)?.[1] ?? '';
+    const popPanel = /\[data-theme='pop'\]\s*\.chat-panel\s*\{([^}]*)\}/.exec(popCss)?.[1] ?? '';
+    expect(prismPanel, 'prism .chat-panel 必须设 height: auto').toMatch(/height:\s*auto/);
+    expect(popPanel, 'pop .chat-panel 必须设 height: auto').toMatch(/height:\s*auto/);
+
+    const scroll = ruleBody('.chat-scroll') ?? '';
+    expect(scroll, '.chat-scroll 必须设 min-height: 0 保证底部输入区不被挤出').toMatch(/min-height:\s*0/);
+  });
 });
 
 // ---------------------------------------------------------------------------

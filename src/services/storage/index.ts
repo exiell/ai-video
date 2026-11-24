@@ -35,11 +35,23 @@ export interface ProjectRecord {
   data: Project;
 }
 
+export interface KnowledgeDoc {
+  id: string;
+  /** 'global' 表示全局资料，或具体 projectId 表示项目专属资料 */
+  scope: string;
+  title: string;
+  content: string;
+  sourceType: 'file' | 'web' | 'note';
+  sourceUrl?: string;
+  createdAt: string;
+}
+
 export class AniGuideDB extends Dexie {
   projects!: Table<ProjectRecord, string>;
   assets!: Table<Asset, string>;
   videoJobs!: Table<VideoJobRecord, string>;
   videoClips!: Table<VideoClipRecord, string>;
+  knowledgeDocs!: Table<KnowledgeDoc, string>;
 
   constructor() {
     super('aniguide');
@@ -80,6 +92,17 @@ export class AniGuideDB extends Dexie {
       assets: 'id, projectId, kind, refId, [projectId+refId]',
       videoJobs: 'id, projectId, shotId, status, createdAt',
       videoClips: 'id, projectId, shotId, createdAt, [projectId+shotId]',
+    });
+    /**
+     * v4：本地资料库（RAG 知识库，支持导入 .txt/.md 与网页剪藏）。
+     * 只加表，不动既有数据，Dexie 自动升级。
+     */
+    this.version(4).stores({
+      projects: 'id, name, updatedAt',
+      assets: 'id, projectId, kind, refId, [projectId+refId]',
+      videoJobs: 'id, projectId, shotId, status, createdAt',
+      videoClips: 'id, projectId, shotId, createdAt, [projectId+shotId]',
+      knowledgeDocs: 'id, scope, sourceType, createdAt',
     });
   }
 }
@@ -675,4 +698,30 @@ export function parseImportedProject(raw: string): ImportResult {
 
   // 通过校验后仍然归一化一次：缺的可选字段补齐，不让下游各自防御
   return { ok: true, project: normalizeProject(obj) };
+}
+
+// ---------------------------------------------------------------------------
+// 本地资料库（RAG 知识库 · Dexie v4）
+// ---------------------------------------------------------------------------
+
+/** 列出当前项目可用资料（包含 global 全局资料与该项目专属资料，按最新倒序） */
+export async function listKnowledgeDocs(projectId?: string): Promise<KnowledgeDoc[]> {
+  try {
+    const db = getDb();
+    const all = await db.knowledgeDocs.orderBy('createdAt').reverse().toArray();
+    if (!projectId) return all;
+    return all.filter((doc) => doc.scope === 'global' || doc.scope === projectId);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveKnowledgeDoc(doc: KnowledgeDoc): Promise<void> {
+  const db = getDb();
+  await db.knowledgeDocs.put(doc);
+}
+
+export async function deleteKnowledgeDoc(id: string): Promise<void> {
+  const db = getDb();
+  await db.knowledgeDocs.delete(id);
 }

@@ -251,6 +251,7 @@ export function buildChatMessages(
   context: string,
   history: ChatMessage[],
   question: string,
+  referenceBlock?: string,
 ): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: 'system', content: buildChatSystemPrompt() }];
 
@@ -271,12 +272,86 @@ export function buildChatMessages(
     });
   }
 
+  const refPart = referenceBlock?.trim() ? `\n\n# 外部与资料库参考\n${referenceBlock.trim()}` : '';
   messages.push({
     role: 'user',
-    content: `# 当前项目内容\n${context}\n\n# 用户的问题\n${question}`,
+    content: `# 当前项目内容\n${context}${refPart}\n\n# 用户的问题\n${question}`,
   });
 
   return messages;
+}
+
+/**
+ * 探讨策划模式（Batch 2）：
+ * 当用户想先聊视频思路、科普知识、剧情反转或参考案例时，不强行要求返回 JSON 字段修改，
+ * 而是结合项目现状 + 本地资料库（RAG）+ 联网搜索给出清晰、有画面感的中文建议。
+ */
+export async function askDiscussModel(
+  ctx: GenerateContext,
+  context: string,
+  history: ChatMessage[],
+  question: string,
+  referenceBlock?: string,
+): Promise<{ ok: boolean; reply?: string; error?: string; detail?: string }> {
+  const messages: ChatMessage[] = [
+    {
+      role: 'system',
+      content: [
+        '你是动漫视频创作者的策划与编剧顾问。当前处于「探讨策划」模式：',
+        '- 请用清晰易懂的中文和用户探讨故事构思、科普逻辑、情节反转、节奏或画面表现，不要输出 JSON。',
+        '- 若附带了「本地资料库参考」或「联网搜索参考资料」，请优先依据这些事实给出准确建议，并在文中自然提及参考来源。',
+        '- 给出具体、可拍的镜头或情节建议，帮助用户定下方向；若用户需要落地修改字段，可提醒他切到「精准改稿」模式。',
+      ].join('\n'),
+    },
+  ];
+
+  if (history.length > 0) {
+    const condensed = history
+      .slice(-6)
+      .map((m) => `${m.role === 'user' ? '用户' : '你'}：${m.content}`)
+      .join('\n');
+    messages.push({
+      role: 'system',
+      content: `# 之前的对话（供理解上下文）\n${condensed}`,
+    });
+  }
+
+  const refPart = referenceBlock?.trim() ? `\n\n# 外部与资料库参考\n${referenceBlock.trim()}` : '';
+  messages.push({
+    role: 'user',
+    content: `# 当前项目概况\n${context}${refPart}\n\n# 用户想探讨的问题\n${question}`,
+  });
+
+  try {
+    const response = await request({
+      profile: ctx.profile,
+      apiKey: ctx.apiKey,
+      body: buildChatPayload({
+        model: ctx.profile.model ?? ctx.profile.id,
+        messages,
+        jsonMode: false,
+        temperature: 0.7,
+      }),
+      ...(ctx.transport ? { transport: ctx.transport } : {}),
+      ...(ctx.fetchImpl ? { fetchImpl: ctx.fetchImpl } : {}),
+    });
+    const reply = extractChatContent(response).trim();
+    if (!reply) {
+      return { ok: false, error: '模型返回了空内容，请换个说法再试一次。' };
+    }
+    return { ok: true, reply };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const gatewayInfo =
+      typeof error === 'object' && error !== null && 'info' in error
+        ? ((error as { info?: { title?: string; advice?: string } }).info ?? {})
+        : {};
+    return {
+      ok: false,
+      error: gatewayInfo.title ?? message,
+      detail: gatewayInfo.advice ?? message,
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------

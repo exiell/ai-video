@@ -403,6 +403,27 @@ export interface ProjectBrief {
   negativePrompt: string;
 }
 
+export interface StoryChatTurn {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  createdAt: string;
+  /** 可选：该轮回复参考的联网网页来源 */
+  webSources?: Array<{ title: string; url: string; domain: string; snippet: string }>;
+  /** 可选：该轮回复命中的资料库条数 */
+  ragCount?: number;
+}
+
+/**
+ * 创作共创上下文（跨阶段贯通）：
+ * 记录在「故事」页与 AI 探讨剧情、题材与风格的对话与共识摘要，
+ * 供「生成故事」「拆角色与场景」「生成镜头」共同引用。
+ */
+export interface CreativeContext {
+  storyChat: StoryChatTurn[];
+  consensusSummary: string;
+}
+
 export interface Project extends Versioned {
   id: string;
   name: string;
@@ -413,6 +434,8 @@ export interface Project extends Versioned {
   shots: Shot[];
   characters: CharacterCard[];
   scenes: SceneCard[];
+  /** 可选：故事共创对话与创作共识（向后兼容旧项目 JSON） */
+  creativeContext?: CreativeContext;
 }
 
 // ---------------------------------------------------------------------------

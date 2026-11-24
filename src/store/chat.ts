@@ -6,8 +6,14 @@ import {
   type ChatEditProposal,
   type EditGate,
 } from '../domain/chat/edits';
-import { askModel, buildChatMessages } from '../services/llm/chat';
+import { askDiscussModel, askModel, buildChatMessages } from '../services/llm/chat';
 import { buildGenerateContext } from '../services/llm/readiness';
+import { formatRagHitsForPrompt, searchKnowledge, type RagHit } from '../services/rag';
+import {
+  formatWebResultsForPrompt,
+  searchWeb,
+  type WebSearchResult,
+} from '../services/search/webSearch';
 import { useAppStore } from './app';
 import type { ChatMessage } from '../services/gateway';
 import type { Project } from '../types/model';
@@ -36,6 +42,8 @@ import type { Project } from '../types/model';
  *    ——并且会先问一下，避免用户辛苦勾选的成果被静默清掉。
  */
 
+export type ChatMode = 'discuss' | 'edit';
+
 export interface ChatBubble {
   id: string;
   role: 'user' | 'assistant';
@@ -53,10 +61,19 @@ export interface ChatBubble {
   resolved?: 'applied' | 'discarded';
   /** 为什么这批要你确认（给界面用一句话说清） */
   gateWhy?: string;
+  /** 联网搜索返回的参考网页 */
+  webSources?: WebSearchResult[];
+  /** 本地资料库（RAG）命中的片段 */
+  ragSources?: RagHit[];
+  /** 联网搜索受限时的温和提示 */
+  searchWarning?: string;
 }
 
 interface ChatState {
   open: boolean;
+  mode: ChatMode;
+  useRag: boolean;
+  useWebSearch: boolean;
   bubbles: ChatBubble[];
   /** 正在等模型回答 */
   pending: boolean;
@@ -81,6 +98,9 @@ interface ChatState {
 
   toggle: () => void;
   setOpen: (open: boolean) => void;
+  setMode: (mode: ChatMode) => void;
+  toggleRag: () => void;
+  toggleWebSearch: () => void;
   setDraft: (text: string) => void;
   ask: (question: string) => Promise<void>;
   toggleEdit: (editId: string) => void;
@@ -95,6 +115,9 @@ interface ChatState {
 
 export const useChat = create<ChatState>((set, get) => ({
   open: false,
+  mode: 'edit',
+  useRag: true,
+  useWebSearch: false,
   bubbles: [],
   pending: false,
   draft: '',
@@ -106,6 +129,9 @@ export const useChat = create<ChatState>((set, get) => ({
 
   toggle: () => set((s) => ({ open: !s.open })),
   setOpen: (open) => set({ open }),
+  setMode: (mode) => set({ mode }),
+  toggleRag: () => set((s) => ({ useRag: !s.useRag })),
+  toggleWebSearch: () => set((s) => ({ useWebSearch: !s.useWebSearch })),
   setDraft: (draft) => set({ draft }),
   clearNotice: () => set({ notice: null }),
 
@@ -150,11 +176,69 @@ export const useChat = create<ChatState>((set, get) => ({
     // 把穿帮检查的结论也带上 —— 用户会直接问「哪里会穿帮」，
     // 而那是引擎算出来的确定性结论，比让模型自己读分镜猜准得多
     const context = buildProjectContext(project, useAppStore.getState().report);
-    const messages = buildChatMessages(context, history, text);
+    const { mode, useRag, useWebSearch } = get();
+
+    let ragSources: RagHit[] = [];
+    let webSources: WebSearchResult[] = [];
+    let searchWarning: string | undefined;
+
+    if (useRag) {
+      ragSources = await searchKnowledge(text, project.id, 4);
+    }
+    if (useWebSearch) {
+      const webRes = await searchWeb(text, { limit: 5 });
+      if (webRes.ok) {
+        webSources = webRes.results;
+      } else if (webRes.error) {
+        searchWarning = webRes.error;
+      }
+    }
+
+    const referenceBlock = [
+      formatRagHitsForPrompt(ragSources),
+      formatWebResultsForPrompt(webSources),
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+
+    if (mode === 'discuss') {
+      const discussOutcome = await askDiscussModel(
+        gen.ctx,
+        context,
+        history,
+        text,
+        referenceBlock || undefined,
+      );
+      set((s) => {
+        const bubble: ChatBubble = {
+          id: newId('a'),
+          role: 'assistant',
+          content: discussOutcome.ok ? (discussOutcome.reply ?? '') : '',
+          ...(webSources.length > 0 ? { webSources } : {}),
+          ...(ragSources.length > 0 ? { ragSources } : {}),
+          ...(searchWarning ? { searchWarning } : {}),
+        };
+        if (!discussOutcome.ok) {
+          bubble.error = discussOutcome.error ?? '对话请求失败。';
+          if (discussOutcome.detail) bubble.detail = discussOutcome.detail;
+        }
+        return { bubbles: [...s.bubbles, bubble], pending: false };
+      });
+      return;
+    }
+
+    const messages = buildChatMessages(context, history, text, referenceBlock || undefined);
     const outcome = await askModel(gen.ctx, messages, project);
 
     set((s) => {
-      const bubble: ChatBubble = { id: newId('a'), role: 'assistant', content: '' };
+      const bubble: ChatBubble = {
+        id: newId('a'),
+        role: 'assistant',
+        content: '',
+        ...(webSources.length > 0 ? { webSources } : {}),
+        ...(ragSources.length > 0 ? { ragSources } : {}),
+        ...(searchWarning ? { searchWarning } : {}),
+      };
 
       if (!outcome.ok || !outcome.data) {
         bubble.error = outcome.error ?? '模型没有按格式回答。';

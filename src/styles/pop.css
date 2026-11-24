@@ -436,6 +436,8 @@
   right: 22px;
   bottom: 22px;
   top: 80px;
+  height: auto;
+  max-height: calc(100vh - 102px);
   width: 380px;
   max-width: calc(100vw - 32px);
   border: 2px solid rgba(124, 92, 255, 0.26);

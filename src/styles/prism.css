@@ -490,6 +490,8 @@
   right: 22px;
   bottom: 22px;
   top: 78px;
+  height: auto;
+  max-height: calc(100vh - 100px);
   width: 380px;
   max-width: calc(100vw - 32px);
   border: 1px solid rgba(129, 140, 248, 0.34);
@@ -1413,6 +1415,8 @@
     right: 12px;
     bottom: 12px;
     top: 72px;
+    height: auto;
+    max-height: calc(100vh - 84px);
     width: auto;
   }
 }

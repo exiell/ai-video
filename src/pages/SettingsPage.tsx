@@ -19,6 +19,12 @@ import { isModelOverridden, resolveModelName } from '../services/llm/modelName';
 import { testConnection, type ConnectionTestResult } from '../services/gateway';
 import type { ModelProfile } from '../types/model';
 import { getDesktopApi, isDesktopApp } from '../platform';
+import {
+  readWebSearchConfig,
+  saveWebSearchConfig,
+  type SearchProvider,
+  type WebSearchConfig,
+} from '../services/search/webSearch';
 
 /**
  * 设置的子视图。
@@ -191,6 +197,15 @@ export function SettingsPage() {
   const [imageStats, setImageStats] = useState<{ count: number; bytes: number } | null>(null);
   /** 代理口令默认遮起来；给一个「显示」按钮，和填 Key 的体验一致。 */
   const [showProxyPassword, setShowProxyPassword] = useState(false);
+  const [searchConfig, setSearchConfig] = useState<WebSearchConfig>(() => readWebSearchConfig());
+
+  function updateSearchConfig(patch: Partial<WebSearchConfig>) {
+    setSearchConfig((prev) => {
+      const next = { ...prev, ...patch };
+      saveWebSearchConfig(next);
+      return next;
+    });
+  }
   /** 每家厂商默认收起；展开状态按厂商 id 记。 */
   const [openVendors, setOpenVendors] = useState<Record<string, boolean>>({});
 
@@ -306,6 +321,47 @@ export function SettingsPage() {
           </a>
         </div>
       )}
+
+      <div className="card">
+        <h2 className="card-title">联网搜索（问 AI 与故事共创）</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
+          {isDesktopApp()
+            ? '桌面客户端默认支持免 Key 轻量搜索；如需更稳定的中文检索与摘要，可在此选填博查、Tavily 或自建 SearXNG。'
+            : '网页版受跨域限制，需填写支持浏览器直连的 Tavily、博查或自建 SearXNG 地址后才能联网搜索。'}
+        </p>
+        <Field label="搜索服务">
+          <SelectMenu
+            ariaLabel="联网搜索服务"
+            value={searchConfig.provider}
+            options={[
+              { value: 'auto', label: '自动（桌面端免 Key 优先）' },
+              { value: 'bocha', label: '博查（Bocha，中文优化）' },
+              { value: 'tavily', label: 'Tavily Search' },
+              { value: 'searxng', label: '自建 SearXNG 实例' },
+            ]}
+            onChange={(value) => updateSearchConfig({ provider: value as SearchProvider })}
+          />
+        </Field>
+        {searchConfig.provider === 'searxng' ? (
+          <Field label="SearXNG 地址" hint="例：https://search.example.com（需开启 format=json）">
+            <input
+              type="text"
+              value={searchConfig.searxngUrl}
+              placeholder="https://your-searxng.example.com"
+              onChange={(e) => updateSearchConfig({ searxngUrl: e.target.value })}
+            />
+          </Field>
+        ) : searchConfig.provider === 'bocha' || searchConfig.provider === 'tavily' ? (
+          <Field label="搜索 API Key" hint="仅保存在本机，不会上传到第三方服务器。">
+            <input
+              type="password"
+              value={searchConfig.apiKey}
+              placeholder="粘贴对应搜索服务的 API Key"
+              onChange={(e) => updateSearchConfig({ apiKey: e.target.value })}
+            />
+          </Field>
+        ) : null}
+      </div>
 
       </>) : null}
 
