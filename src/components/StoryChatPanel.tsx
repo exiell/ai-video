@@ -3,8 +3,8 @@ import { useAppStore } from '../store/app';
 import { useGeneration } from '../store/generation';
 import { currentLlmName } from '../services/llm/readiness';
 import { GenerateBar } from './GenerateBar';
-import { KnowledgePanel, SourceCards } from './ResearchWidgets';
-import { Field, RichText } from './bits';
+import { ChatMarkdown, KnowledgePanel, SourceCards } from './ResearchWidgets';
+import { Field } from './bits';
 import { Icon } from './Icon';
 
 const STORY_QUICK_STARTS = [
@@ -111,8 +111,15 @@ export function StoryChatPanel() {
 
           {turns.map((turn) => (
             <div key={turn.id} className={`chat-bubble ${turn.role}`}>
+              <div className="chat-role-badge">
+                {turn.role === 'user' ? '我' : 'AI 策划'}
+              </div>
               <div className="story-chat-text">
-                <RichText>{turn.content}</RichText>
+                {turn.role === 'assistant' ? (
+                  <ChatMarkdown content={turn.content} />
+                ) : (
+                  turn.content
+                )}
               </div>
               {turn.role === 'assistant' && (turn.webSources?.length || turn.ragCount) ? (
                 <SourceCards
@@ -142,7 +149,7 @@ export function StoryChatPanel() {
             className="chat-input"
             aria-label="和 AI 探讨你的故事思路"
             value={draft}
-            rows={2}
+            rows={3}
             disabled={storyChatPending}
             placeholder={`说说你的想法、想拍的题材或参考风格（用 ${currentLlmName()} 对话）`}
             onChange={(e) => setDraft(e.target.value)}

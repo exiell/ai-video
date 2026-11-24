@@ -505,6 +505,14 @@ export function GuidePage() {
                         <div className="issue error" style={{ marginTop: 10, marginBottom: 0 }}>
                           <div className="issue-title">生成中断</div>
                           <div className="issue-line">{pipeline.error}</div>
+                          {pipeline.detail ? (
+                            <details className="why" style={{ marginTop: 6 }}>
+                              <summary>查看详细原因</summary>
+                              <div className="why-body">
+                                <pre>{pipeline.detail}</pre>
+                              </div>
+                            </details>
+                          ) : null}
                           {pipeline.failedStage ? (
                             <div className="row" style={{ marginTop: 8 }}>
                               <button

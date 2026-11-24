@@ -31,6 +31,7 @@ export interface PipelineState {
   completed: PipelineStage[];
   failedStage?: PipelineStage;
   error?: string;
+  detail?: string;
   summary?: string;
 }
 
@@ -546,13 +547,28 @@ export const useGeneration = create<GenerationState>((set, get) => ({
     }
 
     // 第 3 步：基于最新角色、场景与对话上下文生成完整分镜
+    // 连续重型调用之间短暂退避（1.5s），避免触发厂商 RPM/突发限流；若仍遇瞬态限流/服务繁忙则自动退避重试一次
+    if (startFrom !== 'shots') {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
     const p3 = useAppStore.getState().project;
     if (!p3) return false;
     set({
       pending: 'shots',
       pipeline: { running: true, currentStage: 'shots', completed: [...completed] },
     });
-    const shotsOutcome = await generateShots(p3, built.ctx);
+    const freshBuilt = buildGenerateContext();
+    const shotsCtx = 'error' in freshBuilt ? built.ctx : freshBuilt.ctx;
+    let shotsOutcome = await generateShots(p3, shotsCtx);
+    if (
+      !shotsOutcome.ok &&
+      /限流|rate-limit|429|繁忙|server|502|503|超时|timeout/i.test(
+        `${shotsOutcome.error ?? ''} ${shotsOutcome.detail ?? ''}`,
+      )
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, 3500));
+      shotsOutcome = await generateShots(p3, shotsCtx);
+    }
     if (!shotsOutcome.ok || !shotsOutcome.data) {
       set({
         pending: null,
@@ -562,6 +578,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
           completed: [...completed],
           failedStage: 'shots',
           error: describeFailure(shotsOutcome),
+          ...(shotsOutcome.detail ? { detail: shotsOutcome.detail } : {}),
         },
       });
       return false;

@@ -7,7 +7,7 @@ import { fieldLabel, type ChatEditProposal } from '../domain/chat/edits';
 import { currentLlmName } from '../services/llm/readiness';
 import { ConfirmDialog, RichText } from './bits';
 import { Icon } from './Icon';
-import { KnowledgePanel, SourceCards } from './ResearchWidgets';
+import { ChatMarkdown, KnowledgePanel, SourceCards } from './ResearchWidgets';
 import type { Project } from '../types/model';
 
 /**
@@ -653,7 +653,8 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
   if (bubble.role === 'user') {
     return (
       <div className="chat-bubble user">
-        <RichText>{bubble.content}</RichText>
+        <div className="chat-role-badge">我</div>
+        <div>{bubble.content}</div>
       </div>
     );
   }
@@ -682,7 +683,8 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
 
   return (
     <div className="chat-bubble assistant">
-      {bubble.content ? <RichText>{bubble.content}</RichText> : null}
+      <div className="chat-role-badge">AI 副导演</div>
+      {bubble.content ? <ChatMarkdown content={bubble.content} /> : null}
 
       {bubble.rejected && bubble.rejected > 0 ? (
         <div className="hint" style={{ marginTop: 6, color: 'var(--warning)' }}>

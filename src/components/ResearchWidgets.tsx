@@ -1,8 +1,130 @@
-import { useEffect, useRef } from 'react';
+import { Fragment, useEffect, useRef, type ReactNode } from 'react';
 import { openExternalUrl } from '../platform';
 import { useKnowledge } from '../store/knowledge';
 import type { WebSearchResult } from '../services/search/webSearch';
 import type { RagHit } from '../services/rag';
+
+/**
+ * 行内富文本渲染：支持 **加粗** 与 `行内代码`，不输出裸星号。
+ */
+function renderInline(text: string): ReactNode[] {
+  const parts = text.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+      return <b key={idx}>{part.slice(2, -2)}</b>;
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+      return (
+        <code key={idx} className="chat-md-code">
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return <Fragment key={idx}>{part}</Fragment>;
+  });
+}
+
+/**
+ * 面向 AI 对话回复的轻量结构化排版渲染器：
+ * 通过小标题、列表、引用块、分割线与行内代码高亮，让模型输出层次分明、易扫读。
+ */
+export function ChatMarkdown({ content }: { content: string }) {
+  if (!content.trim()) return null;
+
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
+  const nodes: ReactNode[] = [];
+  let listItems: { ordered: boolean; text: string }[] = [];
+  let quoteLines: string[] = [];
+
+  const flushList = (keyPrefix: number) => {
+    if (listItems.length === 0) return;
+    const ordered = listItems[0]!.ordered;
+    const Tag = ordered ? 'ol' : 'ul';
+    nodes.push(
+      <Tag key={`list-${keyPrefix}`} className="chat-md-list">
+        {listItems.map((item, i) => (
+          <li key={i}>{renderInline(item.text)}</li>
+        ))}
+      </Tag>,
+    );
+    listItems = [];
+  };
+
+  const flushQuote = (keyPrefix: number) => {
+    if (quoteLines.length === 0) return;
+    nodes.push(
+      <blockquote key={`quote-${keyPrefix}`} className="chat-md-quote">
+        {quoteLines.map((line, i) => (
+          <div key={i}>{renderInline(line)}</div>
+        ))}
+      </blockquote>,
+    );
+    quoteLines = [];
+  };
+
+  lines.forEach((rawLine, idx) => {
+    const line = rawLine.trim();
+
+    if (!line) {
+      flushList(idx);
+      flushQuote(idx);
+      return;
+    }
+
+    if (/^[-*_]{3,}$/.test(line)) {
+      flushList(idx);
+      flushQuote(idx);
+      nodes.push(<hr key={`hr-${idx}`} className="chat-md-hr" />);
+      return;
+    }
+
+    const headingMatch = /^(#{1,4})\s+(.+)$/.exec(line);
+    if (headingMatch) {
+      flushList(idx);
+      flushQuote(idx);
+      nodes.push(
+        <div key={`h-${idx}`} className="chat-md-h">
+          {renderInline(headingMatch[2]!)}
+        </div>,
+      );
+      return;
+    }
+
+    const quoteMatch = /^>\s?(.*)$/.exec(line);
+    if (quoteMatch) {
+      flushList(idx);
+      quoteLines.push(quoteMatch[1] ?? '');
+      return;
+    }
+    flushQuote(idx);
+
+    const ulMatch = /^[-*•]\s+(.+)$/.exec(line);
+    if (ulMatch) {
+      if (listItems.length > 0 && listItems[0]!.ordered) flushList(idx);
+      listItems.push({ ordered: false, text: ulMatch[1]! });
+      return;
+    }
+
+    const olMatch = /^\d+[.、)]\s+(.+)$/.exec(line);
+    if (olMatch) {
+      if (listItems.length > 0 && !listItems[0]!.ordered) flushList(idx);
+      listItems.push({ ordered: true, text: olMatch[1]! });
+      return;
+    }
+
+    flushList(idx);
+    nodes.push(
+      <p key={`p-${idx}`} className="chat-md-p">
+        {renderInline(line)}
+      </p>,
+    );
+  });
+
+  flushList(lines.length);
+  flushQuote(lines.length);
+
+  return <div className="chat-md">{nodes}</div>;
+}
 
 /**
  * AI 回复下方的参考来源卡片：
