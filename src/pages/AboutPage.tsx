@@ -1,3 +1,5 @@
+import { getAppVersion, isDesktopApp } from '../platform';
+
 /**
  * 关于页 —— 开源许可署名（方案.md v0.6 §0.2 合规执行要求第 2 条与第 6 条）
  *
@@ -7,12 +9,17 @@
  *  - 商业用途警示必须出现在这里，不能只写在仓库文件里
  */
 export function AboutPage() {
+  const desktop = isDesktopApp();
   return (
     <>
       <div className="page-head">
         <div>
           <h1>关于</h1>
-          <p>AniGuide 是一个开源免费的工具，仅供学习交流。</p>
+          <p>
+            {desktop
+              ? `AniGuide 桌面版 v${getAppVersion()}，开源免费，仅供学习交流。`
+              : 'AniGuide 是一个开源免费的工具，仅供学习交流。'}
+          </p>
         </div>
       </div>
 
@@ -31,10 +38,9 @@ export function AboutPage() {
       <div className="card">
         <h2 className="card-title">数据位置</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          全部在你浏览器的本地存储里。没有账号，没有云端。
-          不配代理时，网络请求只发生在你的浏览器与厂商之间；填了代理，请求会经过你填的代理地址，
-          代理能看到 Key 和提示词。
-          你可以在断网状态下使用除「生成」之外的全部功能。
+          {desktop
+            ? '全部保存在你本机应用数据目录中。没有账号，没有云端。不配代理时，网络请求由客户端直连厂商，不受浏览器跨域限制；填了代理，请求会经过你填的代理地址，代理能看到 Key 和提示词。你可以在断网状态下使用除「生成」之外的全部功能。'
+            : '全部在你浏览器的本地存储里。没有账号，没有云端。不配代理时，网络请求只发生在你的浏览器与厂商之间；填了代理，请求会经过你填的代理地址，代理能看到 Key 和提示词。你可以在断网状态下使用除「生成」之外的全部功能。'}
         </p>
       </div>
 

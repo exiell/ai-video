@@ -6,6 +6,8 @@
  */
 
 import type { ModelProfile } from '../../types/model';
+import { isDesktopApp } from '../../platform';
+import { resolvePlatformFetch } from '../../platform/transport';
 
 export const LOCAL_FLUX3_PROFILE_ID = 'local-flux3';
 /** 本地生图参考图的保守档：24GB 3090 上 VAE encode 阶段容易 OOM */
@@ -113,7 +115,7 @@ export async function probeLocalModel(
 ): Promise<LocalModelCheckResult> {
   const base = normalizeLocalEndpoint(endpoint) ?? DEFAULT_LOCAL_MODEL_ENDPOINT;
   const url = localModelsUrl(base);
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = resolvePlatformFetch(options.fetchImpl);
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCAL_CHECK_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -207,13 +209,18 @@ export async function probeLocalModel(
   } catch (error) {
     const latencyMs = Date.now() - started;
     const aborted = error instanceof Error && error.name === 'AbortError';
+    const desktop = isDesktopApp();
     return {
       ok: false,
       endpoint: base,
       latencyMs,
       message: aborted
-        ? `连接本地服务超时（${timeoutMs}ms）。确认 vLLM-Omni 已启动、地址可访问；浏览器直连还需要端口转发 + CORS 放行。`
-        : '连不上本地服务。确认地址/端口正确、vLLM-Omni 已启动；浏览器直连需要端口转发，并且 vLLM 要允许应用 origin。',
+        ? desktop
+          ? `连接本地服务超时（${timeoutMs}ms）。确认本地模型服务已启动、地址可访问。`
+          : `连接本地服务超时（${timeoutMs}ms）。确认 vLLM-Omni 已启动、地址可访问；浏览器直连还需要端口转发 + CORS 放行。`
+        : desktop
+          ? '连不上本地服务。确认地址和端口正确，且本地模型服务已启动。'
+          : '连不上本地服务。确认地址/端口正确、vLLM-Omni 已启动；浏览器直连需要端口转发，并且 vLLM 要允许应用 origin。',
       detail: error instanceof Error ? error.message : String(error),
     };
   } finally {

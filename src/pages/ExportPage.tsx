@@ -15,6 +15,8 @@ import { importProjectFile } from '../services/storage/importBundle';
 import { runChecks } from '../domain/checks';
 import type { Asset } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
+import { isDesktopApp } from '../platform';
+import { revealSavedFile, saveExportFile } from '../platform/fileExport';
 
 /**
  * M6 导出（方案.md §1.5 / §7.5）
@@ -34,6 +36,7 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [importError, setImportError] = useState<string | null>(null);
   const [importOk, setImportOk] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [exportNotice, setExportNotice] = useState<{ text: string; filePath?: string; isError?: boolean } | null>(null);
 
   useEffect(() => {
     if (!project) return;
@@ -55,31 +58,34 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
-  function download() {
+  async function download() {
+    setExportNotice(null);
     const zip = buildZip(entries);
-    const blob = new Blob([zip.slice().buffer as ArrayBuffer], { type: 'application/zip' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = bundleFileName(project!);
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const outcome = await saveExportFile(bundleFileName(project!), zip, 'application/zip');
+    if (outcome.canceled) return;
+    if (!outcome.saved) {
+      setExportNotice({ text: outcome.error ?? '保存失败，请重试。', isError: true });
+      return;
+    }
+    if (isDesktopApp() && outcome.filePath) {
+      setExportNotice({ text: `已保存到 ${outcome.filePath}`, filePath: outcome.filePath });
+    }
   }
 
-  function downloadSingle(entry: ZipEntry) {
-    const blob = entry.bytes
-      ? new Blob([entry.bytes.slice().buffer as ArrayBuffer], { type: 'application/octet-stream' })
-      : new Blob([entry.content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = entry.path.split('/').pop() ?? 'export';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  async function downloadSingle(entry: ZipEntry) {
+    setExportNotice(null);
+    const name = entry.path.split('/').pop() ?? 'export';
+    const outcome = entry.bytes
+      ? await saveExportFile(name, entry.bytes, 'application/octet-stream')
+      : await saveExportFile(name, entry.content, 'text/plain;charset=utf-8');
+    if (outcome.canceled) return;
+    if (!outcome.saved) {
+      setExportNotice({ text: outcome.error ?? '保存失败，请重试。', isError: true });
+      return;
+    }
+    if (isDesktopApp() && outcome.filePath) {
+      setExportNotice({ text: `已保存到 ${outcome.filePath}`, filePath: outcome.filePath });
+    }
   }
 
   async function importFile(file: File) {
@@ -106,11 +112,29 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
     <>
       <div className={`page-head${embedded ? ' page-head-compact' : ''}`}>
         {embedded ? <span /> : <h1>导出</h1>}
-        <button type="button" className="btn btn-primary" onClick={download}>
+        <button type="button" className="btn btn-primary" onClick={() => void download()}>
           <Icon name="download" size={15} />
-          <span>打包下载</span>
+          <span>{isDesktopApp() ? '打包另存为' : '打包下载'}</span>
         </button>
       </div>
+
+      {exportNotice ? (
+        <div className={`issue ${exportNotice.isError ? 'error' : 'info'}`} style={{ marginBottom: 14 }}>
+          <div className="issue-title">{exportNotice.isError ? '导出失败' : '导出完成'}</div>
+          <div className="issue-line">{exportNotice.text}</div>
+          {exportNotice.filePath ? (
+            <div className="row" style={{ marginTop: 8 }}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void revealSavedFile(exportNotice.filePath!)}
+              >
+                打开所在文件夹
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="summary-bar">
         <span>

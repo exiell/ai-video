@@ -6,6 +6,7 @@ import { customProfileId } from '../data/customModels';
 import { checkCustomModel, type CustomModelCheckResult } from '../services/customModels/check';
 import { SKYREELS_VIDEO_PRESET } from '../data/models/videoProfiles';
 import { QWEN_IMAGE_EDIT_PRESET } from '../data/models/imageProfiles';
+import { isDesktopApp } from '../platform';
 import {
   checkVideoProfile,
   type VideoCheckResult,
@@ -474,13 +475,15 @@ export function CustomModelSettings() {
     </Field>
   ) : null;
 
+  const desktop = isDesktopApp();
   return (
     <div className="custom-models">
       <div className="card">
         <h2 className="card-title">自定义接入</h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          接你自己的 OpenAI 兼容服务。配置只存在本机，Key 不进配置 JSON；服务需要允许浏览器直连（CORS）。
-          FLUX3、本机 vLLM 等本地模型也在这里配置。
+          {desktop
+            ? '接你自己的 OpenAI 兼容服务或本机自托管模型（如 Ollama / LM Studio / vLLM）。配置只存在本机，Key 不进配置 JSON。'
+            : '接你自己的 OpenAI 兼容服务。配置只存在本机，Key 不进配置 JSON；服务需要允许浏览器直连（CORS）。FLUX3、本机 vLLM 等本地模型也在这里配置。'}
         </p>
 
         <div className="custom-tabs" role="tablist" aria-label="自定义接入类型">
@@ -504,70 +507,6 @@ export function CustomModelSettings() {
             {MODALITY_LABEL[modality]}配置 {items.length} / {MAX_CUSTOM_MODELS_PER_MODALITY}
           </span>
           <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-            {modality === 'text' ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={limitReached}
-                aria-label="新建本地文字模型"
-                title={
-                  limitReached
-                    ? '已达 10 条上限，先删一条'
-                    : '预填本机 vLLM / OpenAI 兼容文字服务；字段可改'
-                }
-                onClick={() => openLocalAdd('text')}
-              >
-                新建本地文字模型
-              </button>
-            ) : null}
-            {modality === 'image' ? (
-              <>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  disabled={limitReached}
-                  aria-label="新建本地图片模型"
-                  title={
-                    limitReached
-                      ? '已达 10 条上限，先删一条'
-                      : '预填本机 vLLM-Omni / FLUX3；字段可改'
-                  }
-                  onClick={() => openLocalAdd('image')}
-                >
-                  新建本地图片模型
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  disabled={limitReached}
-                  aria-label="新建本地改图模型（Qwen-Image-Edit）"
-                  title={
-                    limitReached
-                      ? '已达 10 条上限，先删一条'
-                      : '3 卡 + CPU offload，纯改图（至少 1 张参考图），约 40–170 秒/张；字段可改'
-                  }
-                  onClick={openLocalImageEditAdd}
-                >
-                  新建本地改图模型（Qwen-Image-Edit）
-                </button>
-              </>
-            ) : null}
-            {modality === 'video' ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                disabled={limitReached}
-                aria-label="新建本地视频模型（SkyReels）"
-                title={
-                  limitReached
-                    ? '已达 10 条上限，先删一条'
-                    : '预填本机 SkyReels 视频服务；字段可改'
-                }
-                onClick={openLocalVideoAdd}
-              >
-                新建本地视频模型（SkyReels）
-              </button>
-            ) : null}
             <button
               type="button"
               className="btn btn-blue btn-sm"
@@ -689,12 +628,93 @@ export function CustomModelSettings() {
           </div>
         )}
 
-        <details className="why" style={{ marginTop: 14 }}>
+        <details className="why" style={{ marginTop: 12 }}>
+          <summary>自托管 / 本地模型快捷模板（高级）</summary>
+          <div className="why-body">
+            <div style={{ marginBottom: 8 }}>
+              如果你在本机或局域网运行了 vLLM / vLLM-Omni 等模型服务，可用下面模板预填字段（端口与模型名均可按实际服务修改）。
+            </div>
+            <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+              {modality === 'text' ? (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={limitReached}
+                  aria-label="新建本地文字模型"
+                  title={
+                    limitReached
+                      ? '已达 10 条上限，先删一条'
+                      : '预填本机 OpenAI 兼容文字服务；字段可改'
+                  }
+                  onClick={() => openLocalAdd('text')}
+                >
+                  新建本地文字模型
+                </button>
+              ) : null}
+              {modality === 'image' ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={limitReached}
+                    aria-label="新建本地图片模型"
+                    title={
+                      limitReached
+                        ? '已达 10 条上限，先删一条'
+                        : '预填本机 vLLM-Omni 生图服务；字段可改'
+                    }
+                    onClick={() => openLocalAdd('image')}
+                  >
+                    新建本地图片模型
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    disabled={limitReached}
+                    aria-label="新建本地改图模型（Qwen-Image-Edit）"
+                    title={
+                      limitReached
+                        ? '已达 10 条上限，先删一条'
+                        : '纯改图模板（至少 1 张参考图）；端口与字段可改'
+                    }
+                    onClick={openLocalImageEditAdd}
+                  >
+                    新建本地改图模型（Qwen-Image-Edit）
+                  </button>
+                </>
+              ) : null}
+              {modality === 'video' ? (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={limitReached}
+                  aria-label="新建本地视频模型（SkyReels）"
+                  title={
+                    limitReached
+                      ? '已达 10 条上限，先删一条'
+                      : '预填本机 SkyReels 视频服务；字段可改'
+                  }
+                  onClick={openLocalVideoAdd}
+                >
+                  新建本地视频模型（SkyReels）
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </details>
+
+        <details className="why" style={{ marginTop: 10 }}>
           <summary>自定义接入的安全与限制</summary>
           <div className="why-body">
-            <div>自定义接入的 Key 默认保存在本机浏览器；勾了「不保存到本机」就只保留到关闭浏览器。</div>
+            <div>
+              {desktop
+                ? '自定义接入的 Key 默认保存在本机应用；勾了「不保存到本机」就只保留到关闭应用。'
+                : '自定义接入的 Key 默认保存在本机浏览器；勾了「不保存到本机」就只保留到关闭浏览器。'}
+            </div>
             <div style={{ marginTop: 4 }}>
-              自定义服务需要允许浏览器直连（CORS）。HTTPS 页面连 HTTP 本地服务可能被混合内容拦截，建议端口转发或同源反代。
+              {desktop
+                ? '桌面客户端通过主进程直连服务，不受浏览器跨域或混合内容拦截。'
+                : '自定义服务需要允许浏览器直连（CORS）。HTTPS 页面连 HTTP 本地服务可能被混合内容拦截，建议端口转发或同源反代。'}
             </div>
             <div style={{ marginTop: 4 }}>
               图片协议的参考图能力按你勾选的声明发送；不确定就不要开，默认 0。
@@ -778,7 +798,7 @@ export function CustomModelSettings() {
 
           <Field
             label="接口地址"
-            hint="通常要含 /v1。例：https://api.openai.com/v1，或本地 http://127.0.0.1:8099/v1"
+            hint="通常要含 /v1。例：https://api.openai.com/v1，或本地 http://127.0.0.1:11434/v1"
           >
             <input
               type="text"

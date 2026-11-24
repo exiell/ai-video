@@ -1,0 +1,48 @@
+appId: com.exiell.aniguide
+productName: AniGuide
+copyright: Copyright © 2026 AniGuide Contributors (MIT)
+# 注意：切勿直接从 OneDrive 云同步目录运行 win-unpacked\AniGuide.exe（OneDrive 重解析点会触发 Chromium 0x80000003 退出），请使用正式安装程序安装或复制至普通本地磁盘目录运行
+asar: false
+npmRebuild: false
+
+directories:
+  buildResources: build
+  output: dist-release
+
+# 严格白名单：渲染端与主进程均已由 Vite 打包，无需带入 node_modules、scripts/、tests/ 或 *.map
+files:
+  - dist/**/*
+  - "!dist/**/*.map"
+  - dist-electron/**/*
+  - "!dist-electron/**/*.map"
+  - package.json
+  - "!node_modules/**/*"
+
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AniGuide
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  installerHeaderIcon: build/icon.ico
+  artifactName: "${productName}-Setup-${version}.${ext}"
+
+mac:
+  icon: build/icon.png
+  category: public.app-category.graphics-design
+  target:
+    - dmg
+    - zip
+  hardenedRuntime: false
+  gatekeeperAssess: false

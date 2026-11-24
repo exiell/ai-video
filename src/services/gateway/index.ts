@@ -1,4 +1,6 @@
 import type { ApiFlavor, ModelProfile } from '../../types/model';
+import { isDesktopApp } from '../../platform';
+import { resolvePlatformFetch } from '../../platform/transport';
 import { isLocalProfile } from './localModel';
 import {
   buildDashScopeAsyncPayload,
@@ -72,8 +74,17 @@ export function classifyError(
     return { kind: 'aborted', title: '请求已取消', advice: '如果你没有主动取消，可能是超时了，重试一次。' };
   }
 
-  // fetch 直接抛错：绝大多数情况是被 CORS 拦了
+  // fetch 直接抛错：浏览器环境下绝大多数是被 CORS 拦了；桌面端走主进程直连，无 CORS 限制
   if (error instanceof TypeError) {
+    if (isDesktopApp()) {
+      return {
+        kind: 'network',
+        title: '没能连上这个接口地址',
+        advice:
+          '请检查网络连接、接口地址是否填写正确，或确认对应服务已正常启动。点击「测试连接」可查看更详细的判断。',
+        raw: error.message,
+      };
+    }
     return {
       kind: 'cors',
       title: '浏览器没能发出这个请求，最可能是被跨域策略挡住了',
@@ -499,7 +510,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     transport,
     // 出图是同步接口里最慢的一类，官方给出的耗时量级是几十秒，默认给足 3 分钟
     timeoutMs = profile.timeoutMs ?? (profile.type === 't2i' ? 180_000 : 60_000),
-    fetchImpl = fetch,
+    fetchImpl = resolvePlatformFetch(),
     signal,
   } = options;
 

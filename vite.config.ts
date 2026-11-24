@@ -8,7 +8,7 @@ export default defineConfig({
   base: './',
   build: {
     target: 'es2022',
-    sourcemap: true,
+    sourcemap: process.env['DESKTOP_RELEASE'] !== '1',
   },
   server: {
     watch: {

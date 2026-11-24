@@ -18,6 +18,7 @@ import { LOCAL_FLUX3_PROFILE_ID } from '../services/gateway/localModel';
 import { isModelOverridden, resolveModelName } from '../services/llm/modelName';
 import { testConnection, type ConnectionTestResult } from '../services/gateway';
 import type { ModelProfile } from '../types/model';
+import { getDesktopApi, isDesktopApp } from '../platform';
 
 /**
  * 设置的子视图。
@@ -287,15 +288,24 @@ export function SettingsPage() {
 
       {tab === 'connection' ? (<>
 
-      <div className="card">
-        <h2 className="card-title">直连检测</h2>
-        <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          点开测一下能不能直连。通就不用管下面「代理」那一栏。
-        </p>
-        <a className="btn btn-primary" href="./cors-check.html" target="_blank" rel="noreferrer">
-          打开跨域实测工具
-        </a>
-      </div>
+      {isDesktopApp() ? (
+        <div className="card">
+          <h2 className="card-title">客户端直连</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-dim)', margin: 0 }}>
+            当前为桌面客户端，所有模型请求经本机直连厂商或本地服务，不受浏览器跨域限制。一般不需要配置转发代理。
+          </p>
+        </div>
+      ) : (
+        <div className="card">
+          <h2 className="card-title">直连检测</h2>
+          <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
+            点开测一下能不能直连。通就不用管下面「代理」那一栏。
+          </p>
+          <a className="btn btn-primary" href="./cors-check.html" target="_blank" rel="noreferrer">
+            打开跨域实测工具
+          </a>
+        </div>
+      )}
 
       </>) : null}
 
@@ -589,7 +599,7 @@ export function SettingsPage() {
               checked={prefs.dontSaveKeys}
               onChange={(e) => setPref('dontSaveKeys', e.target.checked)}
             />
-            不保存到本机（关掉浏览器就失效）
+            {isDesktopApp() ? '不保存到本机（关闭应用就失效）' : '不保存到本机（关掉浏览器就失效）'}
           </label>
         </div>
         <div className="hint">
@@ -758,8 +768,21 @@ export function SettingsPage() {
           存储与备份
         </h2>
         <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-          图片只在这个浏览器里，清缓存就没了。
+          {isDesktopApp()
+            ? '项目与图片保存在本机应用数据目录，不会因清理浏览器缓存丢失；仍建议定期导出备份。'
+            : '图片只在这个浏览器里，清缓存就没了。'}
         </p>
+        {isDesktopApp() ? (
+          <div className="row" style={{ marginBottom: 12 }}>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => void getDesktopApi()?.file.openUserDataDir()}
+            >
+              打开本机数据目录
+            </button>
+          </div>
+        ) : null}
         {imageStats && imageStats.count > 0 ? (
           <div className="issue warning" style={{ marginBottom: 12 }}>
             <div className="issue-title">
@@ -782,7 +805,7 @@ export function SettingsPage() {
               <span>已用</span>
               <b>{formatBytes(usage.usage)}</b>
               <span style={{ color: 'var(--text-faint)' }}>
-                / 浏览器给这个站点约 {formatBytes(usage.quota)}
+                / {isDesktopApp() ? '本机可用配额约' : '浏览器给这个站点约'} {formatBytes(usage.quota)}
               </span>
             </div>
             <div

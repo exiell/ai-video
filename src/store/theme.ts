@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { syncDesktopThemeChrome, type ThemeChromeOptions } from '../platform';
 
 /**
  * 界面外观。
@@ -43,8 +44,18 @@ export const THEMES: ThemeOption[] = [
   },
 ];
 
+/** 5 套主题对应的 Electron 窗口背景色与 titleBarOverlay 配色（docs/DESIGN.md §5.2） */
+export const THEME_CHROME_MAP: Record<Theme, ThemeChromeOptions> = {
+  prism: { bg: '#080b16', overlayColor: '#0d1224', symbolColor: '#f1f5ff' },
+  pop: { bg: '#faf9ff', overlayColor: '#ffffff', symbolColor: '#1b1734' },
+  studio: { bg: '#f3f6f9', overlayColor: '#f8fafc', symbolColor: '#16202b' },
+  night: { bg: '#0b0d10', overlayColor: '#11151b', symbolColor: '#f2efe8' },
+  blueprint: { bg: '#edf1f4', overlayColor: '#f5f8fa', symbolColor: '#102130' },
+};
+
 export function applyTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
+  syncDesktopThemeChrome(THEME_CHROME_MAP[theme]);
   try {
     window.localStorage.setItem('aniguide.theme', theme);
   } catch {
@@ -73,6 +84,7 @@ function initialTheme(): Theme {
 const initial = initialTheme();
 if (typeof document !== 'undefined') {
   document.documentElement.dataset.theme = initial;
+  syncDesktopThemeChrome(THEME_CHROME_MAP[initial]);
 }
 
 interface ThemeState {

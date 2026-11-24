@@ -1,6 +1,7 @@
 import { useId, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useImage } from '../store/image';
+import { isDesktopApp } from '../platform';
 import { useSettings } from '../store/settings';
 import { imageReadiness, missingProfileNames } from './imageReadiness';
 import { consistencyAdvice } from '../domain/image/prompts';
@@ -280,7 +281,7 @@ export function AssetGallery({
   return (
     <div style={{ marginTop: 12 }}>
       <div className="field-label">
-        已保存的图（{assets.length} 张，都存在你自己的浏览器里）· 点击放大查看
+        已保存的图（{assets.length} 张，{isDesktopApp() ? '都存在你本机应用里' : '都存在你自己的浏览器里'}）· 点击放大查看
       </div>
       <div
         style={{

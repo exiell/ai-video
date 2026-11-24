@@ -1,0 +1,134 @@
+/* ==========================================================================
+   桌面客户端 App 风格适配层（DESK-001 · docs/DESIGN.md §5）
+   仅在 Electron 桌面端（html[data-runtime='desktop']）生效，
+   对 Web 静态版保持零侵入。
+   ========================================================================== */
+
+html[data-runtime='desktop'] {
+  overscroll-behavior: none;
+}
+
+/* ---------- 1. 桌面工作台防误选与局部可选策略 ---------- */
+
+html[data-runtime='desktop'] body {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+html[data-runtime='desktop'] input,
+html[data-runtime='desktop'] textarea,
+html[data-runtime='desktop'] [contenteditable='true'],
+html[data-runtime='desktop'] pre,
+html[data-runtime='desktop'] code,
+html[data-runtime='desktop'] .prompt-box,
+html[data-runtime='desktop'] .prompt-text,
+html[data-runtime='desktop'] .issue-line,
+html[data-runtime='desktop'] .why-body,
+html[data-runtime='desktop'] .card p,
+html[data-runtime='desktop'] .copyable {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* ---------- 2. 桌面级细滚动条（5 套主题自适应） ---------- */
+
+html[data-runtime='desktop'] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html[data-runtime='desktop'] ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+html[data-runtime='desktop'] ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-strong) 65%, transparent);
+  border-radius: var(--radius-sm);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html[data-runtime='desktop'] ::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-faint) 85%, transparent);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+html[data-runtime='desktop'] ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ---------- 3. 一体化原生标题栏与窗口拖拽区 ---------- */
+
+.desktop-drag-strip {
+  display: none;
+}
+
+/* 现代顶部通栏主题（prism / pop）：顶栏本身充当一体化标题栏 */
+html[data-runtime='desktop'][data-theme='prism'] .sidebar,
+html[data-runtime='desktop'][data-theme='pop'] .sidebar {
+  -webkit-app-region: drag;
+  min-height: 48px;
+}
+
+html[data-runtime='desktop'][data-platform='win32'][data-theme='prism'] .sidebar,
+html[data-runtime='desktop'][data-platform='win32'][data-theme='pop'] .sidebar,
+html[data-runtime='desktop'][data-platform='linux'][data-theme='prism'] .sidebar,
+html[data-runtime='desktop'][data-platform='linux'][data-theme='pop'] .sidebar {
+  padding-right: 152px;
+}
+
+html[data-runtime='desktop'][data-platform='darwin'][data-theme='prism'] .sidebar,
+html[data-runtime='desktop'][data-platform='darwin'][data-theme='pop'] .sidebar {
+  padding-left: 84px;
+}
+
+html[data-runtime='desktop'] .sidebar a,
+html[data-runtime='desktop'] .sidebar button,
+html[data-runtime='desktop'] .sidebar input,
+html[data-runtime='desktop'] .sidebar select,
+html[data-runtime='desktop'] .sidebar .brand-lockup,
+html[data-runtime='desktop'] .sidebar .project-switch,
+html[data-runtime='desktop'] .sidebar .nav-item,
+html[data-runtime='desktop'] .sidebar .save-pill {
+  -webkit-app-region: no-drag;
+}
+
+/* 经典三栏主题（studio / night / blueprint）：顶部增加 40px 一体化拖拽标题条 */
+html[data-runtime='desktop'][data-theme='studio'] .desktop-drag-strip,
+html[data-runtime='desktop'][data-theme='night'] .desktop-drag-strip,
+html[data-runtime='desktop'][data-theme='blueprint'] .desktop-drag-strip {
+  display: flex;
+  align-items: center;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  background: var(--bg-soft);
+  border-bottom: 1px solid var(--border);
+  padding: 0 152px 0 16px;
+  font-size: 12px;
+  color: var(--text-faint);
+  letter-spacing: 0.02em;
+  z-index: 40;
+  -webkit-app-region: drag;
+}
+
+html[data-runtime='desktop'][data-platform='darwin'][data-theme='studio'] .desktop-drag-strip,
+html[data-runtime='desktop'][data-platform='darwin'][data-theme='night'] .desktop-drag-strip,
+html[data-runtime='desktop'][data-platform='darwin'][data-theme='blueprint'] .desktop-drag-strip {
+  padding: 0 16px 0 84px;
+}
+
+html[data-runtime='desktop'][data-theme='studio'] .app,
+html[data-runtime='desktop'][data-theme='night'] .app,
+html[data-runtime='desktop'][data-theme='blueprint'] .app {
+  padding-top: 40px;
+}
+
+/* 桌面端弹窗始终压过自定义标题栏 */
+html[data-runtime='desktop'] .modal-backdrop,
+html[data-runtime='desktop'] .lightbox-backdrop {
+  -webkit-app-region: no-drag;
+}
