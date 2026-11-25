@@ -28,7 +28,7 @@ import {
   type VideoModelDialect,
   type VideoPromptMode,
 } from '../../data/models/videoDialects';
-import { filterI2vMotionPrompt } from './i2vMotionFilter';
+import { filterI2vMotionPrompt, formatShotAudioCue } from './i2vMotionFilter';
 import { processNegativePrompt } from './negativeRewriter';
 import {
   compileReferenceBindings,
@@ -389,22 +389,63 @@ export function compileVideoDialectPrompt(
     ...(shotScene ? [shotScene.identity.summaryEn || shotScene.name] : []),
   ];
 
+  // 汇总显式跨镜状态变化（EntityStateDelta）作为 I2V 放行的增量视觉说明
+  const deltaNotes = (shot.stateDeltas ?? [])
+    .map((delta) => {
+      const pairs = Object.entries(delta.changeableAttrs)
+        .filter(([, v]) => v.trim().length > 0)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      if (!pairs && !delta.reason.trim()) return '';
+      return [pairs, delta.reason.trim() ? `(${delta.reason.trim()})` : '']
+        .filter(Boolean)
+        .join(' ');
+    })
+    .filter(Boolean);
+  const combinedIncrementalNote = [options.incrementalVisualNote?.trim(), ...deltaNotes]
+    .filter(Boolean)
+    .join('; ');
+
   // 第 1 步：T2V / I2V 分流（I2V 自动剥离首帧已有的静态外观）
   const speakerLabel = options.speakerLabel ?? shotCharacters[0]?.name;
   const i2vResult = filterI2vMotionPrompt({
     dialect,
     mode: promptMode,
     shot,
+    characters: project.characters,
     fullT2vPrompt: baseCompiled.en,
     staticDescriptions,
-    ...(options.incrementalVisualNote ? { incrementalVisualNote: options.incrementalVisualNote } : {}),
+    ...(combinedIncrementalNote ? { incrementalVisualNote: combinedIncrementalNote } : {}),
     suppressEmbeddedSubtitles: options.suppressEmbeddedSubtitles ?? true,
     ...(speakerLabel ? { speakerLabel } : {}),
   });
   warnings.push(...i2vResult.warnings);
 
-  // T2V 模式下如果是 MiniMax 方言，也确保补充官方方括号运镜语法
+  // T2V 模式下如果是 MiniMax 方言，也确保补充官方方括号运镜语法；若有关键道具或结构化音频也补齐
   let bodyText = i2vResult.prompt;
+  if (!i2vResult.strippedStatic) {
+    const shotProps = (project.props ?? []).filter((p) => (shot.propIds ?? []).includes(p.id));
+    if (shotProps.length > 0) {
+      const propTraits = shotProps
+        .map((p) => (p.canonicalTraits.trim() ? `${p.name} (${p.canonicalTraits.trim()})` : p.name))
+        .join(', ');
+      bodyText = `${bodyText}, Key props: ${propTraits}`;
+    }
+    if (deltaNotes.length > 0) {
+      bodyText = `${bodyText}, State change: ${deltaNotes.join('; ')}`;
+    }
+    if (shot.audioSpec && dialect.supportsNativeAudio) {
+      const t2vAudio = formatShotAudioCue({
+        dialect,
+        shot,
+        characters: project.characters,
+        ...(speakerLabel ? { speakerLabel } : {}),
+        warnings,
+      });
+      if (t2vAudio) bodyText = `${bodyText}. ${t2vAudio}`;
+      if (shot.audioSpec.suppressEmbeddedSubtitles) bodyText = `${bodyText}. No subtitles.`;
+    }
+  }
   if (
     !i2vResult.strippedStatic &&
     dialect.cameraSyntax === 'minimax_brackets' &&

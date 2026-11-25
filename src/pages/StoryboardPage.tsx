@@ -10,6 +10,8 @@ import { useGeneration } from '../store/generation';
 import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
 import { ShotExplainerSection } from '../components/storyboard/ShotExplainerSection';
 import { StoryboardToolsDrawer } from '../components/storyboard/StoryboardToolsDrawer';
+import { ShotGroupBar } from '../components/storyboard/ShotGroupBar';
+import { ShotAudioStateFold } from '../components/storyboard/ShotAudioStateFold';
 import { useImage } from '../store/image';
 import { useVideo, videoClipKey } from '../store/video';
 import { VideoPanel } from '../components/VideoPanel';
@@ -547,6 +549,8 @@ export function StoryboardPage() {
           )}
         </section>
       ) : null}
+
+      {project.shots.length >= 2 && videoMode !== 'explainer' ? <ShotGroupBar /> : null}
 
       {project.shots.length === 0 ? (
         <div className="empty">
@@ -1239,6 +1243,12 @@ export function StoryboardPage() {
                         </div>
                       </div>
                     </details>
+
+                    <ShotAudioStateFold
+                      project={project}
+                      shot={shot}
+                      onPatch={(changes) => patch(shot, changes)}
+                    />
                   </div>
 
                   {/* 右栏：三帧视觉监视器 + 5 秒预览视频 */}

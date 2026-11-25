@@ -12,6 +12,8 @@
 // ---------------------------------------------------------------------------
 
 import type { VideoCapabilities, VideoProtocol } from './video';
+import type { ShotAudioSpec, VoiceProfile } from './audio';
+import type { EntityStateDelta, PropAsset, ShotGroup } from './state';
 import type {
   IntentRouteResult,
   ShotContinuityMode,
@@ -21,6 +23,26 @@ import type {
   VisualAsset,
   VisualBible,
 } from '../domain/pipeline/profiles';
+
+export {
+  AUDIO_LANGUAGE_LABEL,
+  DIALOGUE_DELIVERY_LABEL,
+  SHOT_AUDIO_MODE_LABEL,
+  type AudioLanguage,
+  type DialogueDelivery,
+  type DialogueLine,
+  type ShotAudioMode,
+  type ShotAudioSpec,
+  type VoiceProfile,
+} from './audio';
+export {
+  SHOT_GROUP_STRATEGY_LABEL,
+  type EntityStateDelta,
+  type PropAsset,
+  type ShotGroup,
+  type ShotGroupRenderStrategy,
+  type StateDeltaEntityType,
+} from './state';
 
 export type {
   CharacterPolicy,
@@ -144,6 +166,8 @@ export interface CharacterCard extends Versioned {
   negativePrompt?: string;
   /** 固定种子（平台支持时才有意义） */
   seed?: number;
+  /** 角色音色档案（Phase 2：原生带音模型与外部 TTS 共用） */
+  voiceProfile?: VoiceProfile;
 }
 
 export const CHARACTER_ROLE_LABEL: Record<CharacterCard['role'], string> = {
@@ -416,6 +440,14 @@ export interface Shot {
   codeRenderSpec?: string | null;
   /** 本镜引用的泛化视觉资产标签（如 @alpine_valley / @photon_motif） */
   referencedAssetTags?: string[];
+  /** 结构化音频与对白规格（Phase 2，可选向后兼容） */
+  audioSpec?: ShotAudioSpec;
+  /** 本镜涉及的关键道具 ID（引用 Project.props） */
+  propIds?: string[];
+  /** 本镜触发的显式视觉状态变化（如淋雨、换装、道具破损） */
+  stateDeltas?: EntityStateDelta[];
+  /** 所属多镜头编组 ID（引用 Project.shotGroups） */
+  shotGroupId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -508,6 +540,10 @@ export interface Project extends Versioned {
   stageStatus?: StageStatusMap;
   /** 科普模式整篇连续解说词（旁白先行） */
   narrationScript?: string;
+  /** 独立道具一等资产库（Phase 2，可选向后兼容） */
+  props?: PropAsset[];
+  /** 同场次连续分镜编组（Phase 2，供 Multi-Shot 或尾帧接力渲染） */
+  shotGroups?: ShotGroup[];
 }
 
 // ---------------------------------------------------------------------------
@@ -553,7 +589,12 @@ export type CheckRuleId =
   // 提示词质量（v0.39 新增，依据当前主流 AI 视频制作规范）
   | 'adjacent-same-shot-size'
   | 'pronoun-in-visual'
-  | 'abstract-emotion';
+  | 'abstract-emotion'
+  // 音画与动态状态连续性（Phase 2 新增）
+  | 'audio-dialogue-overflow'
+  | 'audio-voice-timbre-conflict'
+  | 'camera-multi-move-conflict'
+  | 'state-delta-undeclared';
 
 export interface CheckIssue {
   /** 稳定 id，便于测试与去重 */

@@ -1,5 +1,5 @@
 import type { VideoModelDialect, VideoPromptMode } from '../../data/models/videoDialects';
-import type { CameraMove, Shot } from '../../types/model';
+import type { CameraMove, CharacterCard, Shot } from '../../types/model';
 import { CAMERA_MOVE_EN } from '../../types/model';
 import { formatMiniMaxCameraCommand } from './refSyntax';
 
@@ -22,7 +22,12 @@ import { formatMiniMaxCameraCommand } from './refSyntax';
 export interface I2vMotionFilterInput {
   dialect: VideoModelDialect;
   mode: VideoPromptMode;
-  shot: Pick<Shot, 'action' | 'cameraMove' | 'cameraPosition' | 'dialogue' | 'sound' | 'endState'>;
+  shot: Pick<
+    Shot,
+    'action' | 'cameraMove' | 'cameraPosition' | 'dialogue' | 'sound' | 'endState' | 'audioSpec'
+  >;
+  /** 关联角色列表（用于解析结构化对白的 voiceProfile，处理音色样本与文字冲突） */
+  characters?: readonly CharacterCard[];
   /** 全量 T2V 提示词（在非 I2V 或模型不剥离时原样返回） */
   fullT2vPrompt: string;
   /** 本镜静态外观/背景描述（仅作审计记录，I2V 模式下会被剥离） */
@@ -42,15 +47,73 @@ export interface I2vMotionFilterResult {
   warnings: string[];
 }
 
-function formatAudioCue(
-  dialect: VideoModelDialect,
-  dialogue: string,
-  sound: string,
-  speakerLabel?: string,
-): string {
+export function formatShotAudioCue(args: {
+  dialect: VideoModelDialect;
+  shot: Pick<Shot, 'dialogue' | 'sound' | 'audioSpec'>;
+  characters?: readonly CharacterCard[];
+  speakerLabel?: string;
+  warnings?: string[];
+}): string {
+  const { dialect, shot, characters, speakerLabel, warnings } = args;
   if (!dialect.supportsNativeAudio) return '';
   const parts: string[] = [];
-  const line = dialogue.trim();
+
+  if (shot.audioSpec) {
+    const spec = shot.audioSpec;
+    if (spec.mode !== 'silent') {
+      for (const line of spec.dialogues) {
+        const text = line.text.trim();
+        if (!text) continue;
+        const char = line.speakerCharacterId
+          ? characters?.find((c) => c.id === line.speakerCharacterId)
+          : undefined;
+        const voice = char?.voiceProfile;
+        const hasVoiceBinding = Boolean(voice?.referenceVoiceUrl?.trim());
+        const suppressTimbre =
+          hasVoiceBinding && (dialect.vendorFamily === 'kling' || dialect.vendorFamily === 'wan');
+        if (suppressTimbre && voice?.timbreNote?.trim()) {
+          warnings?.push(
+            `角色「${char?.name ?? line.speakerLabel}」已绑定参考音频，编译 ${dialect.label} 提示词时已自动抑制文字音色描述，防止与参考音色打架。`,
+          );
+        }
+
+        const voiceTraits = [
+          voice?.dialectOrAccent?.trim(),
+          !suppressTimbre ? voice?.timbreNote?.trim() : '',
+          line.emotionTone?.trim(),
+        ].filter(Boolean);
+        const traitSuffix = voiceTraits.length > 0 ? ` (${voiceTraits.join(', ')})` : '';
+        const speaker = line.speakerLabel.trim() || char?.name || speakerLabel?.trim() || 'Speaker';
+        const deliveryPrefix =
+          line.delivery === 'off_screen_vo'
+            ? 'VO '
+            : line.delivery === 'inner_monologue'
+              ? 'Inner monologue '
+              : '';
+
+        if (dialect.dialogueFormat === 'kling_speaker_bracket') {
+          parts.push(`[${deliveryPrefix}${speaker}${traitSuffix}]: "${text}"`);
+        } else if (dialect.dialogueFormat === 'sora_dialogue_block') {
+          parts.push(`Dialogue — ${deliveryPrefix}${speaker}${traitSuffix}: "${text}"`);
+        } else if (dialect.dialogueFormat === 'quoted_inline') {
+          parts.push(`${deliveryPrefix}${speaker}${traitSuffix} speaking: "${text}"`);
+        }
+      }
+    }
+
+    if (spec.sfx.length > 0) {
+      parts.push(`SFX: ${spec.sfx.join(', ')}`);
+    }
+    if (spec.ambience?.trim()) {
+      parts.push(`Ambience: ${spec.ambience.trim()}`);
+    }
+    if (spec.bgmCue?.trim()) {
+      parts.push(`BGM: ${spec.bgmCue.trim()}`);
+    }
+    return parts.join('. ');
+  }
+
+  const line = shot.dialogue.trim();
   if (line) {
     if (dialect.dialogueFormat === 'kling_speaker_bracket') {
       const speaker = speakerLabel?.trim() || 'Speaker';
@@ -62,7 +125,7 @@ function formatAudioCue(
       parts.push(`speaking: "${line}"`);
     }
   }
-  const sfx = sound.trim();
+  const sfx = shot.sound.trim();
   if (sfx) {
     parts.push(`SFX: ${sfx}`);
   }
@@ -123,14 +186,24 @@ export function filterI2vMotionPrompt(input: I2vMotionFilterInput): I2vMotionFil
   // 4. 显式静止锚定（防止首帧外观与场景结构漂移）
   parts.push('keep existing subject identity, clothing, and background structure steady');
 
-  // 5. 原生音频与对白（仅对支持原生音频的模型输出）
-  const audioCue = formatAudioCue(dialect, shot.dialogue, shot.sound, input.speakerLabel);
+  // 5. 原生音频与对白（仅对支持原生音频的模型输出，优先使用结构化 audioSpec）
+  const audioCue = formatShotAudioCue({
+    dialect,
+    shot,
+    ...(input.characters ? { characters: input.characters } : {}),
+    ...(input.speakerLabel ? { speakerLabel: input.speakerLabel } : {}),
+    warnings,
+  });
   if (audioCue) {
     parts.push(audioCue);
   }
 
   // 6. 防画面烤死乱码字幕（尤其针对 Seedance / 原生带音模型）
-  if (input.suppressEmbeddedSubtitles && dialect.supportsNativeAudio) {
+  const wantSuppressSubtitles =
+    shot.audioSpec !== undefined
+      ? shot.audioSpec.suppressEmbeddedSubtitles
+      : Boolean(input.suppressEmbeddedSubtitles);
+  if (wantSuppressSubtitles && dialect.supportsNativeAudio) {
     parts.push('No subtitles.');
   }
 

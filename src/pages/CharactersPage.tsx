@@ -20,6 +20,7 @@ import { useImage } from '../store/image';
 import { SelectMenu } from '../components/SelectMenu';
 import { Reveal } from '../components/Reveal';
 import { Icon } from '../components/Icon';
+import { CharacterVoiceCard } from '../components/characters/CharacterVoiceCard';
 
 const ROLE_OPTIONS = Object.entries(CHARACTER_ROLE_LABEL).map(([value, label]) => ({
   value,
@@ -522,6 +523,8 @@ export function CharactersPage({ embedded = false }: { embedded?: boolean } = {}
                   />
                 </Field>
                 </details>
+
+                <CharacterVoiceCard character={character} onChange={upsertCharacter} />
 
                 <ImagePanel
                   refId={character.id}

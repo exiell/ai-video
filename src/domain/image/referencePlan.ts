@@ -251,3 +251,12 @@ export function previousShotOf(project: Project, shotId: string): Shot | undefin
 // ---- 兼容 re-export（`store/image.ts` 与测试仍从这里 import） ----
 export type { ReferenceRole, RefAsset, ReferenceSource } from './anchors';
 export { isContinuousWithPrevious, sameStyle } from './anchors';
+export {
+  canServeAsCanonicalAnchor,
+  formatSurgicalEditPrompt,
+  IMAGE_EDIT_MODE_LABEL,
+  planCanonicalReferencePool,
+  type CanonicalAnchorItem,
+  type CanonicalReferencePool,
+  type ImageEditMode,
+} from './canonicalPool';

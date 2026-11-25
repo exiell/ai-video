@@ -16,8 +16,9 @@ import {
 import type { VisualBible } from '../types/model';
 import { CharactersPage } from './CharactersPage';
 import { ScenesPage } from './ScenesPage';
+import { PropsSection } from '../components/assets/PropsSection';
 
-export type AssetsTab = 'characters' | 'scenes' | 'visual-bible';
+export type AssetsTab = 'characters' | 'scenes' | 'props' | 'visual-bible';
 
 export function AssetsPage({ initialTab = 'characters' }: { initialTab?: AssetsTab }) {
   const location = useLocation();
@@ -142,6 +143,20 @@ export function AssetsPage({ initialTab = 'characters' }: { initialTab?: AssetsT
               <span className="hub-tab-badge">
                 {coverage.scenesReady}/{project.scenes.length}
               </span>
+            </button>
+          ) : null}
+
+          {videoMode === 'narrative' ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'props'}
+              className={`hub-tab${tab === 'props' ? ' active' : ''}`}
+              onClick={() => switchTab('props')}
+            >
+              <Icon name="sparkles" size={15} />
+              <span>关键道具</span>
+              <span className="hub-tab-badge">{(project.props ?? []).length}</span>
             </button>
           ) : null}
         </div>
@@ -277,6 +292,8 @@ export function AssetsPage({ initialTab = 'characters' }: { initialTab?: AssetsT
           </div>
         ) : tab === 'characters' ? (
           <CharactersPage embedded />
+        ) : tab === 'props' ? (
+          <PropsSection />
         ) : (
           <ScenesPage embedded />
         )}

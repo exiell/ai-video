@@ -7,8 +7,14 @@ import { useImage } from '../store/image';
 import { useSettings } from '../store/settings';
 import { resolveDefaultImageEditProfile } from '../data/models/imageProfiles';
 import { listAssets } from '../services/storage';
+import {
+  canServeAsCanonicalAnchor,
+  formatSurgicalEditPrompt,
+  type ImageEditMode,
+} from '../domain/image/canonicalPool';
 
 export type ImageEditTarget = 'character' | 'scene' | 'frame';
+type DialogEditStrategy = 'free' | ImageEditMode;
 
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_PROMPT_LENGTH = 800;
@@ -27,6 +33,7 @@ interface SelectedReference {
   key: string;
   dataUrl: string;
   label: string;
+  kind?: Asset['kind'];
 }
 
 /**
@@ -62,6 +69,8 @@ export function ImageEditDialog({
   const [assets, setAssets] = useState<Asset[]>([]);
   const [selected, setSelected] = useState<SelectedReference[]>([]);
   const [prompt, setPrompt] = useState('');
+  const [editStrategy, setEditStrategy] = useState<DialogEditStrategy>('free');
+  const [preserveNote, setPreserveNote] = useState('');
   const [frameKind, setFrameKind] = useState<FrameKind>('first-frame');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +84,8 @@ export function ImageEditDialog({
     if (!open) return;
     setSelected([]);
     setPrompt('');
+    setEditStrategy('free');
+    setPreserveNote('');
     setFrameKind('first-frame');
     setError(null);
     setUploadError(null);
@@ -197,7 +208,7 @@ export function ImageEditDialog({
         setError(`最多选 ${maxReferences} 张参考图。`);
         return current;
       }
-      return [...current, { key: asset.id, dataUrl, label }];
+      return [...current, { key: asset.id, dataUrl, label, kind: asset.kind }];
     });
   }
 
@@ -263,11 +274,19 @@ export function ImageEditDialog({
     setError(null);
     clearFeedback(`edit:${refId}`);
     try {
+      const compiledPrompt =
+        editStrategy === 'free'
+          ? promptText
+          : formatSurgicalEditPrompt({
+              mode: editStrategy,
+              changeInstruction: promptText,
+              preserveNote,
+            });
       await generateEditedImage({
         target,
         refId,
         ...(target === 'frame' ? { frameKind } : {}),
-        prompt: promptText,
+        prompt: compiledPrompt,
         referenceImages: selected.map((item) => item.dataUrl),
         referenceLabels: selected.map((item) => item.label),
       });
@@ -419,6 +438,26 @@ export function ImageEditDialog({
               {prompt.length} / {MAX_PROMPT_LENGTH}
             </span>
           </div>
+          {selected.length > 0 &&
+          selected.every((item) => item.kind !== undefined && !canServeAsCanonicalAnchor(item.kind)) ? (
+            <div className="issue warning" style={{ marginBottom: 8 }}>
+              <div className="issue-line">
+                当前仅选了分镜帧；若已连续修图多轮，建议改用「回溯主参考重绘」并选回角色或场景主图，防止外观漂移。
+              </div>
+            </div>
+          ) : null}
+          <label className="image-edit-save-as" style={{ marginBottom: 8 }}>
+            <span>修图模式</span>
+            <select
+              value={editStrategy}
+              aria-label="修图模式"
+              onChange={(event) => setEditStrategy(event.target.value as DialogEditStrategy)}
+            >
+              <option value="free">自由填写（原样发送）</option>
+              <option value="surgical_edit">局部微调（只改指定项，锁其余画面）</option>
+              <option value="canonical_redraw">回溯主参考重绘（防多轮修图漂移）</option>
+            </select>
+          </label>
           <label className="field-label" htmlFor="image-edit-prompt">
             要改什么
           </label>
@@ -435,6 +474,20 @@ export function ImageEditDialog({
               setError(null);
             }}
           />
+          {editStrategy !== 'free' ? (
+            <div style={{ marginTop: 6 }}>
+              <label className="field-label" htmlFor="image-edit-preserve">
+                显式保留项（可选）
+              </label>
+              <input
+                id="image-edit-preserve"
+                type="text"
+                value={preserveNote}
+                placeholder="例：保持发型、深绿风衣、窗外雨景和机位不变"
+                onChange={(event) => setPreserveNote(event.target.value)}
+              />
+            </div>
+          ) : null}
 
           {target === 'frame' ? (
             <label className="image-edit-save-as">

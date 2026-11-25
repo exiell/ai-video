@@ -1,16 +1,27 @@
 import Dexie, { type Table } from 'dexie';
 import type {
   Asset,
+  AudioLanguage,
   CameraMove,
   CharacterCard,
   ContinuityLock,
+  DialogueDelivery,
+  DialogueLine,
+  EntityStateDelta,
   LockAspect,
   Project,
+  PropAsset,
   SceneCard,
   Shot,
+  ShotAudioMode,
+  ShotAudioSpec,
+  ShotGroup,
+  ShotGroupRenderStrategy,
   ShotSize,
+  StateDeltaEntityType,
   StoryScene,
   Variant,
+  VoiceProfile,
 } from '../../types/model';
 import {
   SHOT_CONTINUITY_MODES,
@@ -441,6 +452,128 @@ const CAMERA_MOVES: readonly CameraMove[] = [
   'crane-down',
   'handheld',
 ];
+const AUDIO_LANGUAGES: readonly AudioLanguage[] = ['zh', 'en', 'ja', 'ko', 'es', 'auto'];
+const DIALOGUE_DELIVERIES: readonly DialogueDelivery[] = [
+  'on_screen_lip_sync',
+  'off_screen_vo',
+  'inner_monologue',
+];
+const SHOT_AUDIO_MODES: readonly ShotAudioMode[] = [
+  'native_video_audio',
+  'external_tts_dub',
+  'silent',
+];
+const STATE_DELTA_ENTITY_TYPES: readonly StateDeltaEntityType[] = ['character', 'scene', 'prop'];
+const SHOT_GROUP_STRATEGIES: readonly ShotGroupRenderStrategy[] = [
+  'independent_clips',
+  'native_multi_shot',
+  'chained_last_frame',
+];
+
+function normalizeVoiceProfile(value: unknown): VoiceProfile | undefined {
+  if (!isRecord(value)) return undefined;
+  const voiceId = text(value.voiceId).trim();
+  const referenceVoiceUrl = text(value.referenceVoiceUrl).trim();
+  const dialectOrAccent = text(value.dialectOrAccent).trim();
+  return {
+    ...(voiceId ? { voiceId } : {}),
+    ...(referenceVoiceUrl ? { referenceVoiceUrl } : {}),
+    language: oneOf(value.language, AUDIO_LANGUAGES, 'zh'),
+    ...(dialectOrAccent ? { dialectOrAccent } : {}),
+    timbreNote: text(value.timbreNote),
+  };
+}
+
+function normalizeDialogueLine(value: unknown): DialogueLine | null {
+  if (!isRecord(value)) return null;
+  const lineText = text(value.text).trim();
+  if (!lineText) return null;
+  const speakerCharacterId = text(value.speakerCharacterId).trim();
+  const emotionTone = text(value.emotionTone).trim();
+  return {
+    id: text(value.id) || newId('dlg'),
+    ...(speakerCharacterId ? { speakerCharacterId } : {}),
+    speakerLabel: text(value.speakerLabel, '旁白'),
+    text: lineText,
+    ...(emotionTone ? { emotionTone } : {}),
+    delivery: oneOf(value.delivery, DIALOGUE_DELIVERIES, 'on_screen_lip_sync'),
+    ...(typeof value.startOffsetSec === 'number' && Number.isFinite(value.startOffsetSec)
+      ? { startOffsetSec: value.startOffsetSec }
+      : {}),
+    ...(typeof value.endOffsetSec === 'number' && Number.isFinite(value.endOffsetSec)
+      ? { endOffsetSec: value.endOffsetSec }
+      : {}),
+  };
+}
+
+function normalizeShotAudioSpec(value: unknown): ShotAudioSpec | undefined {
+  if (!isRecord(value)) return undefined;
+  const ambience = text(value.ambience).trim();
+  const bgmCue = text(value.bgmCue).trim();
+  return {
+    mode: oneOf(value.mode, SHOT_AUDIO_MODES, 'native_video_audio'),
+    dialogues: asRecordArray(value.dialogues)
+      .map(normalizeDialogueLine)
+      .filter((item): item is DialogueLine => item !== null),
+    sfx: textArray(value.sfx),
+    ...(ambience ? { ambience } : {}),
+    ...(bgmCue ? { bgmCue } : {}),
+    suppressEmbeddedSubtitles:
+      typeof value.suppressEmbeddedSubtitles === 'boolean'
+        ? value.suppressEmbeddedSubtitles
+        : true,
+  };
+}
+
+function normalizePropAsset(value: unknown): PropAsset | null {
+  if (!isRecord(value)) return null;
+  const name = text(value.name).trim();
+  if (!name) return null;
+  const ownerCharacterId = text(value.ownerCharacterId).trim();
+  const canonicalImageAssetId = text(value.canonicalImageAssetId).trim();
+  return {
+    id: text(value.id) || newId('prop'),
+    name,
+    canonicalTraits: text(value.canonicalTraits),
+    ...(ownerCharacterId ? { ownerCharacterId } : {}),
+    ...(canonicalImageAssetId ? { canonicalImageAssetId } : {}),
+    ...(typeof value.locked === 'boolean' ? { locked: value.locked } : {}),
+  };
+}
+
+function normalizeEntityStateDelta(value: unknown): EntityStateDelta | null {
+  if (!isRecord(value)) return null;
+  const entityId = text(value.entityId).trim();
+  if (!entityId) return null;
+  const rawAttrs = isRecord(value.changeableAttrs) ? value.changeableAttrs : {};
+  const changeableAttrs: Record<string, string> = {};
+  for (const [k, v] of Object.entries(rawAttrs)) {
+    if (typeof v === 'string' && v.trim()) {
+      changeableAttrs[k] = v.trim();
+    }
+  }
+  return {
+    entityType: oneOf(value.entityType, STATE_DELTA_ENTITY_TYPES, 'character'),
+    entityId,
+    changeableAttrs,
+    reason: text(value.reason),
+  };
+}
+
+function normalizeShotGroup(value: unknown): ShotGroup | null {
+  if (!isRecord(value)) return null;
+  const shotIds = textArray(value.shotIds);
+  if (shotIds.length === 0) return null;
+  const masterStyleAnchor = text(value.masterStyleAnchor).trim();
+  return {
+    id: text(value.id) || newId('group'),
+    sceneId: text(value.sceneId),
+    title: text(value.title, '连续镜头组'),
+    shotIds,
+    renderStrategy: oneOf(value.renderStrategy, SHOT_GROUP_STRATEGIES, 'native_multi_shot'),
+    ...(masterStyleAnchor ? { masterStyleAnchor } : {}),
+  };
+}
 
 function normalizeVariant(value: unknown): Variant | null {
   if (!isRecord(value)) return null;
@@ -467,6 +600,7 @@ function normalizeLock(value: unknown): ContinuityLock | null {
 function normalizeCharacter(value: unknown, now: string): CharacterCard | null {
   if (!isRecord(value)) return null;
   const identity = isRecord(value.identity) ? value.identity : {};
+  const voiceProfile = normalizeVoiceProfile(value.voiceProfile);
   return {
     ...(value as unknown as CharacterCard),
     id: text(value.id) || newId('char'),
@@ -490,6 +624,7 @@ function normalizeCharacter(value: unknown, now: string): CharacterCard | null {
       .map(normalizeLock)
       .filter((item): item is ContinuityLock => item !== null),
     shotIds: textArray(value.shotIds),
+    ...(voiceProfile ? { voiceProfile } : {}),
     schemaVersion: finiteNumber(value.schemaVersion, SCHEMA_VERSION),
     createdAt: text(value.createdAt, now),
     updatedAt: text(value.updatedAt, now),
@@ -568,6 +703,14 @@ function normalizeShot(value: unknown, index: number): Shot | null {
         ? null
         : undefined;
 
+  const audioSpec = normalizeShotAudioSpec(value.audioSpec);
+  const stateDeltas = Array.isArray(value.stateDeltas)
+    ? asRecordArray(value.stateDeltas)
+        .map(normalizeEntityStateDelta)
+        .filter((item): item is EntityStateDelta => item !== null)
+    : undefined;
+  const shotGroupId = text(value.shotGroupId).trim();
+
   return {
     ...(value as unknown as Shot),
     id: text(value.id) || newId('shot'),
@@ -599,6 +742,10 @@ function normalizeShot(value: unknown, index: number): Shot | null {
     ...(Array.isArray(value.referencedAssetTags)
       ? { referencedAssetTags: textArray(value.referencedAssetTags) }
       : {}),
+    ...(audioSpec ? { audioSpec } : {}),
+    ...(Array.isArray(value.propIds) ? { propIds: textArray(value.propIds) } : {}),
+    ...(stateDeltas ? { stateDeltas } : {}),
+    ...(shotGroupId ? { shotGroupId } : {}),
   };
 }
 
@@ -665,6 +812,20 @@ export function normalizeProject(input: unknown): Project {
           visualAssets: asRecordArray(raw.visualAssets)
             .map(normalizeVisualAsset)
             .filter((item): item is VisualAsset => item !== null),
+        }
+      : {}),
+    ...(Array.isArray(raw.props)
+      ? {
+          props: asRecordArray(raw.props)
+            .map(normalizePropAsset)
+            .filter((item): item is PropAsset => item !== null),
+        }
+      : {}),
+    ...(Array.isArray(raw.shotGroups)
+      ? {
+          shotGroups: asRecordArray(raw.shotGroups)
+            .map(normalizeShotGroup)
+            .filter((item): item is ShotGroup => item !== null),
         }
       : {}),
   };

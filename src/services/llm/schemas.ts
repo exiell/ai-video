@@ -118,6 +118,49 @@ const continuityLockSchema = z.object({
   appliesTo: z.enum(['look', 'geography', 'lighting', 'prop', 'composition']).default('look'),
 });
 
+const voiceProfileSchema = z.object({
+  language: z.enum(['zh', 'en', 'ja', 'ko', 'es', 'auto']).default('zh'),
+  dialectOrAccent: z.string().max(MAX_ENTITY_NAME_CHARS).optional(),
+  timbreNote: z.string().max(MAX_SHOT_SHORT_CHARS).default(''),
+  voiceId: z.string().max(MAX_ENTITY_NAME_CHARS).optional(),
+  referenceVoiceUrl: z.string().max(MAX_IDENTITY_CHARS).optional(),
+});
+
+const propAssetSchema = z.object({
+  slug,
+  name: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+  canonicalTraits: z.string().max(MAX_IDENTITY_CHARS).default(''),
+  ownerCharacterSlug: slug.optional(),
+});
+
+const dialogueLineSchema = z.object({
+  speakerSlug: slug.optional(),
+  speakerLabel: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+  text: z.string().min(1).max(MAX_SHOT_TEXT_CHARS),
+  emotionTone: z.string().max(MAX_ENTITY_NAME_CHARS).optional(),
+  delivery: z
+    .enum(['on_screen_lip_sync', 'off_screen_vo', 'inner_monologue'])
+    .default('on_screen_lip_sync'),
+  startOffsetSec: z.coerce.number().min(0).max(60).optional(),
+  endOffsetSec: z.coerce.number().min(0).max(60).optional(),
+});
+
+const shotAudioSpecSchema = z.object({
+  mode: z.enum(['native_video_audio', 'external_tts_dub', 'silent']).default('native_video_audio'),
+  dialogues: z.array(dialogueLineSchema).max(12).default([]),
+  sfx: z.array(z.string().max(MAX_ENTITY_NAME_CHARS)).max(12).default([]),
+  ambience: z.string().max(MAX_SHOT_SHORT_CHARS).optional(),
+  bgmCue: z.string().max(MAX_SHOT_SHORT_CHARS).optional(),
+  suppressEmbeddedSubtitles: z.boolean().default(true),
+});
+
+const stateDeltaSchema = z.object({
+  entityType: z.enum(['character', 'scene', 'prop']).default('character'),
+  entitySlug: slug,
+  changeableAttrs: z.record(z.string(), z.string().max(MAX_SHOT_SHORT_CHARS)).default({}),
+  reason: z.string().max(MAX_SHOT_SHORT_CHARS).default(''),
+});
+
 export const assetsSchema = z.object({
   hasSentientCharacters: z.boolean().optional(),
   characters: z
@@ -150,6 +193,7 @@ export const assetsSchema = z.object({
           )
           .max(MAX_VARIANTS)
           .default([]),
+        voiceProfile: voiceProfileSchema.optional(),
         negativePrompt: z.string().max(MAX_IDENTITY_CHARS).optional(),
       }),
     )
@@ -179,6 +223,7 @@ export const assetsSchema = z.object({
     )
     .max(MAX_ASSETS)
     .default([]),
+  props: z.array(propAssetSchema).max(MAX_ASSETS).optional(),
 });
 
 type InferredAssets = z.infer<typeof assetsSchema>;
@@ -325,6 +370,9 @@ export const shotsSchema = z.object({
         onScreenLabels: z.array(z.string().max(MAX_ENTITY_NAME_CHARS)).max(8).optional(),
         codeRenderSpec: z.string().max(MAX_SHOT_TEXT_CHARS).nullable().optional(),
         referencedAssetTags: z.array(z.string().max(MAX_ENTITY_NAME_CHARS)).max(20).optional(),
+        audioSpec: shotAudioSpecSchema.optional(),
+        propSlugs: z.array(slug).max(MAX_REFERENCES).optional(),
+        stateDeltas: z.array(stateDeltaSchema).max(12).optional(),
       }),
     )
     .min(1)

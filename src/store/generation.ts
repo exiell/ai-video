@@ -365,6 +365,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
     useAppStore.getState().patchProject({
       characters: sanitized.characters,
       scenes: mapping.scenes,
+      ...(mapping.props ? { props: mapping.props } : {}),
       visualAssets: sanitized.visualAssets,
       stageStatus: {
         ...project.stageStatus,
@@ -897,6 +898,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
         useAppStore.getState().patchProject({
           characters: sanitized.characters,
           scenes: mapping.scenes,
+          ...(mapping.props ? { props: mapping.props } : {}),
           visualAssets: sanitized.visualAssets,
           stageStatus: {
             ...p2.stageStatus,

@@ -1,4 +1,13 @@
-import type { CharacterCard, SceneCard, Shot, Story, VisualAsset } from '../../types/model';
+import type {
+  CharacterCard,
+  EntityStateDelta,
+  PropAsset,
+  SceneCard,
+  Shot,
+  ShotAudioSpec,
+  Story,
+  VisualAsset,
+} from '../../types/model';
 import { SCHEMA_VERSION } from '../../types/model';
 import { newId } from '../storage';
 import type {
@@ -55,9 +64,11 @@ export function storyFromGenerated(generated: GeneratedStory, previous?: Story |
 export interface AssetMapping {
   characters: CharacterCard[];
   scenes: SceneCard[];
+  props?: PropAsset[];
   /** slug → 真实 id */
   characterIdBySlug: Map<string, string>;
   sceneIdBySlug: Map<string, string>;
+  propIdBySlug?: Map<string, string>;
   /** 锁的 label → 真实 id */
   lockIdByLabel: Map<string, string>;
   /**
@@ -133,7 +144,37 @@ export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
       }),
       continuityLocks,
       shotIds: [],
+      ...(c.voiceProfile
+        ? {
+            voiceProfile: {
+              language: c.voiceProfile.language,
+              timbreNote: c.voiceProfile.timbreNote,
+              ...(c.voiceProfile.voiceId ? { voiceId: c.voiceProfile.voiceId } : {}),
+              ...(c.voiceProfile.referenceVoiceUrl
+                ? { referenceVoiceUrl: c.voiceProfile.referenceVoiceUrl }
+                : {}),
+              ...(c.voiceProfile.dialectOrAccent
+                ? { dialectOrAccent: c.voiceProfile.dialectOrAccent }
+                : {}),
+            },
+          }
+        : {}),
       ...(c.negativePrompt ? { negativePrompt: c.negativePrompt } : {}),
+    };
+  });
+
+  const propIdBySlug = new Map<string, string>();
+  const props: PropAsset[] = (generated.props ?? []).map((p) => {
+    const id = newId('prop');
+    propIdBySlug.set(p.slug, id);
+    const ownerCharacterId = p.ownerCharacterSlug
+      ? characterIdBySlug.get(p.ownerCharacterSlug)
+      : undefined;
+    return {
+      id,
+      name: p.name,
+      canonicalTraits: p.canonicalTraits,
+      ...(ownerCharacterId ? { ownerCharacterId } : {}),
     };
   });
 
@@ -166,6 +207,7 @@ export function assetsFromGenerated(generated: GeneratedAssets): AssetMapping {
   return {
     characters,
     scenes,
+    ...(props.length > 0 ? { props, propIdBySlug } : {}),
     characterIdBySlug,
     sceneIdBySlug,
     lockIdByLabel,
@@ -265,6 +307,55 @@ export function shotsFromGenerated(
       unresolvedByShot.push(`第 ${index + 1} 镜：${unresolved.join('、')}`);
     }
 
+    const propIds: string[] = [];
+    for (const propSlug of g.propSlugs ?? []) {
+      const id = mapping.propIdBySlug?.get(propSlug);
+      if (id) propIds.push(id);
+    }
+
+    const audioSpec: ShotAudioSpec | undefined = g.audioSpec
+      ? {
+          mode: g.audioSpec.mode,
+          dialogues: g.audioSpec.dialogues.map((line) => {
+            const speakerCharacterId = line.speakerSlug
+              ? mapping.characterIdBySlug.get(line.speakerSlug)
+              : undefined;
+            return {
+              id: newId('dlg'),
+              ...(speakerCharacterId ? { speakerCharacterId } : {}),
+              speakerLabel: line.speakerLabel,
+              text: line.text,
+              ...(line.emotionTone ? { emotionTone: line.emotionTone } : {}),
+              delivery: line.delivery,
+              ...(line.startOffsetSec !== undefined ? { startOffsetSec: line.startOffsetSec } : {}),
+              ...(line.endOffsetSec !== undefined ? { endOffsetSec: line.endOffsetSec } : {}),
+            };
+          }),
+          sfx: g.audioSpec.sfx,
+          ...(g.audioSpec.ambience ? { ambience: g.audioSpec.ambience } : {}),
+          ...(g.audioSpec.bgmCue ? { bgmCue: g.audioSpec.bgmCue } : {}),
+          suppressEmbeddedSubtitles: g.audioSpec.suppressEmbeddedSubtitles,
+        }
+      : undefined;
+
+    const stateDeltas: EntityStateDelta[] = [];
+    for (const delta of g.stateDeltas ?? []) {
+      const entityId =
+        delta.entityType === 'character'
+          ? mapping.characterIdBySlug.get(delta.entitySlug)
+          : delta.entityType === 'scene'
+            ? mapping.sceneIdBySlug.get(delta.entitySlug)
+            : mapping.propIdBySlug?.get(delta.entitySlug);
+      if (entityId) {
+        stateDeltas.push({
+          entityType: delta.entityType,
+          entityId,
+          changeableAttrs: delta.changeableAttrs,
+          reason: delta.reason,
+        });
+      }
+    }
+
     return {
       id: newId('shot'),
       number: index + 1,
@@ -297,6 +388,9 @@ export function shotsFromGenerated(
       ...(g.onScreenLabels ? { onScreenLabels: g.onScreenLabels } : {}),
       ...(g.codeRenderSpec !== undefined ? { codeRenderSpec: g.codeRenderSpec } : {}),
       ...(g.referencedAssetTags ? { referencedAssetTags: g.referencedAssetTags } : {}),
+      ...(audioSpec ? { audioSpec } : {}),
+      ...(propIds.length > 0 ? { propIds } : {}),
+      ...(stateDeltas.length > 0 ? { stateDeltas } : {}),
     };
   });
 

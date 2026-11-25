@@ -3,6 +3,8 @@ import { checkCharacters } from './characters';
 import { checkScenes } from './scenes';
 import { checkStoryboard } from './storyboard';
 import { checkContinuity } from './continuity';
+import { checkAudio } from './audio';
+import { checkStateAndCamera } from './stateDelta';
 
 /**
  * 穿帮检查引擎总入口（方案.md v0.6 §3.2 / §7.2 任务 5）
@@ -85,6 +87,10 @@ export const RULE_LABEL: Record<string, string> = {
   'adjacent-same-shot-size': '相邻镜同景别',
   'pronoun-in-visual': '提示词里用了代词',
   'abstract-emotion': '情绪写成抽象词',
+  'audio-dialogue-overflow': '台词时长超限',
+  'audio-voice-timbre-conflict': '参考音频与文字音色冲突',
+  'camera-multi-move-conflict': '单镜多运镜冲突',
+  'state-delta-undeclared': '跨镜状态变化未声明',
 };
 
 export function runChecks(project: Project): CheckReport {
@@ -93,6 +99,8 @@ export function runChecks(project: Project): CheckReport {
     ...checkScenes(project),
     ...checkStoryboard(project),
     ...checkContinuity(project),
+    ...checkAudio(project),
+    ...checkStateAndCamera(project),
   ];
 
   issues.sort((a, b) => {
@@ -111,4 +119,4 @@ export function runChecks(project: Project): CheckReport {
   };
 }
 
-export { checkCharacters, checkScenes, checkStoryboard, checkContinuity };
+export { checkCharacters, checkScenes, checkStoryboard, checkContinuity, checkAudio, checkStateAndCamera };

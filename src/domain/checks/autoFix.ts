@@ -1,4 +1,6 @@
 import type { CheckIssue, Project, Shot } from '../../types/model';
+import { CAMERA_MOVE_LABEL } from '../../types/model';
+import { stripConflictingCameraMoves } from './stateDelta';
 
 /**
  * 穿帮问题的自动修复提议（方案.md §7.6.5）
@@ -25,7 +27,8 @@ export type FixKind =
   | 'fill-end-state'
   | 'fill-action'
   | 'add-shot-for-scene'
-  | 'set-brief';
+  | 'set-brief'
+  | 'normalize-camera-move';
 
 export interface FixProposal {
   /** 稳定 id，供界面勾选 */
@@ -222,6 +225,31 @@ export function buildFixPlan(project: Project, report: { issues: CheckIssue[] },
           after: missingStyle ? 'anime style, cel shading, clean line art' : '16:9',
           sideEffect: '风格词是通用的默认值，强烈建议按你的题材在「引导向导」里换成合适的预设。',
         });
+        break;
+      }
+
+      // ---------------------------------------------------------------
+      // 单镜多运镜冲突：保留主运镜，清理机位描述里的多余运镜词
+      // ---------------------------------------------------------------
+      case 'camera-multi-move-conflict': {
+        if (issue.location.kind !== 'shot') break;
+        const shot = shotById.get(issue.location.id);
+        if (!shot || !shot.cameraPosition.trim()) break;
+        const cleaned = stripConflictingCameraMoves(shot.cameraPosition, shot.cameraMove);
+        if (cleaned === shot.cameraPosition.trim()) break;
+        proposals.push({
+          id: `fix:${issue.id}`,
+          kind: 'normalize-camera-move',
+          issueId: issue.id,
+          title: `第 ${shot.number} 镜仅保留主运镜「${CAMERA_MOVE_LABEL[shot.cameraMove]}」`,
+          reason:
+            '机位说明里写进了和主运镜冲突的其他运镜词，视频模型同时执行多个运镜容易眩晕或变形。',
+          target: { shotId: shot.id },
+          before: shot.cameraPosition,
+          after: cleaned || '（仅按主运镜执行）',
+          sideEffect: '只清理机位备注里的冲突运镜词，不改动分镜的动作描写。',
+        });
+        affected.add(shot.id);
         break;
       }
 
@@ -517,6 +545,11 @@ function applyOne(project: Project, proposal: FixProposal): boolean {
         return true;
       }
       return false;
+    }
+    case 'normalize-camera-move': {
+      if (!shot) return false;
+      shot.cameraPosition = stripConflictingCameraMoves(shot.cameraPosition, shot.cameraMove);
+      return true;
     }
     case 'register-scene':
     case 'add-shot-for-scene':
