@@ -12,6 +12,7 @@ import { ShotExplainerSection } from '../components/storyboard/ShotExplainerSect
 import { StoryboardToolsDrawer } from '../components/storyboard/StoryboardToolsDrawer';
 import { ShotGroupBar } from '../components/storyboard/ShotGroupBar';
 import { ShotAudioStateFold } from '../components/storyboard/ShotAudioStateFold';
+import { ShotVisualQaFold } from '../components/storyboard/ShotVisualQaFold';
 import { useImage } from '../store/image';
 import { useVideo, videoClipKey } from '../store/video';
 import { VideoPanel } from '../components/VideoPanel';
@@ -1248,6 +1249,12 @@ export function StoryboardPage() {
                       project={project}
                       shot={shot}
                       onPatch={(changes) => patch(shot, changes)}
+                    />
+                    <ShotVisualQaFold
+                      project={project}
+                      shot={shot}
+                      shotAssets={gallery[shot.id] ?? []}
+                      gallery={gallery}
                     />
                   </div>
 

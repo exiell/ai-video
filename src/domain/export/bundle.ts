@@ -12,6 +12,10 @@ import {
   storyboardToCsv,
   storyboardToMarkdown,
 } from './index';
+import { exportToOtioJson } from './otio';
+import { exportToFcpxml } from './fcpxml';
+import { exportToJianyingDraft } from './jianyingDraft';
+import { exportToSrt } from './srt';
 
 /**
  * 打包下载（方案.md §1.5 / §7.5 M6）
@@ -221,6 +225,8 @@ export function consistencyReportMarkdown(project: Project, assets: Asset[]): st
 export interface ExportOptions {
   /** 项目里的图片素材。传了它才会生成图包与一致性总览。 */
   assets?: Asset[];
+  /** 可选：各镜头已落盘的本地视频文件路径（用于剪辑时间线直接链接本地素材） */
+  clipPathsByShotId?: Record<string, string>;
 }
 
 /**
@@ -327,6 +333,22 @@ export function buildExportManifest(
       path: `${REFERENCE_DIR}/一致性总览.md`,
       content: consistencyReportMarkdown(project, assets),
     });
+  }
+
+  // 剪辑软件与剪映时间线工程（统一收进「参考文档/剪辑时间线」，不打乱根目录 5 项分工）
+  const nleOpts = options.clipPathsByShotId
+    ? { clipPathsByShotId: options.clipPathsByShotId }
+    : {};
+  const jianying = exportToJianyingDraft(project, nleOpts);
+  entries.push(
+    { path: `${REFERENCE_DIR}/剪辑时间线/timeline.otio`, content: exportToOtioJson(project, nleOpts) },
+    { path: `${REFERENCE_DIR}/剪辑时间线/timeline.fcpxml`, content: exportToFcpxml(project, nleOpts) },
+    { path: `${REFERENCE_DIR}/剪辑时间线/剪映草稿/draft_content.json`, content: jianying.draftContentJson },
+    { path: `${REFERENCE_DIR}/剪辑时间线/剪映草稿/draft_meta_info.json`, content: jianying.draftMetaInfoJson },
+  );
+  const srt = exportToSrt(project);
+  if (srt.trim().length > 0) {
+    entries.push({ path: `${REFERENCE_DIR}/剪辑时间线/subtitles.srt`, content: srt });
   }
 
   entries.push({

@@ -10,13 +10,14 @@ import {
   summarizeBundle,
   type ZipEntry,
 } from '../domain/export/bundle';
-import { deleteProject, listAssets } from '../services/storage';
+import { deleteProject, listAssets, listVideoClipsForShot } from '../services/storage';
 import { importProjectFile } from '../services/storage/importBundle';
 import { runChecks } from '../domain/checks';
 import type { Asset } from '../types/model';
 import { ASSET_KIND_LABEL } from '../types/model';
 import { isDesktopApp } from '../platform';
 import { revealSavedFile, saveExportFile } from '../platform/fileExport';
+import { NleContactSheetCard } from '../components/export/NleContactSheetCard';
 
 /**
  * M6 导出（方案.md §1.5 / §7.5）
@@ -33,6 +34,7 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
   const report = useAppStore((s) => s.report);
   const setProject = useAppStore((s) => s.setProject);
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [clipPathsByShotId, setClipPathsByShotId] = useState<Record<string, string>>({});
   const [importError, setImportError] = useState<string | null>(null);
   const [importOk, setImportOk] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -40,7 +42,31 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   useEffect(() => {
     if (!project) return;
-    void listAssets(project.id).then(setAssets);
+    let alive = true;
+    void listAssets(project.id).then((rows) => {
+      if (alive) setAssets(rows);
+    });
+    void Promise.all(
+      project.shots.map(async (shot) => {
+        const clips = await listVideoClipsForShot(project.id, shot.id);
+        const path = clips[0]?.localMediaPath;
+        return path ? ([shot.id, path] as const) : null;
+      }),
+    )
+      .then((pairs) => {
+        if (!alive) return;
+        const map: Record<string, string> = {};
+        for (const item of pairs) {
+          if (item) map[item[0]] = item[1];
+        }
+        setClipPathsByShotId(map);
+      })
+      .catch(() => {
+        if (alive) setClipPathsByShotId({});
+      });
+    return () => {
+      alive = false;
+    };
   }, [project]);
 
   if (!project) {
@@ -48,7 +74,7 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   const currentReport = report ?? runChecks(project);
-  const entries = buildExportManifest(project, currentReport, { assets });
+  const entries = buildExportManifest(project, currentReport, { assets, clipPathsByShotId });
   const summary = summarizeBundle(entries);
   const imageAssets = assets.filter((a) => a.dataUrl);
 
@@ -161,6 +187,13 @@ export function ExportPage({ embedded = false }: { embedded?: boolean } = {}) {
           </Link>
         </div>
       ) : null}
+
+      <NleContactSheetCard
+        project={project}
+        assets={assets}
+        clipPathsByShotId={clipPathsByShotId}
+        onNotice={setExportNotice}
+      />
 
       <div className="card">
         <h2 className="card-title">压缩包内容</h2>
@@ -361,6 +394,11 @@ function describeText(path: string): string {
   if (name === '图片提示词.md')
     return '角色 / 场景 / 三帧的出图提示词。拿到任何模型里都能出图，不限本工具支持的厂商';
   if (name === '项目数据.json') return '备份用。导入它可以完整恢复这个项目的文本部分';
+  if (name === 'timeline.otio') return 'OpenTimelineIO 专业时间线，可导入达芬奇 / Premiere / Blender';
+  if (name === 'timeline.fcpxml') return 'Final Cut Pro / 达芬奇（DaVinci Resolve）标准时间线 XML';
+  if (name === 'draft_content.json') return '剪映 / CapCut 草稿主时间线工程（含视频轨与字幕轨）';
+  if (name === 'draft_meta_info.json') return '剪映 / CapCut 草稿元信息配置';
+  if (name === 'subtitles.srt') return '标准 UTF-8 外挂字幕轨，与无字幕视频配套使用';
   if (path.startsWith('视频提示词★/')) return '直接复制去平台：每镜英文正文 + 中文对照';
   return '';
 }

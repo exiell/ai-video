@@ -600,9 +600,13 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 // 载荷构造
 // ---------------------------------------------------------------------------
 
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string; detail?: 'low' | 'high' | 'auto' } };
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | ChatContentPart[];
 }
 
 export interface ChatJsonSchemaSpec {
