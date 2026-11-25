@@ -41,7 +41,7 @@ export const VIDEO_MODEL_CAPABILITIES: Record<TargetPlatform, VideoModelCapabili
   },
   veo: {
     platform: 'veo',
-    supportsNativeNegativePrompt: true,
+    supportsNativeNegativePrompt: false,
     supportsFirstLastFrame: true,
     maxReferenceImages: 3,
     supportsNativeAudio: true,

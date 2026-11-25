@@ -2,14 +2,14 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { RichText, SummaryBar } from '../components/bits';
-import { GenerateBar } from '../components/GenerateBar';
 import { AiFlowGuide } from '../components/AiFlowGuide';
 import { AutoFixPanel } from '../components/AutoFixPanel';
 import { Icon } from '../components/Icon';
 import { SelectMenu } from '../components/SelectMenu';
 import { useGeneration } from '../store/generation';
 import { AssetGallery, AssetPeek, ImagePanel } from '../components/ImagePanel';
-import { BatchGenerateCard } from '../components/BatchGenerateCard';
+import { ShotExplainerSection } from '../components/storyboard/ShotExplainerSection';
+import { StoryboardToolsDrawer } from '../components/storyboard/StoryboardToolsDrawer';
 import { useImage } from '../store/image';
 import { useVideo, videoClipKey } from '../store/video';
 import { VideoPanel } from '../components/VideoPanel';
@@ -451,53 +451,12 @@ export function StoryboardPage() {
         </div>
       ) : null}
 
-      <details className="tools-drawer" ref={toolsRef}>
-        <summary>
-          <span className="tools-drawer-title">
-            <Icon name="sparkles" size={14} className="tools-icon" />
-            AI 生成与批量出图
-          </span>
-          <Icon name="chevron-right" size={15} className="expand-chevron tools-drawer-chevron" />
-        </summary>
-        <div className="tools-drawer-body">
-          <div className="card">
-            <h2 className="card-title">分镜生成</h2>
-            <GenerateBar
-              task="assets"
-              label={
-                videoMode === 'scenic'
-                  ? '① 锁定视觉圣经与宏观环境'
-                  : videoMode === 'explainer'
-                    ? '① 锁定风格预设与视觉母题'
-                    : '① 从故事里拆角色与场景'
-              }
-              hint={
-                videoMode === 'scenic'
-                  ? `当前已有 ${project.scenes.length} 个宏观环境、${visualAssets.length} 项环境锚点（无角色模式已跳过角色）。重新生成会覆盖它们。`
-                  : videoMode === 'explainer'
-                    ? `当前已有 ${visualAssets.length} 项视觉母题${charEnabled ? `、${project.characters.length} 个虚拟讲解员` : '（已跳过角色与物理场景）'}。重新生成会覆盖它们。`
-                    : `当前已有 ${project.characters.length} 个角色、${project.scenes.length} 个场景。重新生成会覆盖它们。`
-              }
-            />
-            <GenerateBar
-              task="shots"
-              label="② 生成分镜表"
-              hint={
-                project.story.body.trim()
-                  ? videoMode === 'scenic'
-                    ? '会把脚本拆成自然风光镜头，并绑定视觉圣经与环境锚点。'
-                    : videoMode === 'explainer'
-                      ? '会把解说脚本拆成概念节拍镜头，并生成视觉隐喻与旁白时间轴。'
-                      : '会把故事拆成镜头，并自动挂好场景、角色和连续性锁。'
-                  : '内容还是空的，先去故事页写正文或让模型起草。'
-              }
-            />
-          </div>
-          <BatchGenerateCard
-            tasks={['characters', 'scenes', 'all-frames', 'first-frame', 'action-peak', 'end-frame']}
-          />
-        </div>
-      </details>
+      <StoryboardToolsDrawer
+        drawerRef={toolsRef}
+        project={project}
+        videoMode={videoMode}
+        charEnabled={charEnabled}
+      />
 
       {/* 内置穿帮质检与自动修复面板（折叠滑出，不离开分镜页） */}
       {qcOpen ? (
@@ -909,76 +868,7 @@ export function StoryboardPage() {
                     </div>
 
                     {videoMode === 'explainer' ? (
-                      <div className="shot-continuity-box" style={{ marginBottom: 12 }}>
-                        <div className="shot-block-label">
-                          <Icon name="sparkles" size={14} />
-                          <span>
-                            科普节拍与视觉隐喻
-                            {shot.narrationTimeRangeSec
-                              ? `（${shot.narrationTimeRangeSec[0]}s – ${shot.narrationTimeRangeSec[1]}s）`
-                              : ''}
-                          </span>
-                        </div>
-                        <div className="grid-2">
-                          <div>
-                            <div className="field-label">本镜旁白</div>
-                            <textarea
-                              rows={2}
-                              aria-label={`第 ${shot.number} 镜的科普旁白`}
-                              value={shot.narrationText ?? shot.dialogue}
-                              onChange={(e) =>
-                                patch(shot, {
-                                  narrationText: e.target.value,
-                                  dialogue: e.target.value,
-                                })
-                              }
-                              placeholder="这一节拍对应的连续解说词（20-30 词讲清 1 个核心概念）"
-                            />
-                          </div>
-                          <div>
-                            <div className="field-label">视觉隐喻转译</div>
-                            <textarea
-                              rows={2}
-                              aria-label={`第 ${shot.number} 镜的视觉隐喻`}
-                              value={shot.visualMetaphor ?? ''}
-                              onChange={(e) => patch(shot, { visualMetaphor: e.target.value })}
-                              placeholder="把抽象概念变成可画出来的物理类比（如尺度缩放、对比、过程推演）"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid-2" style={{ marginTop: 8 }}>
-                          <div>
-                            <div className="field-label">屏幕简短标注（用、分隔，限 3-5 词）</div>
-                            <input
-                              type="text"
-                              aria-label={`第 ${shot.number} 镜的屏幕标注`}
-                              value={(shot.onScreenLabels ?? []).join('、')}
-                              onChange={(e) =>
-                                patch(shot, {
-                                  onScreenLabels: e.target.value
-                                    .split(/[、,，]+/)
-                                    .map((s) => s.trim())
-                                    .filter(Boolean),
-                                })
-                              }
-                              placeholder="例：量子纠缠、无法超光速传信"
-                            />
-                          </div>
-                          {shot.renderEngine === 'html_hyperframes' ||
-                          shot.renderEngine === 'manim' ? (
-                            <div>
-                              <div className="field-label">代码渲染指令（预留）</div>
-                              <input
-                                type="text"
-                                aria-label={`第 ${shot.number} 镜的代码渲染指令`}
-                                value={shot.codeRenderSpec ?? ''}
-                                onChange={(e) => patch(shot, { codeRenderSpec: e.target.value })}
-                                placeholder="供 HTML 动效或 Manim 公式动画使用的渲染说明"
-                              />
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
+                      <ShotExplainerSection shot={shot} onPatch={(changes) => patch(shot, changes)} />
                     ) : null}
 
                     {/* 防穿帮锚点区 */}

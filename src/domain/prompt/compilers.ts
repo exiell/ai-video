@@ -16,12 +16,26 @@ import {
 import {
   SHOT_RENDER_ENGINE_LABEL,
   makeDefaultVisualBible,
+  resolveVideoMode,
 } from '../pipeline/profiles';
 import {
   ModelExclusionAdapter,
   computeTailFrameOffsetSec,
   sanitizeExplainerSafetyTerms,
 } from './modelExclusion';
+import {
+  resolveVideoDialect,
+  type VideoModelDialect,
+  type VideoPromptMode,
+} from '../../data/models/videoDialects';
+import { filterI2vMotionPrompt } from './i2vMotionFilter';
+import { processNegativePrompt } from './negativeRewriter';
+import {
+  compileReferenceBindings,
+  formatMiniMaxCameraCommand,
+  stripProseParameters,
+  type ReferenceMediaItem,
+} from './refSyntax';
 
 /**
  * 策略模式提示词编译器簇（Phase 4 · 第五层防呆）
@@ -267,8 +281,219 @@ export class PromptCompilerFactory {
     if (mode === 'scenic') return this.scenicCompiler;
     if (mode === 'explainer') return this.explainerCompiler;
     if (!this.narrativeCompiler) {
-      throw new Error('NarrativePromptCompiler is not registered.');
+      // 允许独立导入 compilers.ts（未先加载 index.ts）时仍有安全的叙事兜底编译
+      return new NarrativePromptCompiler((project, shot, platform) => {
+        const scene = project.scenes.find((s) => s.id === shot.sceneId);
+        const chars = project.characters.filter((c) => shot.characterIds.includes(c.id));
+        const parts = [
+          scene ? scene.identity.summaryEn || scene.name : '',
+          ...chars.map((c) => c.identity.summaryEn || c.name),
+          `${SHOT_SIZE_EN[shot.shotSize]}, ${CAMERA_MOVE_EN[shot.cameraMove]}`,
+          shot.startState.trim(),
+          shot.action.trim(),
+          shot.endState.trim(),
+          ...project.brief.styleTags,
+          project.brief.aspectRatio ? `${project.brief.aspectRatio} aspect ratio` : '',
+        ].filter(Boolean);
+        return {
+          en: parts.join(', '),
+          zh: `【场景】${scene?.name ?? '未指定场景'}\n【动作】${shot.action}\n【目标平台】${PLATFORM_LABEL[platform]}`,
+          notes: [],
+        };
+      });
     }
     return this.narrativeCompiler;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1：三段式视频模型方言编译器（T2V/I2V 分流 + 负向词改写 + 槽位语法 + 参数剥离）
+// ---------------------------------------------------------------------------
+
+export interface CompileVideoDialectOptions {
+  project: Project;
+  shot: Shot;
+  /** 目标方言 ID（如 kling_3 / veo_3_1 / seedance_2_5 / runway_gen4_5）或平台枚举 */
+  dialectIdOrPlatform: string;
+  /** 生成模式：默认 i2v_motion_only（已有首帧时剥离静态外貌） */
+  promptMode?: VideoPromptMode;
+  /** 参与绑定的多模态参考素材 */
+  references?: readonly ReferenceMediaItem[];
+  /** 是否同时传入了首尾帧（用于 Seedance 互斥校验） */
+  hasFirstLastFrame?: boolean;
+  /** 目标分辨率（用于 Veo 3.1 / Hailuo 时长硬锁校验） */
+  resolution?: '480P' | '540P' | '720P' | '1080P' | '4K';
+  /** 仅在新元素入画或剧烈转场时传入增量视觉说明 */
+  incrementalVisualNote?: string;
+  /** 是否防画面烤死乱码字幕，默认 true */
+  suppressEmbeddedSubtitles?: boolean;
+  /** 覆盖说话人名称 */
+  speakerLabel?: string;
+}
+
+export interface CompiledVideoDialectPrompt {
+  ok: boolean;
+  dialect: VideoModelDialect;
+  promptMode: VideoPromptMode;
+  prompt: string;
+  negativePrompt: string;
+  zhSummary: string;
+  referenceTokens: string[];
+  strippedStaticAppearance: boolean;
+  strippedProseParams: boolean;
+  rewrittenToPositive: string[];
+  lockedDurationSec?: number;
+  apiHints: {
+    promptOptimizer?: boolean;
+    durationSec: number;
+  };
+  errors: string[];
+  warnings: string[];
+}
+
+export function compileVideoDialectPrompt(
+  options: CompileVideoDialectOptions,
+): CompiledVideoDialectPrompt {
+  const { project, shot } = options;
+  const dialect = resolveVideoDialect(options.dialectIdOrPlatform);
+  const videoMode = resolveVideoMode(project);
+  const promptMode: VideoPromptMode = options.promptMode ?? 'i2v_motion_only';
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  if (!dialect.supportedModes.includes(promptMode)) {
+    warnings.push(
+      `${dialect.label} 官方未原生声明支持「${promptMode}」模式，建议切换为 ${dialect.supportedModes[0]}。`,
+    );
+  }
+
+  // 基础全量提示词（来自对应 VideoMode 的领域编译器）
+  const fallbackPlatform: TargetPlatform =
+    dialect.vendorFamily === 'minimax'
+      ? 'hailuo'
+      : dialect.vendorFamily === 'vidu' || dialect.vendorFamily === 'custom'
+        ? 'jimeng'
+        : (dialect.vendorFamily as TargetPlatform);
+
+  const baseCompiled = PromptCompilerFactory.get(videoMode).compile(
+    project,
+    shot,
+    fallbackPlatform,
+  );
+
+  // 收集静态描述清单，用于 I2V 剥离统计
+  const shotCharacters = project.characters.filter((c) => shot.characterIds.includes(c.id));
+  const shotScene = project.scenes.find((s) => s.id === shot.sceneId);
+  const staticDescriptions = [
+    ...shotCharacters.map((c) => c.identity.summaryEn || c.name),
+    ...(shotScene ? [shotScene.identity.summaryEn || shotScene.name] : []),
+  ];
+
+  // 第 1 步：T2V / I2V 分流（I2V 自动剥离首帧已有的静态外观）
+  const speakerLabel = options.speakerLabel ?? shotCharacters[0]?.name;
+  const i2vResult = filterI2vMotionPrompt({
+    dialect,
+    mode: promptMode,
+    shot,
+    fullT2vPrompt: baseCompiled.en,
+    staticDescriptions,
+    ...(options.incrementalVisualNote ? { incrementalVisualNote: options.incrementalVisualNote } : {}),
+    suppressEmbeddedSubtitles: options.suppressEmbeddedSubtitles ?? true,
+    ...(speakerLabel ? { speakerLabel } : {}),
+  });
+  warnings.push(...i2vResult.warnings);
+
+  // T2V 模式下如果是 MiniMax 方言，也确保补充官方方括号运镜语法
+  let bodyText = i2vResult.prompt;
+  if (
+    !i2vResult.strippedStatic &&
+    dialect.cameraSyntax === 'minimax_brackets' &&
+    !/\[[A-Za-z ,]+\]/.test(bodyText)
+  ) {
+    bodyText = `${bodyText}, ${formatMiniMaxCameraCommand([shot.cameraMove])}`;
+  }
+
+  // 第 2 步：参数剥离（清除正文中不应出现的 1080p / 4K / 16:9 / Duration 文本）
+  let strippedProseParams = false;
+  if (dialect.forbidProseParams) {
+    const cleaned = stripProseParameters(bodyText);
+    bodyText = cleaned.text;
+    strippedProseParams = cleaned.stripped;
+  }
+
+  // 第 3 步：多模态槽位语法编译与硬约束校验
+  const refBinding = compileReferenceBindings({
+    dialect,
+    references: options.references ?? [],
+    ...(options.hasFirstLastFrame !== undefined ? { hasFirstLastFrame: options.hasFirstLastFrame } : {}),
+    ...(options.resolution ? { resolution: options.resolution } : {}),
+    durationSec: shot.duration,
+  });
+  errors.push(...refBinding.errors);
+  warnings.push(...refBinding.warnings);
+
+  const combinedPositive = [refBinding.prefix, bodyText].filter(Boolean).join(' ').trim();
+
+  // 第 4 步：负向提示词策略分流与正向改写
+  const rawNegative = baseCompiled.negative ?? project.brief.negativePrompt;
+  const negResult = processNegativePrompt({
+    dialect,
+    positivePrompt: combinedPositive,
+    rawNegativePrompt: rawNegative,
+    videoMode,
+  });
+  if (negResult.truncated && dialect.negativeMaxChars) {
+    warnings.push(
+      `${dialect.label} 负向提示词上限为 ${dialect.negativeMaxChars} 字符，超出部分已安全截断。`,
+    );
+  }
+
+  // 第 5 步：总字符长度上限守卫
+  let finalPrompt = negResult.positivePrompt;
+  if (finalPrompt.length > dialect.promptMaxChars) {
+    finalPrompt = finalPrompt.slice(0, dialect.promptMaxChars).trim();
+    warnings.push(`${dialect.label} 正文上限 ${dialect.promptMaxChars} 字符，已按上限截断。`);
+  }
+
+  const effectiveDuration = refBinding.lockedDurationSec ?? shot.duration;
+
+  const zhLines = [
+    `【目标方言】${dialect.label}（${promptMode === 'i2v_motion_only' ? '图生视频动作精简' : promptMode}）`,
+    i2vResult.strippedStatic
+      ? `【I2V 防僵化】已剥离首帧已有的静态外观与背景描述，只保留动作、运镜与声音`
+      : `【完整描写】保留完整画面、主体与环境描述`,
+    refBinding.tokens.length > 0 ? `【参考槽位】${refBinding.tokens.join(' / ')}` : '',
+    negResult.rewrittenToPositive.length > 0
+      ? `【正向改写】已将排除意图改写为：${negResult.rewrittenToPositive.join('；')}`
+      : negResult.negativePrompt
+        ? `【原生负向词】${negResult.negativePrompt}`
+        : '',
+    refBinding.lockedDurationSec
+      ? `【时长锁定】当前规格锁定 ${refBinding.lockedDurationSec} 秒`
+      : `【时长参数】建议 API 传参 ${effectiveDuration} 秒（已从正文剥离参数）`,
+  ].filter(Boolean);
+
+  return {
+    ok: errors.length === 0,
+    dialect,
+    promptMode,
+    prompt: finalPrompt,
+    negativePrompt: negResult.negativePrompt,
+    zhSummary: zhLines.join('\n'),
+    referenceTokens: refBinding.tokens,
+    strippedStaticAppearance: i2vResult.strippedStatic,
+    strippedProseParams,
+    rewrittenToPositive: negResult.rewrittenToPositive,
+    ...(refBinding.lockedDurationSec !== undefined
+      ? { lockedDurationSec: refBinding.lockedDurationSec }
+      : {}),
+    apiHints: {
+      ...(dialect.promptOptimizerDefault !== undefined
+        ? { promptOptimizer: dialect.promptOptimizerDefault }
+        : {}),
+      durationSec: effectiveDuration,
+    },
+    errors,
+    warnings,
+  };
 }

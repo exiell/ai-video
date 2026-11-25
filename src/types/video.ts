@@ -104,6 +104,8 @@ export interface VideoJobRecord {
   progress?: number | null;
   elapsedSeconds?: number | null;
   outputClipId?: string;
+  /** 桌面端自动落盘后的本地文件路径（供剪辑软件时间线直接引用） */
+  localMediaPath?: string;
   /** 提交结果不确定时的说明；submit-uncertain 不自动重试 */
   submitUncertainReason?: string;
   /** 最近一次轮询时间 / 下次允许轮询时间（store 内部用） */
@@ -130,6 +132,12 @@ export interface VideoClipRecord {
   seed?: number;
   createdAt: string;
   byteSize: number;
+  /** 桌面端自动缓存到项目本地目录的 .mp4 绝对路径 */
+  localMediaPath?: string;
+  /** 远端若返回尾帧（如 Seedance return_last_frame），缓存本地 data URI */
+  lastFrameDataUrl?: string;
+  /** 远端链接预计过期时间（Web 端用于提醒及时导出） */
+  remoteUrlExpiresAt?: string;
 }
 
 export interface BuildReferencesResult {

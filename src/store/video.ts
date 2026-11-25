@@ -43,6 +43,7 @@ import {
   saveVideoClipReplacingShot,
   saveVideoJob,
 } from '../services/storage';
+import { cacheVideoClipLocally } from '../services/storage/mediaCache';
 
 const MAX_QUEUE = 4;
 const POLL_VISIBLE_MS = 10_000;
@@ -439,6 +440,18 @@ export const useVideo = create<VideoState>((set, get) => ({
           createdAt: new Date().toISOString(),
           byteSize: content.byteSize,
         };
+        // 轮询成功瞬间自动缓存至桌面本地目录，并记录远端过期提示时间
+        const cached = await cacheVideoClipLocally(
+          clip,
+          `${profile.provider} ${profile.baseUrl} ${profile.model}`,
+        );
+        if (cached.localMediaPath) {
+          clip.localMediaPath = cached.localMediaPath;
+          job.localMediaPath = cached.localMediaPath;
+        }
+        if (cached.remoteUrlExpiresAt) {
+          clip.remoteUrlExpiresAt = cached.remoteUrlExpiresAt;
+        }
         job.status = 'saved';
         job.outputClipId = clip.id;
         job.progress = 100;

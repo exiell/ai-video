@@ -39,6 +39,18 @@ export interface SaveBinaryResult {
   error?: string;
 }
 
+export interface CacheMediaOptions {
+  projectId: string;
+  fileName: string;
+  bytes: Uint8Array;
+}
+
+export interface CacheMediaResult {
+  ok: boolean;
+  filePath?: string;
+  error?: string;
+}
+
 export interface ThemeChromeOptions {
   bg: string;
   overlayColor: string;
@@ -55,6 +67,7 @@ export interface AniGuideDesktopAPI {
   };
   file: {
     saveBinary(opts: SaveBinaryOptions): Promise<SaveBinaryResult>;
+    cacheMedia?(opts: CacheMediaOptions): Promise<CacheMediaResult>;
     revealInFolder(filePath: string): Promise<void>;
     openUserDataDir(): Promise<void>;
   };

@@ -4,7 +4,19 @@ import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { PLATFORM_LABEL, type TargetPlatform } from '../types/model';
 import { buildAllPrompts } from '../domain/prompt';
+import { compileVideoDialectPrompt } from '../domain/prompt/compilers';
 import { ModelExclusionAdapter } from '../domain/prompt/modelExclusion';
+import {
+  PRESET_VIDEO_DIALECT_IDS,
+  VIDEO_MODEL_DIALECTS,
+  VIDEO_PROMPT_MODE_LABEL,
+  resolveVideoDialect,
+  type VideoPromptMode,
+} from '../data/models/videoDialects';
+import {
+  ShotRendererRouter,
+  type RenderTier,
+} from '../domain/pipeline/shotRendererRouter';
 import { resolveVideoMode, VIDEO_MODE_SHORT_LABEL } from '../domain/pipeline/profiles';
 
 /**
@@ -23,6 +35,9 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [params] = useSearchParams();
   const project = useAppStore((s) => s.project);
   const [platform, setPlatform] = useState<TargetPlatform | null>(null);
+  const [dialectOverride, setDialectOverride] = useState<string | null>(null);
+  const [promptMode, setPromptMode] = useState<VideoPromptMode>('i2v_motion_only');
+  const [renderTier, setRenderTier] = useState<RenderTier>('draft');
   const [copied, setCopied] = useState<string | null>(null);
   const [showNotes, setShowNotes] = useState(true);
   /** 剪贴板不可用时，把整段内容放进只读弹层，而不是 window.prompt */
@@ -38,6 +53,7 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   const active = platform ?? project.brief.platforms[0] ?? 'jimeng';
+  const activeDialect = resolveVideoDialect(dialectOverride ?? active);
   const bundle = bundles.find((b) => b.platform === active);
   const focusShotId = params.get('shot');
   const videoMode = resolveVideoMode(project);
@@ -96,11 +112,68 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
             key={p}
             type="button"
             className={`step${p === active ? ' active' : ''}`}
-            onClick={() => setPlatform(p)}
+            onClick={() => {
+              setPlatform(p);
+              setDialectOverride(null);
+            }}
           >
             {PLATFORM_LABEL[p]}
           </button>
         ))}
+      </div>
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>视频写法：</span>
+            {(['i2v_motion_only', 't2v', 'first_last_bridge', 'r2v_multimodal'] as const).map(
+              (m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className={`btn btn-sm${promptMode === m ? ' btn-primary' : ''}`}
+                  onClick={() => setPromptMode(m)}
+                >
+                  {VIDEO_PROMPT_MODE_LABEL[m]}
+                </button>
+              ),
+            )}
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 600 }}>档位：</span>
+            <button
+              type="button"
+              className={`btn btn-sm${renderTier === 'draft' ? ' btn-primary' : ''}`}
+              onClick={() => setRenderTier('draft')}
+            >
+              草稿试跑档
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm${renderTier === 'final' ? ' btn-primary' : ''}`}
+              onClick={() => setRenderTier('final')}
+            >
+              终渲成片档
+            </button>
+          </div>
+        </div>
+
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>模型方言：</span>
+          {PRESET_VIDEO_DIALECT_IDS.map((id) => {
+            const d = VIDEO_MODEL_DIALECTS[id]!;
+            return (
+              <button
+                key={id}
+                type="button"
+                className={`btn btn-sm${activeDialect.dialectId === id ? ' btn-primary' : ' btn-ghost'}`}
+                onClick={() => setDialectOverride(id)}
+              >
+                {d.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {project.brief.negativePrompt && activeSupportsNegative && videoMode === 'narrative' ? (
@@ -127,7 +200,17 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
       {!bundle ? (
         <div className="empty">这个平台还没有提示词。去「故事」里把目标平台选上。</div>
       ) : (
-        bundle.lines.map(({ shot, prompt }) => (
+        bundle.lines.map(({ shot, prompt }) => {
+          const dialectCompiled = compileVideoDialectPrompt({
+            project,
+            shot,
+            dialectIdOrPlatform: activeDialect.dialectId,
+            promptMode,
+          });
+          const routeRec = ShotRendererRouter.recommendRoute(shot, project, renderTier);
+          const displayEn = dialectCompiled.prompt || prompt.en;
+          const displayNeg = dialectCompiled.negativePrompt || prompt.negative || '';
+          return (
           <div
             className="card"
             key={shot.id}
@@ -137,23 +220,36 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
                 : undefined
             }
           >
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
-              <h2 className="prompt-shot-title">
-                第 {shot.number} 镜 · {shot.duration} 秒
-              </h2>
+            <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                <h2 className="prompt-shot-title" style={{ margin: 0 }}>
+                  第 {shot.number} 镜 · {dialectCompiled.apiHints.durationSec} 秒
+                </h2>
+                <span className="tag" title={routeRec.reason}>
+                  推荐：{VIDEO_MODEL_DIALECTS[routeRec.recommendedDialectId]?.label ?? routeRec.recommendedDialectId}
+                </span>
+              </div>
               <button
                 type="button"
                 className="btn btn-sm"
-                onClick={() => void copy(prompt.en, shot.id)}
+                onClick={() => void copy(displayEn, shot.id)}
               >
                 {copied === shot.id ? '已复制' : '复制英文正文'}
               </button>
             </div>
 
-            <div className="field-label">英文正文（直接粘贴到平台）</div>
-            <div className="prompt-text">{prompt.en}</div>
+            <div className="field-label">
+              英文正文（已按 {activeDialect.label} · {VIDEO_PROMPT_MODE_LABEL[promptMode]} 编译）
+            </div>
+            <div className="prompt-text">{displayEn}</div>
 
-            {prompt.negative ? (
+            {dialectCompiled.warnings.length > 0 ? (
+              <div className="hint" style={{ marginTop: 6 }}>
+                提示：{dialectCompiled.warnings.join('；')}
+              </div>
+            ) : null}
+
+            {displayNeg ? (
               <div style={{ marginTop: 8 }}>
                 <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                   <div className="field-label" style={{ margin: 0 }}>
@@ -162,12 +258,12 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
                   <button
                     type="button"
                     className="btn btn-sm"
-                    onClick={() => void copy(prompt.negative!, `${shot.id}-neg`)}
+                    onClick={() => void copy(displayNeg, `${shot.id}-neg`)}
                   >
                     {copied === `${shot.id}-neg` ? '已复制' : '复制负向词'}
                   </button>
                 </div>
-                <div className="prompt-text prompt-text-compact">{prompt.negative}</div>
+                <div className="prompt-text prompt-text-compact">{displayNeg}</div>
               </div>
             ) : null}
 
@@ -175,6 +271,8 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
               <summary>中文对照（看懂要生成什么）</summary>
               <div className="why-body">
                 <div className="prompt-text prompt-text-plain">
+                  {dialectCompiled.zhSummary}
+                  {'\n'}
                   {prompt.zh}
                 </div>
               </div>
@@ -208,7 +306,8 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
               </details>
             ) : null}
           </div>
-        ))
+          );
+        })
       )}
     </>
   );

@@ -344,6 +344,12 @@ export interface PlatformPrompts {
   lines: { shot: Shot; prompt: PromptLine }[];
 }
 
+export {
+  compileVideoDialectPrompt,
+  type CompileVideoDialectOptions,
+  type CompiledVideoDialectPrompt,
+} from './compilers';
+
 export function buildAllPrompts(project: Project): PlatformPrompts[] {
   return project.brief.platforms.map((platform) => ({
     platform,

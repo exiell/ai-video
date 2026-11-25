@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type {
   AniGuideDesktopAPI,
+  CacheMediaOptions,
+  CacheMediaResult,
   NativeHttpRequest,
   NativeHttpResponse,
   SaveBinaryOptions,
@@ -34,6 +36,8 @@ const api: AniGuideDesktopAPI = {
   file: {
     saveBinary: (opts: SaveBinaryOptions): Promise<SaveBinaryResult> =>
       ipcRenderer.invoke('aniguide:file:saveBinary', opts),
+    cacheMedia: (opts: CacheMediaOptions): Promise<CacheMediaResult> =>
+      ipcRenderer.invoke('aniguide:file:cacheMedia', opts),
     revealInFolder: (filePath: string): Promise<void> =>
       ipcRenderer.invoke('aniguide:file:revealInFolder', filePath),
     openUserDataDir: (): Promise<void> =>
