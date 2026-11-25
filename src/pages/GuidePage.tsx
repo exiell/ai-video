@@ -14,10 +14,12 @@ import { useGeneration } from '../store/generation';
 import type { StoryScene, TargetPlatform, VideoMode } from '../types/model';
 import { PLATFORM_LABEL } from '../types/model';
 import {
+  isCharacterStageEnabled,
   makeDefaultVisualBible,
   resolveVideoMode,
   VIDEO_MODE_DESC,
   VIDEO_MODE_LABEL,
+  VIDEO_MODE_SHORT_LABEL,
   VIDEO_MODES,
 } from '../domain/pipeline/profiles';
 import { newId } from '../services/storage';
@@ -82,6 +84,7 @@ export function GuidePage() {
 
   const story = project.story;
   const videoMode = resolveVideoMode(project);
+  const charEnabled = isCharacterStageEnabled(project);
 
   function selectVideoMode(nextMode: VideoMode) {
     const nextHost = nextMode === 'explainer' ? Boolean(project!.enableVirtualHost) : false;
@@ -276,45 +279,92 @@ export function GuidePage() {
               ) : null}
 
               <Field
-                label="故事正文"
-               
+                label={
+                  videoMode === 'scenic'
+                    ? '风光节拍脚本'
+                    : videoMode === 'explainer'
+                      ? '科普解说脚本（连续旁白）'
+                      : '故事正文'
+                }
               >
                 <textarea
                   rows={8}
                   value={story.body}
                   onChange={(e) => patchStory({ body: e.target.value })}
-                  placeholder="例：林冲被陷害发配沧州看守草料场。风雪夜沽酒回来见草厅压塌，宿进山神庙，听见门外三人密谋后提枪推门而出……"
+                  placeholder={
+                    videoMode === 'scenic'
+                      ? '例：清晨阿尔卑斯山谷，露珠水滴从松针滑落到青苔岩石上，金色光线穿透薄雾，溪流沿着岩缝向山谷下游流淌……'
+                      : videoMode === 'explainer'
+                        ? '例：为什么相隔光年的两个纠缠粒子瞬间同步，却依然不能用来超光速传信？想象地球和火星上各放着一只装满手套的盒子……'
+                        : '例：林冲被陷害发配沧州看守草料场。风雪夜沽酒回来见草厅压塌，宿进山神庙，听见门外三人密谋后提枪推门而出……'
+                  }
                 />
               </Field>
 
               <details className="card-fold">
                 <summary>
-                  <span className="card-fold-title">四要素（可选）</span>
-                  <span className="card-fold-count">{storyFilledCount} / 4 已填</span>
+                  <span className="card-fold-title">
+                    {videoMode === 'scenic'
+                      ? '风光要素（可选）'
+                      : videoMode === 'explainer'
+                        ? '科普要点（可选）'
+                        : '四要素（可选）'}
+                  </span>
+                  <span className="card-fold-count">
+                    {charEnabled
+                      ? `${storyFilledCount} / 4 已填`
+                      : `${[story.setting, story.conflict, story.ending].filter((v) => v.trim().length > 0).length} / 3 已填`}
+                  </span>
                 </summary>
                 <div className="grid-2" style={{ marginTop: 10 }}>
-                  <Field label="主要人物">
-                    <textarea
-                      rows={2}
-                      value={story.charactersNote}
-                      onChange={(e) => patchStory({ charactersNote: e.target.value })}
-                    />
-                  </Field>
-                  <Field label="时间与地点">
+                  {charEnabled ? (
+                    <Field label={videoMode === 'explainer' ? '虚拟讲解员备注' : '主要人物'}>
+                      <textarea
+                        rows={2}
+                        value={story.charactersNote}
+                        onChange={(e) => patchStory({ charactersNote: e.target.value })}
+                      />
+                    </Field>
+                  ) : null}
+                  <Field
+                    label={
+                      videoMode === 'scenic'
+                        ? '地貌与时段'
+                        : videoMode === 'explainer'
+                          ? '视觉隐喻方向'
+                          : '时间与地点'
+                    }
+                  >
                     <textarea
                       rows={2}
                       value={story.setting}
                       onChange={(e) => patchStory({ setting: e.target.value })}
                     />
                   </Field>
-                  <Field label="核心冲突">
+                  <Field
+                    label={
+                      videoMode === 'scenic'
+                        ? '气象与光影演进'
+                        : videoMode === 'explainer'
+                          ? '核心论点'
+                          : '核心冲突'
+                    }
+                  >
                     <textarea
                       rows={2}
                       value={story.conflict}
                       onChange={(e) => patchStory({ conflict: e.target.value })}
                     />
                   </Field>
-                  <Field label="结局定格">
+                  <Field
+                    label={
+                      videoMode === 'scenic'
+                        ? '收尾画面定格'
+                        : videoMode === 'explainer'
+                          ? '总结与启示'
+                          : '结局定格'
+                    }
+                  >
                     <textarea
                       rows={2}
                       value={story.ending}
@@ -326,8 +376,17 @@ export function GuidePage() {
 
               <details className="card-fold" style={{ marginTop: 10 }}>
                 <summary>
-                  <span className="card-fold-title">场次拆分（可选）</span>
-                  <span className="card-fold-count">{story.scenes.length} 场</span>
+                  <span className="card-fold-title">
+                    {videoMode === 'scenic'
+                      ? '视觉段落拆分（可选）'
+                      : videoMode === 'explainer'
+                        ? '概念章节拆分（可选）'
+                        : '场次拆分（可选）'}
+                  </span>
+                  <span className="card-fold-count">
+                    {story.scenes.length}{' '}
+                    {videoMode === 'scenic' ? '段' : videoMode === 'explainer' ? '章' : '场'}
+                  </span>
                 </summary>
                 <div style={{ marginTop: 10 }}>
                   {story.scenes.map((scene) => (
@@ -571,9 +630,19 @@ export function GuidePage() {
               <div className="guide-launch-cards">
                 <div className="card guide-launch-primary">
                   <span className="next-label">推荐路径</span>
-                  <h3>连续生成角色、场景与分镜</h3>
+                  <h3>
+                    {videoMode === 'scenic'
+                      ? '连续生成视觉圣经、环境与分镜'
+                      : videoMode === 'explainer'
+                        ? '连续生成风格预设、母题与分镜'
+                        : '连续生成角色、场景与分镜'}
+                  </h3>
                   <p style={{ fontSize: 13, color: 'var(--text-dim)', marginTop: 0 }}>
-                    自动结合你的故事大纲、画风设定与前期对话上下文，依次补齐英文风格词、拆出角色/场景锚点并生成完整分镜表。
+                    {videoMode === 'scenic'
+                      ? '自动结合你的风光脚本与对话上下文，跳过角色提取，依次补齐风格词、锁定视觉圣经与宏观环境并生成风光分镜。'
+                      : videoMode === 'explainer'
+                        ? '自动结合你的科普旁白与对话上下文，跳过物理实景，依次补齐风格词、锁定风格预设与视觉母题并生成概念节拍分镜。'
+                        : '自动结合你的故事大纲、画风设定与前期对话上下文，依次补齐英文风格词、拆出角色/场景锚点并生成完整分镜表。'}
                   </p>
 
                   {pipeline ? (
@@ -582,7 +651,14 @@ export function GuidePage() {
                         {(
                           [
                             ['style', '01 风格词'],
-                            ['assets', '02 角色与场景'],
+                            [
+                              'assets',
+                              videoMode === 'scenic'
+                                ? '02 视觉圣经与环境'
+                                : videoMode === 'explainer'
+                                  ? '02 风格预设与母题'
+                                  : '02 角色与场景',
+                            ],
                             ['shots', '03 分镜表'],
                           ] as const
                         ).map(([stage, label]) => {
@@ -671,7 +747,11 @@ export function GuidePage() {
                       <span>
                         {pipeline?.running
                           ? '正在按序生成中…'
-                          : '连续生成角色、场景与分镜'}
+                          : videoMode === 'scenic'
+                            ? '连续生成视觉圣经、环境与分镜'
+                            : videoMode === 'explainer'
+                              ? '连续生成风格预设、母题与分镜'
+                              : '连续生成角色、场景与分镜'}
                       </span>
                     </button>
                     <button
@@ -686,7 +766,13 @@ export function GuidePage() {
 
                 <div className="card">
                   <span className="next-label">手动路径</span>
-                  <h3>先去设定集，亲手定制角色与场景</h3>
+                  <h3>
+                    {videoMode === 'scenic'
+                      ? '先去设定集，亲手定制视觉圣经与环境'
+                      : videoMode === 'explainer'
+                        ? '先去设定集，亲手定制风格预设与母题'
+                        : '先去设定集，亲手定制角色与场景'}
+                  </h3>
 
                   <div className="row">
                     <button
@@ -757,7 +843,11 @@ export function GuidePage() {
 
           <dl className="guide-preview-meta">
             <div>
-              <dt>故事字数</dt>
+              <dt>生产模式</dt>
+              <dd>{VIDEO_MODE_SHORT_LABEL[videoMode]}</dd>
+            </div>
+            <div>
+              <dt>脚本文本</dt>
               <dd>{story.body.trim().length} 字</dd>
             </div>
             <div>

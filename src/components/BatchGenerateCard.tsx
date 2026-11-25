@@ -4,6 +4,11 @@ import { useAppStore } from '../store/app';
 import { imageReadiness, missingProfileNames } from './imageReadiness';
 import { useSettings } from '../store/settings';
 import { RichText, WhyDetails } from './bits';
+import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+  resolveVideoMode,
+} from '../domain/pipeline/profiles';
 
 /**
  * 批量出图按钮 + 进度
@@ -63,6 +68,22 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
   // 本地档案不需要 Key；判定统一走 imageReadiness（参考图 + 文生图两个档案）
   const readiness = imageReadiness(prefs, keys);
   const missingNames = missingProfileNames(readiness);
+
+  const videoMode = resolveVideoMode(project);
+  const charEnabled = isCharacterStageEnabled(project);
+  const sceneEnabled = isPhysicalSceneStageEnabled(project);
+
+  const visibleTasks = tasks.filter((task) => {
+    if (task === 'characters' && !charEnabled) return false;
+    if (task === 'scenes' && !sceneEnabled) return false;
+    return true;
+  });
+
+  const taskLabel = (task: BatchTask): string => {
+    if (task === 'characters' && videoMode === 'explainer') return '虚拟讲解员形象图';
+    if (task === 'scenes' && videoMode === 'scenic') return '全部宏观环境板';
+    return TASK_LABEL[task];
+  };
 
   const counts: Record<BatchTask, number> = {
     characters: project?.characters.length ?? 0,
@@ -151,7 +172,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
         其余用描边的 .btn-ai。这样一眼能看出「先点哪个」。
       */}
       <div className="row">
-        {tasks.map((task, index) => (
+        {visibleTasks.map((task, index) => (
           <button
             key={task}
             type="button"
@@ -159,7 +180,7 @@ export function BatchGenerateCard({ tasks }: { tasks: BatchTask[] }) {
             disabled={batch !== null || !readiness.ready || counts[task] === 0}
             onClick={() => void run(task)}
           >
-            {TASK_LABEL[task]}（{counts[task]}）
+            {taskLabel(task)}（{counts[task]}）
           </button>
         ))}
       </div>

@@ -4,6 +4,8 @@ import { useSearchParams } from 'react-router-dom';
 import { useAppStore } from '../store/app';
 import { PLATFORM_LABEL, type TargetPlatform } from '../types/model';
 import { buildAllPrompts } from '../domain/prompt';
+import { ModelExclusionAdapter } from '../domain/prompt/modelExclusion';
+import { resolveVideoMode, VIDEO_MODE_SHORT_LABEL } from '../domain/pipeline/profiles';
 
 /**
  * M5 提示词适配（方案.md v0.6 §3.2 + 用户确认的第 7 条）
@@ -38,6 +40,8 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const active = platform ?? project.brief.platforms[0] ?? 'jimeng';
   const bundle = bundles.find((b) => b.platform === active);
   const focusShotId = params.get('shot');
+  const videoMode = resolveVideoMode(project);
+  const activeSupportsNegative = ModelExclusionAdapter.getCapability(active).supportsNativeNegativePrompt;
 
   async function copy(text: string, key: string) {
     try {
@@ -57,7 +61,22 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
       </span>
       <CopyFallbackDialog text={copyFallback} onClose={() => setCopyFallback(null)} />
       <div className={`page-head${embedded ? ' page-head-compact' : ''}`}>
-        {embedded ? <span /> : <h1>提示词</h1>}
+        {embedded ? (
+          videoMode !== 'narrative' ? (
+            <span className="tag">{VIDEO_MODE_SHORT_LABEL[videoMode]}模式提示词</span>
+          ) : (
+            <span />
+          )
+        ) : (
+          <h1>
+            提示词
+            {videoMode !== 'narrative' ? (
+              <span className="tag" style={{ marginLeft: 8, verticalAlign: 'middle' }}>
+                {VIDEO_MODE_SHORT_LABEL[videoMode]}
+              </span>
+            ) : null}
+          </h1>
+        )}
         <div className="row">
           <label className="row" style={{ gap: 6, fontSize: 12, cursor: 'pointer' }}>
             <input
@@ -84,7 +103,7 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
         ))}
       </div>
 
-      {project.brief.negativePrompt ? (
+      {project.brief.negativePrompt && activeSupportsNegative && videoMode === 'narrative' ? (
         <div className="card">
           <div className="row" style={{ justifyContent: 'space-between' }}>
             <div>
@@ -133,6 +152,24 @@ export function PromptsPage({ embedded = false }: { embedded?: boolean } = {}) {
 
             <div className="field-label">英文正文（直接粘贴到平台）</div>
             <div className="prompt-text">{prompt.en}</div>
+
+            {prompt.negative ? (
+              <div style={{ marginTop: 8 }}>
+                <div className="row" style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                  <div className="field-label" style={{ margin: 0 }}>
+                    本镜负向词（贴到平台负向词栏）
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => void copy(prompt.negative!, `${shot.id}-neg`)}
+                  >
+                    {copied === `${shot.id}-neg` ? '已复制' : '复制负向词'}
+                  </button>
+                </div>
+                <div className="prompt-text prompt-text-compact">{prompt.negative}</div>
+              </div>
+            ) : null}
 
             <details className="why" open>
               <summary>中文对照（看懂要生成什么）</summary>

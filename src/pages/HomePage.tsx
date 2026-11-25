@@ -194,16 +194,14 @@ export function HomePage() {
   const charEnabled = isCharacterStageEnabled(project);
   const sceneEnabled = isPhysicalSceneStageEnabled(project);
   const videoMode = resolveVideoMode(project);
+  const visualAssets = project?.visualAssets ?? [];
   const storyDone = !!story?.body.trim();
   const hasVisualAnchors =
-    Boolean(project?.visualBible?.styleAnchor?.trim()) ||
-    (project?.visualAssets?.length ?? 0) > 0;
+    Boolean(project?.visualBible?.styleAnchor?.trim()) || visualAssets.length > 0;
   const settingDone =
     (!charEnabled || characters.length > 0) &&
     (!sceneEnabled || scenes.length > 0) &&
     (charEnabled || sceneEnabled || hasVisualAnchors || shots.length > 0);
-  void videoMode;
-  void VIDEO_MODE_SHORT_LABEL;
   const storyboardDone = shots.length > 0 && !durationOff && errorCount === 0;
   const framesAll = shots.length > 0 && coverage.framesReady === shots.length;
   const deliveryDone = shots.length > 0 && errorCount === 0 && coverage.imagesReady;
@@ -238,10 +236,25 @@ export function HomePage() {
   } else if (!settingDone) {
     next = {
       label: '阶段 02 · 设定集',
-      title: '补齐角色与场景设定',
-      detail: '先锁定角色服装和场景固定元素，跨镜出图更稳定。',
+      title:
+        videoMode === 'scenic'
+          ? '锁定视觉圣经与宏观环境'
+          : videoMode === 'explainer'
+            ? '锁定风格预设与视觉母题'
+            : '补齐角色与场景设定',
+      detail:
+        videoMode === 'scenic'
+          ? '先锁定摄影质感、光源方向与环境锚点，风光画面跨镜更稳定。'
+          : videoMode === 'explainer'
+            ? '先锁定插画风格预设与核心视觉母题，科普画面前后更统一。'
+            : '先锁定角色服装和场景固定元素，跨镜出图更稳定。',
       cta: '去设定集',
-      to: characters.length === 0 ? '/characters' : '/scenes',
+      to:
+        videoMode !== 'narrative'
+          ? '/assets'
+          : characters.length === 0
+            ? '/characters'
+            : '/scenes',
     };
   } else if (shots.length === 0) {
     next = {
@@ -270,10 +283,20 @@ export function HomePage() {
   } else if (!coverage.loaded || !coverage.referencesReady) {
     next = {
       label: '阶段 02 · 参考图',
-      title: '先出齐角色形象图与场景参考板',
+      title:
+        videoMode === 'scenic'
+          ? '先出齐宏观环境参考板'
+          : videoMode === 'explainer'
+            ? '先出齐虚拟讲解员形象图'
+            : '先出齐角色形象图与场景参考板',
       detail: '参考图是分镜三帧的视觉锚点，先出齐能显著减少返工。',
       cta: '去设定集出图',
-      to: coverage.charsReady < characters.length ? '/characters' : '/scenes',
+      to:
+        charEnabled && coverage.charsReady < characters.length
+          ? '/characters'
+          : sceneEnabled
+            ? '/scenes'
+            : '/assets',
     };
   } else if (!framesAll) {
     next = {
@@ -302,7 +325,8 @@ export function HomePage() {
           <header className="home-head">
             <div>
               <div className="home-crumb">
-                {isSample ? '示例项目' : '当前项目'} · {project.brief.aspectRatio}
+                {isSample ? '示例项目' : '当前项目'} · {VIDEO_MODE_SHORT_LABEL[videoMode]} ·{' '}
+                {project.brief.aspectRatio}
               </div>
               <h1>{project.name}</h1>
               <p className="home-logline">{project.logline || '还没有填写一句话简介。'}</p>
@@ -355,7 +379,13 @@ export function HomePage() {
                   to: '/assets',
                   done: settingDone,
                   prevDone: storyDone,
-                  state: settingDone ? `${characters.length}角 · ${scenes.length}景` : '待建立',
+                  state: settingDone
+                    ? videoMode === 'scenic'
+                      ? `${scenes.length}环境 · ${visualAssets.length}锚点`
+                      : videoMode === 'explainer'
+                        ? `${visualAssets.length}母题${charEnabled ? ` · ${characters.length}讲解员` : ''}`
+                        : `${characters.length}角 · ${scenes.length}景`
+                    : '待建立',
                 },
                 {
                   key: 'storyboard',
@@ -454,7 +484,11 @@ export function HomePage() {
                         {hasErr ? <span className="shot-tile-alert">待修</span> : null}
                       </div>
                       <div className="shot-tile-meta">
-                        <b>{scene?.name ?? '未指定场景'}</b>
+                        <b>
+                          {sceneEnabled
+                            ? (scene?.name ?? (videoMode === 'scenic' ? '未选环境' : '未指定场景'))
+                            : shot.onScreenLabels?.[0] || shot.visualMetaphor?.slice(0, 14) || '视觉隐喻镜头'}
+                        </b>
                         <span>
                           {SHOT_SIZE_LABEL[shot.shotSize]} · {CAMERA_MOVE_LABEL[shot.cameraMove]}
                         </span>
@@ -524,26 +558,40 @@ export function HomePage() {
                 <Link to="/assets">去设定集 →</Link>
               </div>
               <div className="assets">
-                <Link
-                  className="asset"
-                  to="/characters"
-                  aria-label={`角色设定：角色形象图 ${coverage.charsReady} / ${characters.length}`}
-                >
-                  <b>
-                    {coverage.charsReady} / {characters.length}
-                  </b>
-                  <span>角色形象图</span>
-                </Link>
-                <Link
-                  className="asset"
-                  to="/scenes"
-                  aria-label={`场景设定：场景参考板 ${coverage.scenesReady} / ${scenes.length}`}
-                >
-                  <b>
-                    {coverage.scenesReady} / {scenes.length}
-                  </b>
-                  <span>场景参考板</span>
-                </Link>
+                {videoMode !== 'narrative' ? (
+                  <Link
+                    className="asset"
+                    to="/assets"
+                    aria-label={`${videoMode === 'scenic' ? '视觉圣经与环境锚点' : '风格预设与视觉母题'} ${visualAssets.length} 项`}
+                  >
+                    <b>{visualAssets.length}</b>
+                    <span>{videoMode === 'scenic' ? '视觉圣经/锚点' : '风格/视觉母题'}</span>
+                  </Link>
+                ) : null}
+                {charEnabled ? (
+                  <Link
+                    className="asset"
+                    to="/characters"
+                    aria-label={`${videoMode === 'explainer' ? '虚拟讲解员' : '角色设定'}：形象图 ${coverage.charsReady} / ${characters.length}`}
+                  >
+                    <b>
+                      {coverage.charsReady} / {characters.length}
+                    </b>
+                    <span>{videoMode === 'explainer' ? '虚拟讲解员' : '角色形象图'}</span>
+                  </Link>
+                ) : null}
+                {sceneEnabled ? (
+                  <Link
+                    className="asset"
+                    to="/scenes"
+                    aria-label={`${videoMode === 'scenic' ? '宏观环境板' : '场景参考板'} ${coverage.scenesReady} / ${scenes.length}`}
+                  >
+                    <b>
+                      {coverage.scenesReady} / {scenes.length}
+                    </b>
+                    <span>{videoMode === 'scenic' ? '宏观环境板' : '场景参考板'}</span>
+                  </Link>
+                ) : null}
               </div>
             </div>
 

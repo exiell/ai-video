@@ -7,6 +7,11 @@ import { defaultReferenceAssetIds, videoAspectFromSize } from '../data/video/ref
 import { listAssets } from '../services/storage';
 import { MAX_QUEUE, useVideo, videoClipKey } from '../store/video';
 import { useImage } from '../store/image';
+import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+  resolveVideoMode,
+} from '../domain/pipeline/profiles';
 import { VideoPlayer } from './VideoPlayer';
 
 const MAX_REFERENCES = 4;
@@ -22,27 +27,47 @@ interface CandidateGroup {
 }
 
 function buildCandidateGroups(assets: Asset[], project: Project, shot: Shot): CandidateGroup[] {
+  const videoMode = resolveVideoMode(project);
+  const charEnabled = isCharacterStageEnabled(project);
+  const sceneEnabled = isPhysicalSceneStageEnabled(project);
   const characterName = (id: string) =>
     project.characters.find((character) => character.id === id)?.name ?? '角色';
   const sceneName = project.scenes.find((scene) => scene.id === shot.sceneId)?.name ?? '场景';
   const usable = assets.filter((asset) => Boolean(asset.dataUrl));
 
   const groups: CandidateGroup[] = [];
-  const characterItems: CandidateItem[] = [];
-  for (const asset of usable) {
-    if (asset.kind !== 'character-sheet' && asset.kind !== 'character-sheet-face') continue;
-    if (!shot.characterIds.includes(asset.refId)) continue;
-    characterItems.push({
-      asset,
-      label: `${characterName(asset.refId)} · ${ASSET_KIND_LABEL[asset.kind]}`,
-    });
+  if (charEnabled) {
+    const characterItems: CandidateItem[] = [];
+    for (const asset of usable) {
+      if (asset.kind !== 'character-sheet' && asset.kind !== 'character-sheet-face') continue;
+      if (!shot.characterIds.includes(asset.refId)) continue;
+      characterItems.push({
+        asset,
+        label: `${characterName(asset.refId)} · ${ASSET_KIND_LABEL[asset.kind]}`,
+      });
+    }
+    if (characterItems.length > 0) {
+      groups.push({
+        title: videoMode === 'explainer' ? '虚拟讲解员形象图' : '出镜角色形象图',
+        items: characterItems,
+      });
+    }
   }
-  if (characterItems.length > 0) groups.push({ title: '出镜角色形象图', items: characterItems });
 
-  const sceneItems = usable
-    .filter((asset) => asset.kind === 'scene-plate' && asset.refId === shot.sceneId)
-    .map((asset) => ({ asset, label: `${sceneName} · 场景参考板` }));
-  if (sceneItems.length > 0) groups.push({ title: '场景参考板', items: sceneItems });
+  if (sceneEnabled) {
+    const sceneItems = usable
+      .filter((asset) => asset.kind === 'scene-plate' && asset.refId === shot.sceneId)
+      .map((asset) => ({
+        asset,
+        label: `${sceneName} · ${videoMode === 'scenic' ? '宏观环境板' : '场景参考板'}`,
+      }));
+    if (sceneItems.length > 0) {
+      groups.push({
+        title: videoMode === 'scenic' ? '宏观环境板' : '场景参考板',
+        items: sceneItems,
+      });
+    }
+  }
 
   const frameItems = usable
     .filter(

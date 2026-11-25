@@ -22,8 +22,17 @@ import {
   type CheckIssue,
   type CheckSeverity,
   type Shot,
+  type ShotRenderEngine,
   type ShotSize,
 } from '../types/model';
+import {
+  SHOT_RENDER_ENGINE_LABEL,
+  SHOT_RENDER_ENGINES,
+  VIDEO_MODE_SHORT_LABEL,
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+  resolveVideoMode,
+} from '../domain/pipeline/profiles';
 import { newId } from '../services/storage';
 import { RULE_LABEL, SEVERITY_LABEL, SEVERITY_TAG, worstSeverity } from '../domain/checks';
 import { FieldIssues, IssueBody, UnplacedIssues } from '../components/IssueViews';
@@ -245,10 +254,19 @@ export function StoryboardPage() {
     value: m,
     label: CAMERA_MOVE_LABEL[m],
   }));
+  const videoMode = resolveVideoMode(project);
+  const charEnabled = isCharacterStageEnabled(project);
+  const sceneEnabled = isPhysicalSceneStageEnabled(project);
+  const visualAssets = project.visualAssets ?? [];
+
   const sceneOptions = [
-    { value: '', label: '（未指定场景）' },
+    { value: '', label: videoMode === 'scenic' ? '（未选环境）' : '（未指定场景）' },
     ...project.scenes.map((s) => ({ value: s.id, label: s.name })),
   ];
+  const renderEngineOptions = SHOT_RENDER_ENGINES.map((engine) => ({
+    value: engine,
+    label: SHOT_RENDER_ENGINE_LABEL[engine],
+  }));
   const storySceneOptions = [
     { value: '', label: '（未指定）' },
     ...project.story.scenes.map((s) => ({ value: s.id, label: s.label })),
@@ -300,14 +318,28 @@ export function StoryboardPage() {
   return (
     <div className="storyboard-v2">
       <header className="page-head">
-        <h1>分镜与质检</h1>
+        <h1>
+          分镜与质检
+          {videoMode !== 'narrative' ? (
+            <span className="tag" style={{ marginLeft: 8, verticalAlign: 'middle' }}>
+              {VIDEO_MODE_SHORT_LABEL[videoMode]}
+            </span>
+          ) : null}
+        </h1>
         <div className="row">
           <button
             type="button"
             className="btn btn-sm"
             onClick={() => {
-              const shot = makeShot(project.shots.length + 1, project.scenes[0]?.id ?? '');
-              upsertShot(shot);
+              const shot = makeShot(
+                project.shots.length + 1,
+                sceneEnabled ? (project.scenes[0]?.id ?? '') : '',
+              );
+              upsertShot(
+                videoMode === 'explainer'
+                  ? { ...shot, renderEngine: 'ai_ref_to_video' }
+                  : shot,
+              );
               setExpanded(shot.id);
             }}
           >
@@ -368,7 +400,15 @@ export function StoryboardPage() {
         ) : project.shots.length > 0 ? (
           <span className="tag tag-ok">检查通过</span>
         ) : null}
-        {generatingAssets ? <span className="tag tag-info">正在拆角色与场景</span> : null}
+        {generatingAssets ? (
+          <span className="tag tag-info">
+            {videoMode === 'scenic'
+              ? '正在锁定视觉圣经与环境'
+              : videoMode === 'explainer'
+                ? '正在锁定风格预设与母题'
+                : '正在拆角色与场景'}
+          </span>
+        ) : null}
       </SummaryBar>
 
       {project.shots.length > 0 ? (
@@ -424,16 +464,32 @@ export function StoryboardPage() {
             <h2 className="card-title">分镜生成</h2>
             <GenerateBar
               task="assets"
-              label="① 从故事里拆角色与场景"
-              hint={`当前已有 ${project.characters.length} 个角色、${project.scenes.length} 个场景。重新生成会覆盖它们。`}
+              label={
+                videoMode === 'scenic'
+                  ? '① 锁定视觉圣经与宏观环境'
+                  : videoMode === 'explainer'
+                    ? '① 锁定风格预设与视觉母题'
+                    : '① 从故事里拆角色与场景'
+              }
+              hint={
+                videoMode === 'scenic'
+                  ? `当前已有 ${project.scenes.length} 个宏观环境、${visualAssets.length} 项环境锚点（无角色模式已跳过角色）。重新生成会覆盖它们。`
+                  : videoMode === 'explainer'
+                    ? `当前已有 ${visualAssets.length} 项视觉母题${charEnabled ? `、${project.characters.length} 个虚拟讲解员` : '（已跳过角色与物理场景）'}。重新生成会覆盖它们。`
+                    : `当前已有 ${project.characters.length} 个角色、${project.scenes.length} 个场景。重新生成会覆盖它们。`
+              }
             />
             <GenerateBar
               task="shots"
               label="② 生成分镜表"
               hint={
                 project.story.body.trim()
-                  ? '会把故事拆成镜头，并自动挂好场景、角色和连续性锁。'
-                  : '故事还是空的，先去故事页写正文或让模型起草。'
+                  ? videoMode === 'scenic'
+                    ? '会把脚本拆成自然风光镜头，并绑定视觉圣经与环境锚点。'
+                    : videoMode === 'explainer'
+                      ? '会把解说脚本拆成概念节拍镜头，并生成视觉隐喻与旁白时间轴。'
+                      : '会把故事拆成镜头，并自动挂好场景、角色和连续性锁。'
+                  : '内容还是空的，先去故事页写正文或让模型起草。'
               }
             />
           </div>
@@ -558,9 +614,18 @@ export function StoryboardPage() {
         {project.shots.map((shot, index) => {
           const scene = project.scenes.find((s) => s.id === shot.sceneId);
           const prevShot = project.shots[index - 1];
-          const locks = project.characters.flatMap((c) =>
-            c.continuityLocks.filter((l) => shot.activeLockIds.includes(l.id)),
-          );
+          const locks = [
+            ...(charEnabled
+              ? project.characters.flatMap((c) =>
+                  c.continuityLocks.filter((l) => shot.activeLockIds.includes(l.id)),
+                )
+              : []),
+            ...(sceneEnabled
+              ? project.scenes.flatMap((s) =>
+                  s.continuityLocks.filter((l) => shot.activeLockIds.includes(l.id)),
+                )
+              : []),
+          ];
           const open = expanded === shot.id;
 
           const shotIssues = issuesByShot.get(shot.id) ?? [];
@@ -627,15 +692,27 @@ export function StoryboardPage() {
                   onChange={(value) => patch(shot, { cameraMove: value as CameraMove })}
                 />
 
-                <SelectMenu
-                  className={`shot-select shot-scene-select${
-                    isFlagged(shot.id, 'sceneId') ? ' field-flagged' : ''
-                  }`}
-                  value={shot.sceneId}
-                  options={sceneOptions}
-                  ariaLabel={`第 ${shot.number} 镜的场景`}
-                  onChange={(value) => patch(shot, { sceneId: value })}
-                />
+                {sceneEnabled ? (
+                  <SelectMenu
+                    className={`shot-select shot-scene-select${
+                      isFlagged(shot.id, 'sceneId') ? ' field-flagged' : ''
+                    }`}
+                    value={shot.sceneId}
+                    options={sceneOptions}
+                    ariaLabel={`第 ${shot.number} 镜的${videoMode === 'scenic' ? '宏观环境' : '场景'}`}
+                    onChange={(value) => patch(shot, { sceneId: value })}
+                  />
+                ) : (
+                  <SelectMenu
+                    className="shot-select shot-scene-select"
+                    value={shot.renderEngine ?? 'ai_ref_to_video'}
+                    options={renderEngineOptions}
+                    ariaLabel={`第 ${shot.number} 镜的渲染方式`}
+                    onChange={(value) =>
+                      patch(shot, { renderEngine: value as ShotRenderEngine })
+                    }
+                  />
+                )}
 
                 <input
                   type="text"
@@ -749,7 +826,13 @@ export function StoryboardPage() {
                       <div className="shot-flow-step">
                         <div className="shot-flow-head">
                           <span className="shot-step-badge">① 起点</span>
-                          <span className="shot-step-tip">开场静止画面</span>
+                          <span className="shot-step-tip">
+                            {videoMode === 'scenic'
+                              ? '自然主体初始状态'
+                              : videoMode === 'explainer'
+                                ? '概念隐喻开场画面'
+                                : '开场静止画面'}
+                          </span>
                         </div>
                         <textarea
                           rows={2}
@@ -757,7 +840,13 @@ export function StoryboardPage() {
                           value={shot.startState}
                           onChange={(e) => patch(shot, { startState: e.target.value })}
                           className={isFlagged(shot.id, 'startState') ? 'field-flagged' : ''}
-                          placeholder="例：大雪夜山神庙门内，林冲手按花枪杆站在门后"
+                          placeholder={
+                            videoMode === 'scenic'
+                              ? '例：清晨阿尔卑斯松针尖端悬着一颗露珠，金色光束穿透薄雾'
+                              : videoMode === 'explainer'
+                                ? '例：深蓝画布中央悬浮两枚发光几何球体，由青色虚线波形相连'
+                                : '例：大雪夜山神庙门内，林冲手按花枪杆站在门后'
+                          }
                         />
                         <FieldIssues issues={issuesOf('startState')} label="起点" />
                       </div>
@@ -765,7 +854,13 @@ export function StoryboardPage() {
                       <div className="shot-flow-step">
                         <div className="shot-flow-head">
                           <span className="shot-step-badge">② 动作</span>
-                          <span className="shot-step-tip">本镜唯一动作</span>
+                          <span className="shot-step-tip">
+                            {videoMode === 'scenic'
+                              ? '主物理与次级环境运动'
+                              : videoMode === 'explainer'
+                                ? '概念推演或图形动效'
+                                : '本镜唯一动作'}
+                          </span>
                         </div>
                         <textarea
                           rows={2}
@@ -773,7 +868,13 @@ export function StoryboardPage() {
                           value={shot.action}
                           onChange={(e) => patch(shot, { action: e.target.value })}
                           className={isFlagged(shot.id, 'action') ? 'field-flagged' : ''}
-                          placeholder="例：他猛地拉开木门，提枪跨出门槛"
+                          placeholder={
+                            videoMode === 'scenic'
+                              ? '例：露珠滑落至青苔岩石，溅起微雾，松针随之轻颤'
+                              : videoMode === 'explainer'
+                                ? '例：左侧球体亮起并展开图标标注，右侧球体同步翻面但无信号传递箭头'
+                                : '例：他猛地拉开木门，提枪跨出门槛'
+                          }
                         />
                         <FieldIssues issues={issuesOf('action')} label="动作" />
                       </div>
@@ -781,7 +882,13 @@ export function StoryboardPage() {
                       <div className="shot-flow-step">
                         <div className="shot-flow-head">
                           <span className="shot-step-badge">③ 终点</span>
-                          <span className="shot-step-tip">收尾定格姿态</span>
+                          <span className="shot-step-tip">
+                            {videoMode === 'scenic'
+                              ? '镜头收尾自然状态'
+                              : videoMode === 'explainer'
+                                ? '本节拍画面定格'
+                                : '收尾定格姿态'}
+                          </span>
                         </div>
                         <textarea
                           rows={2}
@@ -789,117 +896,257 @@ export function StoryboardPage() {
                           value={shot.endState}
                           onChange={(e) => patch(shot, { endState: e.target.value })}
                           className={isFlagged(shot.id, 'endState') ? 'field-flagged' : ''}
-                          placeholder="例：林冲立于门外风雪中，枪尖斜指前方"
+                          placeholder={
+                            videoMode === 'scenic'
+                              ? '例：湿润青苔在暖金晨光下反光，山谷薄雾缓缓飘散'
+                              : videoMode === 'explainer'
+                                ? '例：两枚球体并列定格，下方浮现 3 个词的简洁结论标注'
+                                : '例：林冲立于门外风雪中，枪尖斜指前方'
+                          }
                         />
                         <FieldIssues issues={issuesOf('endState')} label="终点" />
                       </div>
                     </div>
 
+                    {videoMode === 'explainer' ? (
+                      <div className="shot-continuity-box" style={{ marginBottom: 12 }}>
+                        <div className="shot-block-label">
+                          <Icon name="sparkles" size={14} />
+                          <span>
+                            科普节拍与视觉隐喻
+                            {shot.narrationTimeRangeSec
+                              ? `（${shot.narrationTimeRangeSec[0]}s – ${shot.narrationTimeRangeSec[1]}s）`
+                              : ''}
+                          </span>
+                        </div>
+                        <div className="grid-2">
+                          <div>
+                            <div className="field-label">本镜旁白</div>
+                            <textarea
+                              rows={2}
+                              aria-label={`第 ${shot.number} 镜的科普旁白`}
+                              value={shot.narrationText ?? shot.dialogue}
+                              onChange={(e) =>
+                                patch(shot, {
+                                  narrationText: e.target.value,
+                                  dialogue: e.target.value,
+                                })
+                              }
+                              placeholder="这一节拍对应的连续解说词（20-30 词讲清 1 个核心概念）"
+                            />
+                          </div>
+                          <div>
+                            <div className="field-label">视觉隐喻转译</div>
+                            <textarea
+                              rows={2}
+                              aria-label={`第 ${shot.number} 镜的视觉隐喻`}
+                              value={shot.visualMetaphor ?? ''}
+                              onChange={(e) => patch(shot, { visualMetaphor: e.target.value })}
+                              placeholder="把抽象概念变成可画出来的物理类比（如尺度缩放、对比、过程推演）"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid-2" style={{ marginTop: 8 }}>
+                          <div>
+                            <div className="field-label">屏幕简短标注（用、分隔，限 3-5 词）</div>
+                            <input
+                              type="text"
+                              aria-label={`第 ${shot.number} 镜的屏幕标注`}
+                              value={(shot.onScreenLabels ?? []).join('、')}
+                              onChange={(e) =>
+                                patch(shot, {
+                                  onScreenLabels: e.target.value
+                                    .split(/[、,，]+/)
+                                    .map((s) => s.trim())
+                                    .filter(Boolean),
+                                })
+                              }
+                              placeholder="例：量子纠缠、无法超光速传信"
+                            />
+                          </div>
+                          {shot.renderEngine === 'html_hyperframes' ||
+                          shot.renderEngine === 'manim' ? (
+                            <div>
+                              <div className="field-label">代码渲染指令（预留）</div>
+                              <input
+                                type="text"
+                                aria-label={`第 ${shot.number} 镜的代码渲染指令`}
+                                value={shot.codeRenderSpec ?? ''}
+                                onChange={(e) => patch(shot, { codeRenderSpec: e.target.value })}
+                                placeholder="供 HTML 动效或 Manim 公式动画使用的渲染说明"
+                              />
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+
                     {/* 防穿帮锚点区 */}
                     <div className="shot-continuity-box">
                       <div className="shot-block-label">
                         <Icon name="lock" size={14} />
-                        <span>防穿帮锚点</span>
+                        <span>
+                          {videoMode === 'scenic'
+                            ? '风光连贯锚点'
+                            : videoMode === 'explainer'
+                              ? '视觉母题与风格锚点'
+                              : '防穿帮锚点'}
+                        </span>
                       </div>
 
-                      <div className="shot-anchor-row">
-                        <div className="field-label">出镜角色</div>
-                        <div className="row" style={{ gap: 6 }}>
-                          {project.characters.length === 0 ? (
-                            <span className="hint">还没有角色，去设定集新建。</span>
-                          ) : (
-                            project.characters.map((c) => {
-                              const on = shot.characterIds.includes(c.id);
-                              return (
-                                <button
-                                  key={c.id}
-                                  type="button"
-                                  className={`btn btn-sm${on ? ' btn-primary' : ''}`}
-                                  onClick={() =>
-                                    patch(shot, {
-                                      characterIds: on
-                                        ? shot.characterIds.filter((x) => x !== c.id)
-                                        : [...shot.characterIds, c.id],
-                                    })
-                                  }
-                                >
-                                  {c.name}
-                                </button>
-                              );
-                            })
-                          )}
+                      {charEnabled ? (
+                        <div className="shot-anchor-row">
+                          <div className="field-label">
+                            {videoMode === 'explainer' ? '虚拟讲解员' : '出镜角色'}
+                          </div>
+                          <div className="row" style={{ gap: 6 }}>
+                            {project.characters.length === 0 ? (
+                              <span className="hint">
+                                {videoMode === 'explainer'
+                                  ? '还没有虚拟讲解员，去设定集新建。'
+                                  : '还没有角色，去设定集新建。'}
+                              </span>
+                            ) : (
+                              project.characters.map((c) => {
+                                const on = shot.characterIds.includes(c.id);
+                                return (
+                                  <button
+                                    key={c.id}
+                                    type="button"
+                                    className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                    onClick={() =>
+                                      patch(shot, {
+                                        characterIds: on
+                                          ? shot.characterIds.filter((x) => x !== c.id)
+                                          : [...shot.characterIds, c.id],
+                                      })
+                                    }
+                                  >
+                                    {c.name}
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      ) : null}
 
-                      <div className="shot-anchor-row">
-                        <div className="field-label">连续性锁</div>
-                        <FieldIssues issues={issuesOf('activeLockIds')} label="连续性锁" />
-                        <div className="row" style={{ gap: 6 }}>
-                          {project.characters.every((c) => c.continuityLocks.length === 0) &&
-                          project.scenes.every((s) => s.continuityLocks.length === 0) ? (
-                            <span className="hint">还没有连续性锁，去设定集里添加。</span>
-                          ) : (
-                            <>
-                              {project.characters.flatMap((c) =>
-                                c.continuityLocks.map((lock) => {
-                                  const on = shot.activeLockIds.includes(lock.id);
-                                  return (
-                                    <button
-                                      key={lock.id}
-                                      type="button"
-                                      className={`btn btn-sm${on ? ' btn-primary' : ''}`}
-                                      onClick={() =>
-                                        patch(shot, {
-                                          activeLockIds: on
-                                            ? shot.activeLockIds.filter((x) => x !== lock.id)
-                                            : [...shot.activeLockIds, lock.id],
-                                        })
-                                      }
-                                      title={lock.phrase}
-                                    >
-                                      {c.name}·{lock.label}
-                                    </button>
-                                  );
-                                }),
-                              )}
-                              {project.scenes.flatMap((s) =>
-                                s.continuityLocks.map((lock) => {
-                                  const on = shot.activeLockIds.includes(lock.id);
-                                  return (
-                                    <button
-                                      key={lock.id}
-                                      type="button"
-                                      className={`btn btn-sm${on ? ' btn-primary' : ''}`}
-                                      onClick={() =>
-                                        patch(shot, {
-                                          activeLockIds: on
-                                            ? shot.activeLockIds.filter((x) => x !== lock.id)
-                                            : [...shot.activeLockIds, lock.id],
-                                        })
-                                      }
-                                      title={lock.phrase}
-                                    >
-                                      {s.name}·{lock.label}
-                                    </button>
-                                  );
-                                }),
-                              )}
-                            </>
-                          )}
+                      {videoMode !== 'narrative' ? (
+                        <div className="shot-anchor-row">
+                          <div className="field-label">
+                            {videoMode === 'scenic' ? '环境与风格标签' : '引用视觉母题'}
+                          </div>
+                          <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                            {visualAssets.length === 0 ? (
+                              <span className="hint">
+                                {videoMode === 'scenic'
+                                  ? '还没有环境锚点标签，去设定集或顶部先锁定视觉圣经。'
+                                  : '还没有非人物视觉母题，去设定集或顶部先锁定风格预设与母题。'}
+                              </span>
+                            ) : (
+                              visualAssets.map((asset) => {
+                                const tags = shot.referencedAssetTags ?? [];
+                                const on = tags.includes(asset.tag);
+                                return (
+                                  <button
+                                    key={asset.id}
+                                    type="button"
+                                    className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                    onClick={() =>
+                                      patch(shot, {
+                                        referencedAssetTags: on
+                                          ? tags.filter((t) => t !== asset.tag)
+                                          : [...tags, asset.tag],
+                                      })
+                                    }
+                                    title={asset.visualPrompt}
+                                  >
+                                    {asset.name}（{asset.tag}）
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
                         </div>
-                        {locks.length > 0 ? (
-                          <details className="why shot-lock-details">
-                            <summary>已锁定 {locks.length} 条英文短语</summary>
-                            <div className="why-body">
-                              {locks.map((l) => (
-                                <code key={l.id} style={{ marginRight: 6 }}>
-                                  {l.phrase}
-                                </code>
-                              ))}
-                            </div>
-                          </details>
-                        ) : null}
-                      </div>
+                      ) : null}
+
+                      {charEnabled || sceneEnabled ? (
+                        <div className="shot-anchor-row">
+                          <div className="field-label">连续性锁</div>
+                          <FieldIssues issues={issuesOf('activeLockIds')} label="连续性锁" />
+                          <div className="row" style={{ gap: 6 }}>
+                            {(!charEnabled ||
+                              project.characters.every((c) => c.continuityLocks.length === 0)) &&
+                            (!sceneEnabled ||
+                              project.scenes.every((s) => s.continuityLocks.length === 0)) ? (
+                              <span className="hint">还没有连续性锁，去设定集里添加。</span>
+                            ) : (
+                              <>
+                                {charEnabled
+                                  ? project.characters.flatMap((c) =>
+                                      c.continuityLocks.map((lock) => {
+                                        const on = shot.activeLockIds.includes(lock.id);
+                                        return (
+                                          <button
+                                            key={lock.id}
+                                            type="button"
+                                            className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                            onClick={() =>
+                                              patch(shot, {
+                                                activeLockIds: on
+                                                  ? shot.activeLockIds.filter((x) => x !== lock.id)
+                                                  : [...shot.activeLockIds, lock.id],
+                                              })
+                                            }
+                                            title={lock.phrase}
+                                          >
+                                            {c.name}·{lock.label}
+                                          </button>
+                                        );
+                                      }),
+                                    )
+                                  : null}
+                                {sceneEnabled
+                                  ? project.scenes.flatMap((s) =>
+                                      s.continuityLocks.map((lock) => {
+                                        const on = shot.activeLockIds.includes(lock.id);
+                                        return (
+                                          <button
+                                            key={lock.id}
+                                            type="button"
+                                            className={`btn btn-sm${on ? ' btn-primary' : ''}`}
+                                            onClick={() =>
+                                              patch(shot, {
+                                                activeLockIds: on
+                                                  ? shot.activeLockIds.filter((x) => x !== lock.id)
+                                                  : [...shot.activeLockIds, lock.id],
+                                              })
+                                            }
+                                            title={lock.phrase}
+                                          >
+                                            {s.name}·{lock.label}
+                                          </button>
+                                        );
+                                      }),
+                                    )
+                                  : null}
+                              </>
+                            )}
+                          </div>
+                          {locks.length > 0 ? (
+                            <details className="why shot-lock-details">
+                              <summary>已锁定 {locks.length} 条英文短语</summary>
+                              <div className="why-body">
+                                {locks.map((l) => (
+                                  <code key={l.id} style={{ marginRight: 6 }}>
+                                    {l.phrase}
+                                  </code>
+                                ))}
+                              </div>
+                            </details>
+                          ) : null}
+                        </div>
+                      ) : null}
 
                       <div className="grid-2" style={{ marginTop: 10 }}>
                         <div>
@@ -936,9 +1183,11 @@ export function StoryboardPage() {
                         </div>
                       </div>
 
-                      {scene ? (
+                      {sceneEnabled && scene ? (
                         <details className="why shot-scene">
-                          <summary>当前场景约束：{scene.name}</summary>
+                          <summary>
+                            {videoMode === 'scenic' ? '当前宏观环境约束' : '当前场景约束'}：{scene.name}
+                          </summary>
                           <div className="why-body">
                             固定元素：
                             {scene.fixedElements.length > 0
@@ -954,12 +1203,35 @@ export function StoryboardPage() {
                           </div>
                         </details>
                       ) : null}
+
+                      {videoMode !== 'narrative' && project.visualBible ? (
+                        <details className="why shot-scene">
+                          <summary>
+                            {videoMode === 'scenic'
+                              ? '全局视觉圣经约束（每镜自动注入）'
+                              : '全局风格预设铁律（每镜自动注入）'}
+                          </summary>
+                          <div className="why-body">
+                            风格锚点：{project.visualBible.styleAnchor || '未填'}
+                            <br />
+                            光源方向：{project.visualBible.lightingDirection || '未填'}
+                            <br />
+                            风格铁律：{project.visualBible.styleExclusionRule || '未填'}
+                          </div>
+                        </details>
+                      ) : null}
                     </div>
 
                     {/* 进阶视听与机位：默认折叠，减少初学负担 */}
                     <details className="card-fold shot-extras">
                       <summary>
-                        <span className="card-fold-title">机位 · 台词 · 声音 · 情绪</span>
+                        <span className="card-fold-title">
+                          {videoMode === 'scenic'
+                            ? '机位 · 环境音景 · 氛围'
+                            : videoMode === 'explainer'
+                              ? '机位 · 音效 · 章节 · 转场'
+                              : '机位 · 台词 · 声音 · 情绪'}
+                        </span>
                         {extraIssuesCount > 0 ? (
                           <span className="tag tag-warning">{extraIssuesCount} 处要改</span>
                         ) : (
@@ -979,30 +1251,48 @@ export function StoryboardPage() {
                               aria-label="这一镜的机位"
                               value={shot.cameraPosition}
                               onChange={(e) => patch(shot, { cameraPosition: e.target.value })}
-                              placeholder="例：略低角度，仰拍人物"
+                              placeholder={
+                                videoMode === 'scenic'
+                                  ? '例：50mm 中焦，低角度贴近地面'
+                                  : videoMode === 'explainer'
+                                    ? '例：居中平视信息图视角'
+                                    : '例：略低角度，仰拍人物'
+                              }
                             />
                           </div>
+                          {videoMode !== 'explainer' ? (
+                            <div>
+                              <div className="field-label">
+                                {videoMode === 'scenic' ? '纪录片旁白（可选）' : '台词 / 旁白'}
+                              </div>
+                              <input
+                                type="text"
+                                aria-label="这一镜的台词或旁白"
+                                value={shot.dialogue}
+                                onChange={(e) => patch(shot, { dialogue: e.target.value })}
+                              />
+                            </div>
+                          ) : null}
                           <div>
-                            <div className="field-label">台词 / 旁白</div>
-                            <input
-                              type="text"
-                              aria-label="这一镜的台词或旁白"
-                              value={shot.dialogue}
-                              onChange={(e) => patch(shot, { dialogue: e.target.value })}
-                            />
-                          </div>
-                          <div>
-                            <div className="field-label">声音</div>
+                            <div className="field-label">
+                              {videoMode === 'scenic' ? '原生环境音景' : '声音'}
+                            </div>
                             <input
                               type="text"
                               aria-label="这一镜的声音"
                               value={shot.sound}
                               onChange={(e) => patch(shot, { sound: e.target.value })}
-                              placeholder="环境音 / 音效"
+                              placeholder={
+                                videoMode === 'scenic'
+                                  ? '例：松涛风声、露珠滴落、溪流回响'
+                                  : '环境音 / 音效'
+                              }
                             />
                           </div>
                           <div>
-                            <div className="field-label">情绪</div>
+                            <div className="field-label">
+                              {videoMode === 'scenic' ? '光影氛围' : '情绪'}
+                            </div>
                             <input
                               type="text"
                               aria-label="这一镜的情绪"
@@ -1011,26 +1301,34 @@ export function StoryboardPage() {
                             />
                             <FieldIssues issues={issuesOf('mood')} label="情绪" />
                           </div>
+                          {charEnabled ? (
+                            <div>
+                              <div className="field-label">画外人物</div>
+                              <input
+                                type="text"
+                                aria-label="这一镜的画外人物，用顿号分隔"
+                                value={shot.offscreenCharacters.join('、')}
+                                onChange={(e) =>
+                                  patch(shot, {
+                                    offscreenCharacters: e.target.value
+                                      .split(/[、,，\s]+/)
+                                      .map((s) => s.trim())
+                                      .filter(Boolean),
+                                  })
+                                }
+                                placeholder="只在声音里出现的人，用、分隔"
+                              />
+                              <FieldIssues issues={issuesOf('offscreenCharacters')} label="画外人物" />
+                            </div>
+                          ) : null}
                           <div>
-                            <div className="field-label">画外人物</div>
-                            <input
-                              type="text"
-                              aria-label="这一镜的画外人物，用顿号分隔"
-                              value={shot.offscreenCharacters.join('、')}
-                              onChange={(e) =>
-                                patch(shot, {
-                                  offscreenCharacters: e.target.value
-                                    .split(/[、,，\s]+/)
-                                    .map((s) => s.trim())
-                                    .filter(Boolean),
-                                })
-                              }
-                              placeholder="只在声音里出现的人，用、分隔"
-                            />
-                            <FieldIssues issues={issuesOf('offscreenCharacters')} label="画外人物" />
-                          </div>
-                          <div>
-                            <div className="field-label">来源场次</div>
+                            <div className="field-label">
+                              {videoMode === 'scenic'
+                                ? '所属视觉段落'
+                                : videoMode === 'explainer'
+                                  ? '所属概念章节'
+                                  : '来源场次'}
+                            </div>
                             <SelectMenu
                               className="source-scene-select"
                               value={shot.sourceSceneId}
@@ -1085,7 +1383,11 @@ export function StoryboardPage() {
                             frameKind: 'first-frame',
                           },
                           {
-                            label: '① 首帧（锁角色）',
+                            label: charEnabled
+                              ? '① 首帧（锁角色）'
+                              : videoMode === 'scenic'
+                                ? '① 首帧（锚定环境）'
+                                : '① 首帧（带风格参考）',
                             useReference: true,
                             frameKind: 'first-frame',
                           },
