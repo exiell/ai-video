@@ -182,6 +182,8 @@ export function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const restoreRef = useRef<HTMLElement | null>(null);
+  const onCancelRef = useRef(onCancel);
+  onCancelRef.current = onCancel;
 
   useEffect(() => {
     if (!open) return;
@@ -191,7 +193,7 @@ export function ConfirmDialog({
     cancelRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onCancel();
+        onCancelRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -219,7 +221,7 @@ export function ConfirmDialog({
       document.removeEventListener('keydown', onKey);
       restoreRef.current?.focus();
     };
-  }, [open, onCancel]);
+  }, [open]);
 
   if (!open) return null;
 

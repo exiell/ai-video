@@ -121,9 +121,10 @@ export function StoryChatPanel() {
                   turn.content
                 )}
               </div>
-              {turn.role === 'assistant' && (turn.webSources?.length || turn.ragCount) ? (
+              {turn.role === 'assistant' && (turn.webSources?.length || turn.ragCount || turn.searchQueryUsed) ? (
                 <SourceCards
                   webSources={turn.webSources}
+                  searchQueryUsed={turn.searchQueryUsed}
                   projectId={project.id}
                 />
               ) : null}

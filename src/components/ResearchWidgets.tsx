@@ -134,11 +134,13 @@ export function ChatMarkdown({ content }: { content: string }) {
 export function SourceCards({
   webSources,
   ragSources,
+  searchQueryUsed,
   projectId,
   warning,
 }: {
   webSources?: WebSearchResult[];
   ragSources?: RagHit[];
+  searchQueryUsed?: string;
   projectId?: string;
   warning?: string;
 }) {
@@ -154,6 +156,9 @@ export function SourceCards({
 
   return (
     <div className="source-cards">
+      {searchQueryUsed ? (
+        <div className="source-section-label">实际搜索词：{searchQueryUsed}</div>
+      ) : null}
       {warning ? <div className="source-warning">{warning}</div> : null}
 
       {hasRag ? (

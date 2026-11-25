@@ -313,7 +313,7 @@ export function VideoPanel({
       ) : (
         <>
           <p className="hint video-panel-hint">
-            本地服务一次只跑一条，一条 5 秒大约 12 分钟。先拿 1–2 镜试试，满意后再逐镜跑。
+            视频生成耗时取决于所选模型服务与队列情况，建议先挑 1–2 个镜头试跑效果，满意后再逐镜生成。
           </p>
 
           {!firstFrame ? (
@@ -476,7 +476,7 @@ export function VideoPanel({
                     ? '这一镜正在生成'
                     : queueFull
                       ? '排队已满，先把当前几条跑完'
-                      : '生成 5 秒本地视频草稿'
+                      : '生成 5 秒视频预览'
               }
               onClick={() => void handleSubmit()}
             >

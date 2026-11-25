@@ -7,8 +7,11 @@ import {
   tokenizeText,
 } from '../src/services/rag';
 import {
+  cleanSearchQuery,
+  decodeBingRedirectUrl,
   extractArticleFromHtml,
   formatWebResultsForPrompt,
+  isValidSearchResult,
   parseBingHtml,
   parseDuckDuckGoHtml,
 } from '../src/services/search/webSearch';
@@ -103,5 +106,40 @@ describe('第二批：本地中文 RAG 与联网搜索解析（Batch 2）', () =
     expect(article.title).toContain('黑洞原理解析');
     expect(article.textContent).toContain('史瓦西半径');
     expect(article.textContent).not.toContain('__tracking');
+  });
+
+  it('cleanSearchQuery 剥离口语前缀与「我」，decodeBingRedirectUrl 解码跳转，isValidSearchResult 过滤脏结果', () => {
+    const cleaned = cleanSearchQuery('我想做一个关于黑洞事件视界的科普视频，帮我查一下');
+    expect(cleaned).not.toMatch(/^我/);
+    expect(cleaned).toContain('黑洞事件视界');
+
+    const encodedTarget = Buffer.from('https://zh.wikipedia.org/wiki/黑洞', 'utf8').toString('base64');
+    const bingJump = `https://cn.bing.com/ck/a?u=a1${encodedTarget}`;
+    expect(decodeBingRedirectUrl(bingJump)).toBe('https://zh.wikipedia.org/wiki/黑洞');
+
+    expect(
+      isValidSearchResult({
+        title: '我',
+        url: 'https://baike.baidu.com/item/我',
+        snippet: '第一人称代词',
+        domain: 'baike.baidu.com',
+      }),
+    ).toBe(false);
+    expect(
+      isValidSearchResult({
+        title: 'Bing 首页',
+        url: 'https://cn.bing.com/',
+        snippet: '',
+        domain: 'cn.bing.com',
+      }),
+    ).toBe(false);
+    expect(
+      isValidSearchResult({
+        title: '黑洞 - 维基百科',
+        url: 'https://zh.wikipedia.org/wiki/黑洞',
+        snippet: '黑洞是时空展现出极强引力的区域。',
+        domain: 'zh.wikipedia.org',
+      }),
+    ).toBe(true);
   });
 });

@@ -698,6 +698,7 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
       <SourceCards
         webSources={bubble.webSources}
         ragSources={bubble.ragSources}
+        searchQueryUsed={bubble.searchQueryUsed}
         projectId={projectId}
         warning={bubble.searchWarning}
       />

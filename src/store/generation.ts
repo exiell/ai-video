@@ -379,8 +379,15 @@ export const useGeneration = create<GenerationState>((set, get) => ({
     const useRag = options?.useRag !== false;
     const useWebSearch = Boolean(options?.useWebSearch);
     const ragHits = useRag ? await searchKnowledge(text, project.id, 4) : [];
-    const webRes = useWebSearch ? await searchWeb(text, { limit: 5 }) : null;
+    const webRes = useWebSearch
+      ? await searchWeb(text, {
+          limit: 5,
+          projectTopic: project.name || project.logline,
+          llmCtx: built.ctx,
+        })
+      : null;
     const webSources = webRes?.ok ? webRes.results : [];
+    const searchQueryUsed = webRes?.searchQueryUsed;
     const referenceBlock = [
       formatRagHitsForPrompt(ragHits),
       formatWebResultsForPrompt(webSources),
@@ -413,6 +420,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
         content: result.reply,
         createdAt: new Date().toISOString(),
         ...(webSources.length > 0 ? { webSources } : {}),
+        ...(searchQueryUsed ? { searchQueryUsed } : {}),
         ...(ragHits.length > 0 ? { ragCount: ragHits.length } : {}),
       };
       useAppStore.getState().patchProject({

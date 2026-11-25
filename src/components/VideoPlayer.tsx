@@ -195,7 +195,7 @@ export function VideoPlayer({
         }}
       >
         <p style={{ marginTop: 0 }}>
-          会重新排队生成，约 12 分钟。完成后替换当前视频，旧视频会删除。
+          会重新提交生成。完成后替换当前视频，旧视频会删除。
         </p>
       </ConfirmDialog>
 

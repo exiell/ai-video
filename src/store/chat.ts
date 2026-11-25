@@ -63,6 +63,8 @@ export interface ChatBubble {
   gateWhy?: string;
   /** 联网搜索返回的参考网页 */
   webSources?: WebSearchResult[];
+  /** 联网搜索实际使用的提炼关键词 */
+  searchQueryUsed?: string;
   /** 本地资料库（RAG）命中的片段 */
   ragSources?: RagHit[];
   /** 联网搜索受限时的温和提示 */
@@ -180,13 +182,19 @@ export const useChat = create<ChatState>((set, get) => ({
 
     let ragSources: RagHit[] = [];
     let webSources: WebSearchResult[] = [];
+    let searchQueryUsed: string | undefined;
     let searchWarning: string | undefined;
 
     if (useRag) {
       ragSources = await searchKnowledge(text, project.id, 4);
     }
     if (useWebSearch) {
-      const webRes = await searchWeb(text, { limit: 5 });
+      const webRes = await searchWeb(text, {
+        limit: 5,
+        projectTopic: project.name || project.logline,
+        llmCtx: gen.ctx,
+      });
+      searchQueryUsed = webRes.searchQueryUsed;
       if (webRes.ok) {
         webSources = webRes.results;
       } else if (webRes.error) {
@@ -215,6 +223,7 @@ export const useChat = create<ChatState>((set, get) => ({
           role: 'assistant',
           content: discussOutcome.ok ? (discussOutcome.reply ?? '') : '',
           ...(webSources.length > 0 ? { webSources } : {}),
+          ...(searchQueryUsed ? { searchQueryUsed } : {}),
           ...(ragSources.length > 0 ? { ragSources } : {}),
           ...(searchWarning ? { searchWarning } : {}),
         };
@@ -236,6 +245,7 @@ export const useChat = create<ChatState>((set, get) => ({
         role: 'assistant',
         content: '',
         ...(webSources.length > 0 ? { webSources } : {}),
+        ...(searchQueryUsed ? { searchQueryUsed } : {}),
         ...(ragSources.length > 0 ? { ragSources } : {}),
         ...(searchWarning ? { searchWarning } : {}),
       };

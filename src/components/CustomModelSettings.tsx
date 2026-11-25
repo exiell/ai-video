@@ -939,9 +939,9 @@ export function CustomModelSettings() {
             <div className="custom-capabilities">
               <b style={{ fontSize: 13 }}>视频能力</b>
               <div className="hint" style={{ marginTop: 2 }}>
-                本地 SkyReels 支持 1–4 张参考图；第 1 张参考图决定画幅。
+                视频模型通常支持 1–4 张参考图；第 1 张参考图决定输出画幅。
               </div>
-              <Field label="参考图上限" hint="0 表示不传参考图；本地 SkyReels 填 4。">
+              <Field label="参考图上限" hint="0 表示不传参考图；支持多图参考的视频服务通常填 1–4。">
                 <input
                   type="text"
                   inputMode="numeric"

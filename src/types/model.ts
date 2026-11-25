@@ -410,6 +410,8 @@ export interface StoryChatTurn {
   createdAt: string;
   /** 可选：该轮回复参考的联网网页来源 */
   webSources?: Array<{ title: string; url: string; domain: string; snippet: string }>;
+  /** 可选：该轮联网搜索实际使用的提炼关键词 */
+  searchQueryUsed?: string;
   /** 可选：该轮回复命中的资料库条数 */
   ragCount?: number;
 }
