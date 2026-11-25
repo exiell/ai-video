@@ -1,4 +1,5 @@
 import type { CheckIssue, Project, SceneCard, Shot } from '../../types/model';
+import { isPhysicalSceneStageEnabled } from '../pipeline/profiles';
 import { makeIssue, shotLabel } from './shared';
 
 /**
@@ -115,6 +116,11 @@ function hasSceneVariantActive(shot: Shot, scene: SceneCard): boolean {
 
 export function checkScenes(project: Project): CheckIssue[] {
   const issues: CheckIssue[] = [];
+
+  // 无物理场景模式（如科普解说 explainer）跳过物理场景绑定与场地检查
+  if (!isPhysicalSceneStageEnabled(project)) {
+    return issues;
+  }
 
   for (const scene of project.scenes) {
     const label = `场景「${scene.name}」`;

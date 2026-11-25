@@ -1,4 +1,8 @@
 import type { Asset, AssetKind, Project } from '../types/model';
+import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+} from '../domain/pipeline/profiles';
 
 /**
  * 图库覆盖度判定。
@@ -72,11 +76,11 @@ export function computeImageCoverage(project: Project | null, gallery: Gallery):
       hasKind(gallery[s.id], 'end-frame'),
   ).length;
 
-  const referencesReady =
-    characters.length > 0 &&
-    scenes.length > 0 &&
-    charsReady === characters.length &&
-    scenesReady === scenes.length;
+  const charEnabled = isCharacterStageEnabled(project);
+  const sceneEnabled = isPhysicalSceneStageEnabled(project);
+  const charsSatisfied = !charEnabled || (characters.length > 0 && charsReady === characters.length);
+  const scenesSatisfied = !sceneEnabled || (scenes.length > 0 && scenesReady === scenes.length);
+  const referencesReady = charsSatisfied && scenesSatisfied;
   const imagesReady = referencesReady && shots.length > 0 && framesReady === shots.length;
 
   return {

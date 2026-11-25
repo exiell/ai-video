@@ -12,6 +12,33 @@
 // ---------------------------------------------------------------------------
 
 import type { VideoCapabilities, VideoProtocol } from './video';
+import type {
+  IntentRouteResult,
+  ShotContinuityMode,
+  ShotRenderEngine,
+  StageStatusMap,
+  VideoMode,
+  VisualAsset,
+  VisualBible,
+} from '../domain/pipeline/profiles';
+
+export type {
+  CharacterPolicy,
+  DefaultVideoModelTier,
+  HumanExclusionMode,
+  IntentRouteResult,
+  PipelineProfile,
+  ScenePolicy,
+  ScriptStructureKind,
+  ShotContinuityMode,
+  ShotRenderEngine,
+  StageRunStatus,
+  StageStatusMap,
+  VideoMode,
+  VisualAsset,
+  VisualAssetCategory,
+  VisualBible,
+} from '../domain/pipeline/profiles';
 
 /** 当前数据模型版本。改动模型结构时递增，并在 migrate.ts 补迁移函数。 */
 export const SCHEMA_VERSION = 1;
@@ -372,13 +399,39 @@ export interface Shot {
    * 缺省视为 `master`：老项目没有这个字段，镜头都按主视角处理。
    */
   viewAngle?: SceneAngle;
+
+  /** 分镜级渲染引擎（缺省视为 ai_video，预留代码渲染扩展位） */
+  renderEngine?: ShotRenderEngine;
+  /** 跨镜头视觉连续性模式 */
+  continuityMode?: ShotContinuityMode;
+  /** 科普模式连续旁白文本（非科普模式可为空或 null） */
+  narrationText?: string | null;
+  /** 科普模式旁白在整轨音频中的起止秒数 [startSec, endSec] */
+  narrationTimeRangeSec?: [number, number] | null;
+  /** 科普模式：抽象概念转译后的具象画面隐喻 */
+  visualMetaphor?: string | null;
+  /** 科普模式：屏幕简短标注（建议 3–5 词） */
+  onScreenLabels?: string[];
+  /** 代码渲染指令（供 html_hyperframes / manim 使用） */
+  codeRenderSpec?: string | null;
+  /** 本镜引用的泛化视觉资产标签（如 @alpine_valley / @photon_motif） */
+  referencedAssetTags?: string[];
 }
 
 // ---------------------------------------------------------------------------
 // 项目
 // ---------------------------------------------------------------------------
 
-export type TargetPlatform = 'jimeng' | 'kling' | 'seedance' | 'runway' | 'sora' | 'veo';
+export type TargetPlatform =
+  | 'jimeng'
+  | 'kling'
+  | 'seedance'
+  | 'runway'
+  | 'sora'
+  | 'veo'
+  | 'wan'
+  | 'pika'
+  | 'hailuo';
 
 export const PLATFORM_LABEL: Record<TargetPlatform, string> = {
   jimeng: '即梦',
@@ -387,6 +440,9 @@ export const PLATFORM_LABEL: Record<TargetPlatform, string> = {
   runway: 'Runway',
   sora: 'Sora',
   veo: 'Veo',
+  wan: '通义万相',
+  pika: 'Pika',
+  hailuo: '海螺',
 };
 
 export interface ProjectBrief {
@@ -438,6 +494,20 @@ export interface Project extends Versioned {
   scenes: SceneCard[];
   /** 可选：故事共创对话与创作共识（向后兼容旧项目 JSON） */
   creativeContext?: CreativeContext;
+  /** 生产模式：缺省一律按 narrative 处理，100% 向后兼容旧项目 */
+  videoMode?: VideoMode;
+  /** 仅 explainer 模式有效：是否启用单一虚拟讲解员/吉祥物，默认 false */
+  enableVirtualHost?: boolean;
+  /** 前置意图路由识别记录 */
+  intentRoute?: IntentRouteResult;
+  /** 视觉圣经 / 风格锁（scenic 与 explainer 的核心跨镜视觉锚点） */
+  visualBible?: VisualBible;
+  /** 泛化视觉资产（environment / style_ref / visual_motif / diagram_card 等） */
+  visualAssets?: VisualAsset[];
+  /** 编排器各阶段执行状态（支持标记 skipped） */
+  stageStatus?: StageStatusMap;
+  /** 科普模式整篇连续解说词（旁白先行） */
+  narrationScript?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -949,6 +1019,8 @@ export interface PromptLine {
   zh: string;
   /** 逐项说明：为什么这么写 */
   notes: PromptNote[];
+  /** 模型感知负向提示词（若目标模型不支持原生负向词，如 Runway Gen-4，则留空） */
+  negative?: string;
 }
 
 export interface PromptNote {

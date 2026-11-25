@@ -6,7 +6,9 @@ import type {
   SceneCard,
   Shot,
   Story,
+  VideoMode,
 } from '../types/model';
+import { makeDefaultVisualBible } from '../domain/pipeline/profiles';
 import { runChecks } from '../domain/checks';
 import { SCHEMA_VERSION } from '../types/model';
 import { deleteProject, newId, requestPersistentStorage, saveProject } from '../services/storage';
@@ -83,7 +85,10 @@ interface AppState {
   removeProject: (id: string) => Promise<{ ok: boolean; error?: string }>;
   clearSaveError: () => void;
 
-  createEmptyProject: (name?: string) => Project;
+  createEmptyProject: (
+    name?: string,
+    options?: { videoMode?: VideoMode; enableVirtualHost?: boolean },
+  ) => Project;
 }
 
 function nowIso(): string {
@@ -91,20 +96,36 @@ function nowIso(): string {
 }
 
 /** 创建一个空项目 */
-export function makeEmptyProject(name = '未命名项目'): Project {
+export function makeEmptyProject(
+  name = '未命名项目',
+  options?: { videoMode?: VideoMode; enableVirtualHost?: boolean },
+): Project {
   const ts = nowIso();
   const base = { schemaVersion: SCHEMA_VERSION, createdAt: ts, updatedAt: ts };
+  const videoMode: VideoMode = options?.videoMode ?? 'narrative';
+  const enableVirtualHost = videoMode === 'explainer' ? Boolean(options?.enableVirtualHost) : false;
+  const visualBible = videoMode === 'narrative' ? undefined : makeDefaultVisualBible(videoMode);
+
   return {
     ...base,
     id: newId('proj'),
     name,
     logline: '',
+    videoMode,
+    enableVirtualHost,
+    ...(visualBible ? { visualBible } : {}),
+    visualAssets: [],
     brief: {
       targetDuration: 30,
       aspectRatio: '9:16',
       platforms: ['jimeng'],
       styleTone: '',
-      styleTags: ['anime style'],
+      styleTags:
+        videoMode === 'scenic'
+          ? ['documentary cinematography', 'natural lighting']
+          : videoMode === 'explainer'
+            ? ['flat geometric vector illustration', 'clean infographic style']
+            : ['anime style'],
       negativePrompt: 'text, watermark, logo, extra fingers, distorted face',
     },
     story: {
@@ -375,8 +396,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   clearSaveError: () => set({ saveError: null }),
 
-  createEmptyProject: (name) => {
-    const project = makeEmptyProject(name);
+  createEmptyProject: (name, options) => {
+    const project = makeEmptyProject(name, options);
     set((state) => ({
       project,
       report: runChecks(project),

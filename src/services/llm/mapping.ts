@@ -1,7 +1,13 @@
-import type { CharacterCard, SceneCard, Shot, Story } from '../../types/model';
+import type { CharacterCard, SceneCard, Shot, Story, VisualAsset } from '../../types/model';
 import { SCHEMA_VERSION } from '../../types/model';
 import { newId } from '../storage';
-import type { GeneratedAssets, GeneratedShots, GeneratedStory } from './schemas';
+import type {
+  GeneratedAssets,
+  GeneratedExplainerAssets,
+  GeneratedScenicAssets,
+  GeneratedShots,
+  GeneratedStory,
+} from './schemas';
 
 /**
  * 生成结果 → 领域对象的映射（方案.md v0.6 §3.2 M2）
@@ -179,23 +185,54 @@ export interface ShotMappingResult {
   warnings: string[];
 }
 
+export function visualAssetsFromGenerated(
+  items:
+    | GeneratedScenicAssets['visualAssets']
+    | GeneratedExplainerAssets['visualAssets']
+    | undefined,
+): VisualAsset[] {
+  return (items ?? []).map((item) => ({
+    id: newId('va'),
+    category: item.category,
+    name: item.name,
+    tag: item.tag.startsWith('@') ? item.tag : `@${item.tag}`,
+    visualPrompt: item.visualPrompt,
+    referenceImageUrls: [],
+    isImmutableAnchor: item.isImmutableAnchor,
+  }));
+}
+
+export interface ShotMappingOptions {
+  /** 是否要求每镜必须绑定物理场景（explainer 无实景模式为 false） */
+  requireScene?: boolean;
+  /** 是否允许分镜引用角色（scenic 及无主持人 explainer 模式为 false） */
+  allowCharacters?: boolean;
+}
+
 export function shotsFromGenerated(
   generated: GeneratedShots,
   mapping: AssetMapping,
   storyScenes: { id: string }[],
+  options: ShotMappingOptions = {},
 ): ShotMappingResult {
+  const requireScene = options.requireScene !== false;
+  const allowCharacters = options.allowCharacters !== false;
   const warnings: string[] = [];
   const unresolvedByShot: string[] = [];
 
   const shots: Shot[] = generated.shots.map((g, index) => {
-    const sceneId = mapping.sceneIdBySlug.get(g.sceneSlug);
-    if (!sceneId) warnings.push(`第 ${index + 1} 镜引用了不存在的场景「${g.sceneSlug}」`);
+    const sceneId = g.sceneSlug ? mapping.sceneIdBySlug.get(g.sceneSlug) : undefined;
+    if (requireScene && !sceneId) {
+      warnings.push(`第 ${index + 1} 镜引用了不存在的场景「${g.sceneSlug}」`);
+    }
 
     const characterIds: string[] = [];
-    for (const characterSlug of g.characterSlugs) {
-      const id = mapping.characterIdBySlug.get(characterSlug);
-      if (id) characterIds.push(id);
-      else warnings.push(`第 ${index + 1} 镜引用了不存在的角色「${characterSlug}」`);
+    if (allowCharacters) {
+      for (const characterSlug of g.characterSlugs) {
+        const id = mapping.characterIdBySlug.get(characterSlug);
+        if (id) characterIds.push(id);
+        else warnings.push(`第 ${index + 1} 镜引用了不存在的角色「${characterSlug}」`);
+      }
     }
 
     const activeLockIds: string[] = [];
@@ -248,8 +285,18 @@ export function shotsFromGenerated(
       characterIds,
       variantIds,
       activeLockIds,
-      offscreenCharacters: g.offscreenCharacters,
+      offscreenCharacters: allowCharacters ? g.offscreenCharacters : [],
       sourceSceneId: storyScenes[g.sourceSceneIndex]?.id ?? '',
+      ...(g.renderEngine ? { renderEngine: g.renderEngine } : {}),
+      ...(g.continuityMode ? { continuityMode: g.continuityMode } : {}),
+      ...(g.narrationText !== undefined ? { narrationText: g.narrationText } : {}),
+      ...(g.narrationTimeRangeSec !== undefined
+        ? { narrationTimeRangeSec: g.narrationTimeRangeSec }
+        : {}),
+      ...(g.visualMetaphor !== undefined ? { visualMetaphor: g.visualMetaphor } : {}),
+      ...(g.onScreenLabels ? { onScreenLabels: g.onScreenLabels } : {}),
+      ...(g.codeRenderSpec !== undefined ? { codeRenderSpec: g.codeRenderSpec } : {}),
+      ...(g.referencedAssetTags ? { referencedAssetTags: g.referencedAssetTags } : {}),
     };
   });
 

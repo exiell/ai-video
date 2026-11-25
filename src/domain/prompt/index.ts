@@ -9,6 +9,8 @@ import type {
   TargetPlatform,
 } from '../../types/model';
 import { CAMERA_MOVE_EN, PLATFORM_LABEL, SHOT_SIZE_EN, SHOT_SIZE_LABEL } from '../../types/model';
+import { resolveVideoMode } from '../pipeline/profiles';
+import { PromptCompilerFactory } from './compilers';
 
 /**
  * 提示词适配引擎（方案.md v0.6 §3.2 M5）
@@ -32,6 +34,9 @@ const PLATFORM_STYLE: Record<TargetPlatform, PromptStyle> = {
   runway: 'labelled',
   sora: 'prose',
   veo: 'prose',
+  wan: 'prose',
+  pika: 'prose',
+  hailuo: 'prose',
 };
 
 export interface AssembleInput {
@@ -125,10 +130,20 @@ function cameraMoveEn(move: CameraMove): string {
 }
 
 /**
- * 生成单镜在指定平台上的提示词。
- * 返回英文正文（可直接粘贴）、中文对照、以及逐项说明。
+ * 生成单镜在指定平台上的提示词（按 VideoMode 策略分发）。
+ * 返回英文正文（可直接粘贴）、中文对照、逐项说明及模型感知负向词。
  */
 export function buildShotPrompt(
+  project: Project,
+  shot: Shot,
+  platform: TargetPlatform,
+): PromptLine {
+  const mode = resolveVideoMode(project);
+  return PromptCompilerFactory.get(mode).compile(project, shot, platform);
+}
+
+/** 叙事剧情模式（narrative）原有编译实现，保持 100% 向后兼容 */
+function buildNarrativeShotPrompt(
   project: Project,
   shot: Shot,
   platform: TargetPlatform,
@@ -209,6 +224,8 @@ export function buildShotPrompt(
 
   return { en, zh, notes };
 }
+
+PromptCompilerFactory.registerNarrative(buildNarrativeShotPrompt);
 
 /** 中文对照：让用户看懂自己将要粘贴什么 */
 function buildChineseMirror(

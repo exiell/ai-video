@@ -10,6 +10,12 @@ import {
   PLATFORM_LABEL,
   SHOT_SIZE_LABEL,
 } from '../types/model';
+import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+  resolveVideoMode,
+  VIDEO_MODE_SHORT_LABEL,
+} from '../domain/pipeline/profiles';
 import { listProjects, loadProject, type ProjectRecord } from '../services/storage';
 import { importProjectFile } from '../services/storage/importBundle';
 
@@ -185,8 +191,19 @@ export function HomePage() {
     await refresh();
   }
 
+  const charEnabled = isCharacterStageEnabled(project);
+  const sceneEnabled = isPhysicalSceneStageEnabled(project);
+  const videoMode = resolveVideoMode(project);
   const storyDone = !!story?.body.trim();
-  const settingDone = characters.length > 0 && scenes.length > 0;
+  const hasVisualAnchors =
+    Boolean(project?.visualBible?.styleAnchor?.trim()) ||
+    (project?.visualAssets?.length ?? 0) > 0;
+  const settingDone =
+    (!charEnabled || characters.length > 0) &&
+    (!sceneEnabled || scenes.length > 0) &&
+    (charEnabled || sceneEnabled || hasVisualAnchors || shots.length > 0);
+  void videoMode;
+  void VIDEO_MODE_SHORT_LABEL;
   const storyboardDone = shots.length > 0 && !durationOff && errorCount === 0;
   const framesAll = shots.length > 0 && coverage.framesReady === shots.length;
   const deliveryDone = shots.length > 0 && errorCount === 0 && coverage.imagesReady;

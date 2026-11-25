@@ -52,7 +52,10 @@ export function Layout({ children }: { children: ReactNode }) {
 
   const errorCount = report?.counts.error ?? 0;
   const shotCount = project?.shots.length ?? 0;
-  const assetCount = (project?.characters.length ?? 0) + (project?.scenes.length ?? 0);
+  const assetCount =
+    (project?.characters.length ?? 0) +
+    (project?.scenes.length ?? 0) +
+    (project?.visualAssets?.length ?? 0);
   const total = project?.shots.reduce((sum, shot) => sum + (Number(shot.duration) || 0), 0) ?? 0;
   const storyWritten = !!project?.story.body.trim();
 

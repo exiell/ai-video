@@ -71,6 +71,7 @@ export const storySchema = z.object({
   setting: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
   conflict: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
   ending: z.string().max(MAX_STORY_FIELD_CHARS).default(''),
+  narrationScript: z.string().max(MAX_STORY_BODY_CHARS).optional(),
   scenes: z
     .array(
       z.object({
@@ -83,6 +84,25 @@ export const storySchema = z.object({
 });
 
 export type GeneratedStory = z.infer<typeof storySchema>;
+
+export const visualBibleSchema = z.object({
+  styleAnchor: z.string().max(MAX_IDENTITY_CHARS).default(''),
+  colorPalette: z.array(z.string().max(MAX_ENTITY_NAME_CHARS)).max(12).default([]),
+  lightingDirection: z.string().max(MAX_IDENTITY_CHARS).default(''),
+  lensAndFramingRule: z.string().max(MAX_IDENTITY_CHARS).default(''),
+  atmosphereOrMotifRules: z.string().max(MAX_IDENTITY_CHARS).default(''),
+  styleExclusionRule: z.string().max(MAX_IDENTITY_CHARS).default(''),
+});
+
+export const visualAssetItemSchema = z.object({
+  category: z
+    .enum(['character', 'scene', 'environment', 'style_ref', 'visual_motif', 'diagram_card'])
+    .default('visual_motif'),
+  name: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+  tag: z.string().min(1).max(MAX_ENTITY_NAME_CHARS),
+  visualPrompt: z.string().max(MAX_IDENTITY_CHARS).default(''),
+  isImmutableAnchor: z.boolean().default(true),
+});
 
 // ---------------------------------------------------------------------------
 
@@ -99,6 +119,7 @@ const continuityLockSchema = z.object({
 });
 
 export const assetsSchema = z.object({
+  hasSentientCharacters: z.boolean().optional(),
   characters: z
     .array(
       z.object({
@@ -178,6 +199,43 @@ export type GeneratedAssets = Omit<InferredAssets, 'characters'> & {
   >;
 };
 
+/**
+ * 纯风光模式（scenic）资产 Schema：物理移除 characters 字段，
+ * 从解码语法层面杜绝将水滴/光线/岩石提取为角色。
+ */
+export const scenicAssetsSchema = z.object({
+  visualBible: visualBibleSchema,
+  scenes: assetsSchema.shape.scenes,
+  visualAssets: z.array(visualAssetItemSchema).max(MAX_ASSETS).default([]),
+});
+
+export type GeneratedScenicAssets = z.infer<typeof scenicAssetsSchema>;
+
+/**
+ * 科普解说模式（explainer · 无主持人）资产 Schema：
+ * 物理移除 characters 与物理 scenes 字段，仅产出风格圣经与非人物视觉母题清单。
+ */
+export const explainerAssetsNoHostSchema = z.object({
+  visualBible: visualBibleSchema,
+  visualAssets: z.array(visualAssetItemSchema).max(MAX_ASSETS).default([]),
+});
+
+/**
+ * 科普解说模式（explainer · 启用虚拟讲解员）资产 Schema：
+ * 物理移除物理 scenes 字段，仅允许至多 1 个虚拟讲解员角色与非人物母题清单。
+ */
+export const explainerAssetsWithHostSchema = z.object({
+  visualBible: visualBibleSchema,
+  visualAssets: z.array(visualAssetItemSchema).max(MAX_ASSETS).default([]),
+  virtualHost: assetsSchema.shape.characters.unwrap().element.nullable().optional(),
+});
+
+export type GeneratedExplainerAssets = {
+  visualBible: z.infer<typeof visualBibleSchema>;
+  visualAssets: Array<z.infer<typeof visualAssetItemSchema>>;
+  virtualHost?: InferredGeneratedCharacter | null;
+};
+
 // ---------------------------------------------------------------------------
 
 export const shotSizeEnum = z.enum([
@@ -232,7 +290,8 @@ export const shotsSchema = z.object({
          * optional：模型漏写时由衔接说明推断，不该因此让整条分镜解析失败。
          */
         transitionType: z.enum(['continuation', 'cut']).optional(),
-        sceneSlug: slug,
+        /** 叙事与风光模式为场景 slug；科普无实景模式可为空字符串 */
+        sceneSlug: z.string().max(120).default(''),
         characterSlugs: z.array(slug).max(MAX_REFERENCES).default([]),
         activeLockLabels: z
           .array(z.string().max(MAX_ENTITY_NAME_CHARS))
@@ -247,6 +306,25 @@ export const shotsSchema = z.object({
           .max(MAX_OFFSCREEN)
           .default([]),
         sourceSceneIndex: z.coerce.number().int().min(0).max(1000).default(0),
+        renderEngine: z
+          .enum([
+            'ai_video',
+            'ai_first_last_frame',
+            'ai_ref_to_video',
+            'ai_image_kenburns',
+            'html_hyperframes',
+            'manim',
+          ])
+          .optional(),
+        continuityMode: z
+          .enum(['cut', 'prev_tail_frame_offset', 'first_last_frame', 'style_ref_only'])
+          .optional(),
+        narrationText: z.string().max(MAX_SHOT_TEXT_CHARS).nullable().optional(),
+        narrationTimeRangeSec: z.tuple([z.coerce.number(), z.coerce.number()]).nullable().optional(),
+        visualMetaphor: z.string().max(MAX_SHOT_TEXT_CHARS).nullable().optional(),
+        onScreenLabels: z.array(z.string().max(MAX_ENTITY_NAME_CHARS)).max(8).optional(),
+        codeRenderSpec: z.string().max(MAX_SHOT_TEXT_CHARS).nullable().optional(),
+        referencedAssetTags: z.array(z.string().max(MAX_ENTITY_NAME_CHARS)).max(20).optional(),
       }),
     )
     .min(1)
@@ -285,6 +363,22 @@ export function parseStory(raw: string): ParseOutcome<GeneratedStory> {
 /** 把模型的原始输出解析成角色与场景 */
 export function parseAssets(raw: string): ParseOutcome<GeneratedAssets> {
   return parseWith(assetsSchema, raw, '角色与场景', 'assets');
+}
+
+/** 把模型的原始输出解析成风光模式的视觉圣经与环境锚点（物理不含 characters） */
+export function parseScenicAssets(raw: string): ParseOutcome<GeneratedScenicAssets> {
+  return parseWith(scenicAssetsSchema, raw, '视觉圣经与环境锚点');
+}
+
+/** 把模型的原始输出解析成科普模式的风格预设与视觉母题清单 */
+export function parseExplainerAssets(
+  raw: string,
+  enableVirtualHost = false,
+): ParseOutcome<GeneratedExplainerAssets> {
+  if (enableVirtualHost) {
+    return parseWith(explainerAssetsWithHostSchema, raw, '风格预设与视觉母题');
+  }
+  return parseWith(explainerAssetsNoHostSchema, raw, '风格预设与视觉母题');
 }
 
 // ---------------------------------------------------------------------------

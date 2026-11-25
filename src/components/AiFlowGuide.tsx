@@ -3,6 +3,11 @@ import { useAppStore } from '../store/app';
 import { RichText } from './bits';
 import { useImage } from '../store/image';
 import { computeImageCoverage } from './imageCoverage';
+import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+  resolveVideoMode,
+} from '../domain/pipeline/profiles';
 
 /**
  * AI 生成流程指引（方案.md §7.6.19）
@@ -71,51 +76,92 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
     endReady,
   } = computeImageCoverage(project, gallery);
 
-  const hasSplit = characters.length > 0 && scenes.length > 0;
+  const videoMode = resolveVideoMode(project);
+  const charEnabled = isCharacterStageEnabled(project);
+  const sceneEnabled = isPhysicalSceneStageEnabled(project);
+  const visualAssetCount = project.visualAssets?.length ?? 0;
+  const hasVisualBible = Boolean(project.visualBible?.styleAnchor?.trim());
+
+  const hasSplit =
+    (!charEnabled || characters.length > 0) &&
+    (!sceneEnabled || scenes.length > 0) &&
+    (charEnabled || sceneEnabled || hasVisualBible || visualAssetCount > 0);
   const hasShots = shots.length > 0;
 
-  const steps: FlowStep[] = [
+  const splitTitle =
+    videoMode === 'scenic'
+      ? '锁定视觉圣经与宏观环境'
+      : videoMode === 'explainer'
+        ? '锁定风格预设与视觉母题'
+        : '拆出角色与场景';
+
+  const allSteps: FlowStep[] = [
     {
       key: 'split',
-      title: '拆出角色与场景',
+      title: splitTitle,
       where: '分镜表',
       route: '/storyboard',
-      action: '点「① 从故事里拆角色与场景」',
+      action:
+        videoMode === 'scenic'
+          ? '点「① 生成视觉圣经与环境」'
+          : videoMode === 'explainer'
+            ? '点「① 生成风格预设与母题」'
+            : '点「① 从故事里拆角色与场景」',
       expect:
-        '会按故事里的场次生成场景卡与角色卡，并自动填好固定元素、光线、身份描述。之后你可以逐条改。',
+        videoMode === 'scenic'
+          ? '跳过角色提取，自动锁定摄影质感、色板、光源方向与宏观环境锚点。'
+          : videoMode === 'explainer'
+            ? '跳过物理场景，自动锁定插画风格预设与可复用的非人物视觉母题。'
+            : '会按故事里的场次生成场景卡与角色卡，并自动填好固定元素、光线、身份描述。之后你可以逐条改。',
       done: hasSplit,
-      ...(hasSplit ? { progress: `${characters.length} 角色 · ${scenes.length} 场景` } : {}),
-      // 只有真的已经有东西时才提「会被覆盖」——空项目上说这句是误导
+      ...(hasSplit
+        ? {
+            progress:
+              videoMode === 'scenic'
+                ? `${scenes.length} 环境 · ${visualAssetCount} 锚点`
+                : videoMode === 'explainer'
+                  ? `${visualAssetCount} 视觉母题${charEnabled ? ` · ${characters.length} 讲解员` : ''}`
+                  : `${characters.length} 角色 · ${scenes.length} 场景`,
+          }
+        : {}),
       ...(characters.length + scenes.length > 0
         ? {
-            gate: '这一步会**覆盖**现有的角色与场景。已经手建过也没关系。它会重新生成，你改过的内容会丢，自己权衡。',
+            gate: '这一步会**覆盖**现有的设定。已经手建过也没关系。它会重新生成，你改过的内容会丢，自己权衡。',
           }
         : {
-            gate: '这是起点。故事已经写好了，让模型先按场次拆一遍，比对着空白页一条条想要快得多。',
+            gate: '这是起点。脚本已经写好了，先由 AI 锁定视觉锚点，比对着空白页一条条想要快得多。',
           }),
     },
-    {
-      key: 'chars',
-      title: '出角色形象图',
-      where: '角色设定',
-      route: '/characters',
-      action: '点「全部角色形象图」',
-      expect: '每个角色拿到两张图：全身多视图，再拿它当参考出头部特写。',
-      done: characters.length > 0 && charsReady === characters.length,
-      progress: `角色 ${pct(charsReady, characters.length)}（全身 ${pct(charsWithSheet, characters.length)}、特写 ${pct(charsWithFace, characters.length)}）`,
-      gate: '形象图是后面所有关键帧的**参考图锚点**。这一步不满意就重出。等关键帧跑完再返工，前面花的钱就白花了。',
-    },
-    {
-      key: 'scenes',
-      title: '出场景参考板',
-      where: '场景设定',
-      route: '/scenes',
-      action: '点「全部场景参考板」',
-      expect: '每个场景拿到一张空镜参考板，写着这地方的空间结构与主光方向。',
-      done: scenes.length > 0 && scenesReady === scenes.length,
-      progress: `场景 ${pct(scenesReady, scenes.length)}`,
-      gate: '参考板决定「这是同一个地方」。同一个场景在不同镜头里长得不一样，观众第一眼就会出戏。',
-    },
+    ...(charEnabled
+      ? [
+          {
+            key: 'chars' as const,
+            title: videoMode === 'explainer' ? '出虚拟讲解员形象图' : '出角色形象图',
+            where: '角色设定',
+            route: '/characters',
+            action: '点「全部角色形象图」',
+            expect: '每个角色拿到两张图：全身多视图，再拿它当参考出头部特写。',
+            done: characters.length > 0 && charsReady === characters.length,
+            progress: `角色 ${pct(charsReady, characters.length)}（全身 ${pct(charsWithSheet, characters.length)}、特写 ${pct(charsWithFace, characters.length)}）`,
+            gate: '形象图是后面所有关键帧的**参考图锚点**。这一步不满意就重出。等关键帧跑完再返工，前面花的钱就白花了。',
+          },
+        ]
+      : []),
+    ...(sceneEnabled
+      ? [
+          {
+            key: 'scenes' as const,
+            title: videoMode === 'scenic' ? '出宏观环境参考板' : '出场景参考板',
+            where: '场景设定',
+            route: '/scenes',
+            action: '点「全部场景参考板」',
+            expect: '每个场景拿到一张空镜参考板，写着这地方的空间结构与主光方向。',
+            done: scenes.length > 0 && scenesReady === scenes.length,
+            progress: `场景 ${pct(scenesReady, scenes.length)}`,
+            gate: '参考板决定「这是同一个地方」。同一个场景在不同镜头里长得不一样，观众第一眼就会出戏。',
+          },
+        ]
+      : []),
     {
       key: 'shots',
       title: '生成分镜表',
@@ -137,9 +183,10 @@ export function AiFlowGuide({ variant = 'full' }: { variant?: 'full' | 'compact'
       expect: '每个镜头三张图：首帧（构图）、动作关键帧（动态顶点）、尾帧（这一镜结束时的状态）。',
       done: shots.length > 0 && firstReady === shots.length && peakReady === shots.length && endReady === shots.length,
       progress: `首帧 ${pct(firstReady, shots.length)} · 动作关键帧 ${pct(peakReady, shots.length)} · 尾帧 ${pct(endReady, shots.length)}`,
-      gate: '这是最花时间和钱的一步。**先把形象图跑满意再来**。首帧会拿角色形象图当参考，形象图不行，三帧全都救不回来。',
+      gate: '这是最花时间和钱的一步。**先把参考锚点跑满意再来**。首帧会拿参考图锚定画面。',
     },
   ];
+  const steps = allSteps;
 
   const doneCount = steps.filter((s) => s.done).length;
 

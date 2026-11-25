@@ -1,4 +1,5 @@
 import type { CharacterCard, CheckIssue, Project, Shot } from '../../types/model';
+import { isCharacterStageEnabled } from '../pipeline/profiles';
 import { makeIssue, mentionsName, shotLabel } from './shared';
 
 /**
@@ -43,6 +44,23 @@ function resolveCharacters(project: Project, shot: Shot): {
 
 export function checkCharacters(project: Project): CheckIssue[] {
   const issues: CheckIssue[] = [];
+
+  // 非角色模式（如自然风光或未开主持人的科普模式）豁免角色检查；若意外存在角色则给出明确提示
+  if (!isCharacterStageEnabled(project)) {
+    for (const character of project.characters) {
+      issues.push(
+        makeIssue({
+          ruleId: 'character-not-registered',
+          severity: 'warning',
+          title: `当前无角色模式下存在冗余角色「${character.name}」`,
+          why: '当前模式已关闭角色阶段，保留角色卡可能会干扰自然画面或科普风格。',
+          suggestion: '移除该角色卡，或改用视觉圣经与视觉母题来锚定画面要素。',
+          location: { kind: 'character', id: character.id },
+        }),
+      );
+    }
+    return issues;
+  }
 
   for (const shot of project.shots) {
     const { referenced } = resolveCharacters(project, shot);

@@ -11,8 +11,15 @@ import { matchStylePreset, STYLE_PRESETS } from '../domain/help/stylePresets';
 import { assessStyleChange } from '../domain/help/styleChange';
 import { useImage } from '../store/image';
 import { useGeneration } from '../store/generation';
-import type { StoryScene, TargetPlatform } from '../types/model';
+import type { StoryScene, TargetPlatform, VideoMode } from '../types/model';
 import { PLATFORM_LABEL } from '../types/model';
+import {
+  makeDefaultVisualBible,
+  resolveVideoMode,
+  VIDEO_MODE_DESC,
+  VIDEO_MODE_LABEL,
+  VIDEO_MODES,
+} from '../domain/pipeline/profiles';
 import { newId } from '../services/storage';
 
 /**
@@ -45,11 +52,13 @@ export function GuidePage() {
   const assetCount = useImage((s) => s.assetCount);
   const refreshAssetCount = useImage((s) => s.refreshAssetCount);
   const runStyleTags = useGeneration((s) => s.runStyleTags);
+  const detectVideoMode = useGeneration((s) => s.detectVideoMode);
   const pipeline = useGeneration((s) => s.pipeline);
   const runFullPipeline = useGeneration((s) => s.runFullPipeline);
   const clearPipeline = useGeneration((s) => s.clearPipeline);
 
   const [step, setStep] = useState(0);
+  const [detectingMode, setDetectingMode] = useState(false);
   const [pendingStyle, setPendingStyle] = useState<
     { kind: 'preset'; tags: string[] } | { kind: 'generate' } | null
   >(null);
@@ -72,6 +81,37 @@ export function GuidePage() {
   }
 
   const story = project.story;
+  const videoMode = resolveVideoMode(project);
+
+  function selectVideoMode(nextMode: VideoMode) {
+    const nextHost = nextMode === 'explainer' ? Boolean(project!.enableVirtualHost) : false;
+    patchProject({
+      videoMode: nextMode,
+      enableVirtualHost: nextHost,
+      ...(!project!.visualBible && nextMode !== 'narrative'
+        ? { visualBible: makeDefaultVisualBible(nextMode) }
+        : {}),
+      stageStatus: {
+        ...project!.stageStatus,
+        ...(nextMode === 'scenic' ? { characters: 'skipped' as const } : {}),
+        ...(nextMode === 'explainer'
+          ? {
+              scenes: 'skipped' as const,
+              ...(!nextHost ? { characters: 'skipped' as const } : {}),
+            }
+          : {}),
+      },
+    });
+  }
+
+  async function handleAutoDetectMode() {
+    setDetectingMode(true);
+    try {
+      await detectVideoMode(undefined, { useLlm: false });
+    } finally {
+      setDetectingMode(false);
+    }
+  }
 
   function addStoryScene() {
     const scene: StoryScene = {
@@ -167,6 +207,66 @@ export function GuidePage() {
                     AI 帮我起草
                   </button>
                 </div>
+              </div>
+
+              <div
+                style={{
+                  marginBottom: 14,
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--line)',
+                  background: 'var(--bg-elev)',
+                }}
+              >
+                <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>生产模式：</span>
+                    {VIDEO_MODES.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`btn btn-sm${videoMode === m ? ' btn-primary' : ''}`}
+                        onClick={() => selectVideoMode(m)}
+                      >
+                        {VIDEO_MODE_LABEL[m]}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    disabled={detectingMode}
+                    onClick={() => void handleAutoDetectMode()}
+                    title="根据当前主题、正文与对话自动判定视频生产模式"
+                  >
+                    {detectingMode ? '识别中…' : '智能识别模式'}
+                  </button>
+                </div>
+                <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                  {VIDEO_MODE_DESC[videoMode]}
+                  {project.intentRoute?.reasoning ? `（判定依据：${project.intentRoute.reasoning}）` : ''}
+                </div>
+                {videoMode === 'explainer' ? (
+                  <label
+                    className="row"
+                    style={{ gap: 8, marginTop: 8, fontSize: 13, cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={Boolean(project.enableVirtualHost)}
+                      onChange={(e) =>
+                        patchProject({
+                          enableVirtualHost: e.target.checked,
+                          stageStatus: {
+                            ...project.stageStatus,
+                            characters: e.target.checked ? 'pending' : 'skipped',
+                          },
+                        })
+                      }
+                    />
+                    <span>启用虚拟讲解员 / 吉祥物（默认关闭；开启后最多生成 1 个轻量讲解员）</span>
+                  </label>
+                ) : null}
               </div>
 
               {story.source === 'generated' ? (

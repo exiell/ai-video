@@ -605,13 +605,41 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ChatJsonSchemaSpec {
+  name: string;
+  schema: Record<string, unknown>;
+  strict?: boolean;
+}
+
 export interface ChatRequestOptions {
   model: string;
   messages: ChatMessage[];
   /** 要求返回 JSON 对象 */
   jsonMode?: boolean;
+  /** 可选：严格 JSON Schema（仅在厂商/模型支持时由上层传入） */
+  jsonSchema?: ChatJsonSchemaSpec;
   temperature?: number;
   maxTokens?: number;
+}
+
+/**
+ * 判断模型档案是否原生支持 OpenAI 兼容的严格 `response_format: { type: 'json_schema' }`。
+ *
+ * 依据跨厂商实测兼容矩阵：
+ * - DeepSeek 原生端点拒绝 json_schema，只能走 json_object
+ * - Qwen 仅 3.7/3.8 系列支持 json_schema，存量版本走 json_object
+ * - OpenAI / Gemini / Anthropic（经兼容网关）支持严格 json_schema
+ */
+export function supportsStrictJsonSchema(profile: ModelProfile): boolean {
+  const id = `${profile.id} ${profile.provider} ${profile.model ?? ''} ${profile.endpoint}`.toLowerCase();
+  if (/deepseek/.test(id)) return false;
+  if (/qwen|dashscope|bailian/.test(id)) {
+    return /qwen-?3\.[78]/i.test(id);
+  }
+  if (/openai|gpt-4|gpt-5|o1|o3|gemini|claude|anthropic/.test(id)) {
+    return true;
+  }
+  return false;
 }
 
 /** 构造 OpenAI 兼容的对话请求体 */
@@ -620,7 +648,18 @@ export function buildChatPayload(options: ChatRequestOptions): Record<string, un
     model: options.model,
     messages: options.messages,
   };
-  if (options.jsonMode) payload.response_format = { type: 'json_object' };
+  if (options.jsonSchema) {
+    payload.response_format = {
+      type: 'json_schema',
+      json_schema: {
+        name: options.jsonSchema.name,
+        strict: options.jsonSchema.strict ?? true,
+        schema: options.jsonSchema.schema,
+      },
+    };
+  } else if (options.jsonMode) {
+    payload.response_format = { type: 'json_object' };
+  }
   if (options.temperature !== undefined) payload.temperature = options.temperature;
   if (options.maxTokens !== undefined) payload.max_tokens = options.maxTokens;
   return payload;

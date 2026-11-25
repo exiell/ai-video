@@ -8,6 +8,7 @@
  *  - 画幅由首帧宽高比决定：h/w≈1.78 竖屏，≈0.56 横屏。
  */
 import type { Asset, Project, Shot } from '../../types/model';
+import { isCharacterStageEnabled } from '../../domain/pipeline/profiles';
 import type { BuildReferencesResult, VideoAspect } from '../../types/video';
 
 function latestByKind(
@@ -38,7 +39,7 @@ export function defaultReferenceAssetIds(
 
 export function buildVideoReferences(
   shot: Pick<Shot, 'id' | 'characterIds' | 'sceneId'>,
-  project: Pick<Project, 'id'>,
+  project: Pick<Project, 'id' | 'videoMode' | 'enableVirtualHost'>,
   assets: Asset[],
 ): BuildReferencesResult {
   const projectAssets = assets.filter((asset) => asset.projectId === project.id);
@@ -63,20 +64,22 @@ export function buildVideoReferences(
     picked.push(asset);
   };
 
-  // 角色形象图：优先锁脸的头像，没有再退全身多视图；每个角色最多一张
-  for (const characterId of shot.characterIds ?? []) {
-    const face = latestByKind(
-      projectAssets,
-      (asset) =>
-        asset.kind === 'character-sheet-face' &&
-        asset.refId === characterId,
-    );
-    const full = latestByKind(
-      projectAssets,
-      (asset) => asset.kind === 'character-sheet' && asset.refId === characterId,
-    );
-    add(face ?? full);
-    if (picked.length >= 4) break;
+  // 角色形象图：仅在启用角色阶段时注入；scenic/无主持人模式彻底屏蔽角色参考图槽位
+  if (isCharacterStageEnabled(project)) {
+    for (const characterId of shot.characterIds ?? []) {
+      const face = latestByKind(
+        projectAssets,
+        (asset) =>
+          asset.kind === 'character-sheet-face' &&
+          asset.refId === characterId,
+      );
+      const full = latestByKind(
+        projectAssets,
+        (asset) => asset.kind === 'character-sheet' && asset.refId === characterId,
+      );
+      add(face ?? full);
+      if (picked.length >= 4) break;
+    }
   }
 
   // 场景板

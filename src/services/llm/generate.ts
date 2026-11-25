@@ -1,5 +1,6 @@
-import type { Project } from '../../types/model';
+import type { ModelProfile, Project } from '../../types/model';
 import { PLATFORM_LABEL } from '../../types/model';
+import { resolveVideoMode } from '../../domain/pipeline/profiles';
 import {
   buildChatPayload,
   extractChatContent,
@@ -7,13 +8,16 @@ import {
   type ChatMessage,
   type RequestOptions,
 } from '../gateway';
-import type { ModelProfile } from '../../types/model';
 import {
   parseAssets,
+  parseExplainerAssets,
+  parseScenicAssets,
   parseShots,
   parseStory,
   parseStyleTags,
   type GeneratedAssets,
+  type GeneratedExplainerAssets,
+  type GeneratedScenicAssets,
   type GeneratedShots,
   type GeneratedStory,
   type GeneratedStyleTags,
@@ -94,15 +98,23 @@ export function buildStoryChatMessages(
   const summary = project.creativeContext?.consensusSummary?.trim();
   const storySnippet = project.story.body.trim();
 
+  const mode = resolveVideoMode(project);
+  const modeLead =
+    mode === 'scenic'
+      ? '你是自然纪录片与视觉风光短片的前期策划伙伴。当前项目处于【自然风光无角色模式（scenic）】：禁止设计或强行加入人类角色，也不要把水滴、光线、岩石等自然现象拟人化为角色，聚焦光影、气象演进、宏观地貌与微距物理细节。'
+      : mode === 'explainer'
+        ? `你是知识科普视频的前期策划伙伴。当前项目处于【科普解说无实景模式（explainer）】：用「3秒提问钩子 → 核心论点 → 概念节拍 + 具象视觉隐喻」来构思，无需虚构教室/实验室/办公室等物理实景；当前虚拟讲解员开关为 ${project.enableVirtualHost ? '开启（最多 1 个轻量吉祥物）' : '关闭（不要设计任何主持人或拟人角色）'}。`
+        : '你是动漫短片的前期策划与编剧伙伴。你的任务是通过自然、高效的中文对话，帮创作者打磨故事思路、题材切入点、情节反转、人物亮点与视觉节奏。';
+
   const systemParts = [
-    '你是动漫短片的前期策划与编剧伙伴。你的任务是通过自然、高效的中文对话，帮创作者打磨故事思路、题材切入点、情节反转、人物亮点与视觉节奏。',
+    modeLead,
     '',
     '交流原则：',
     '- 用清晰、口语化的中文回复，给出具体可拍的画面建议，不要空泛说教。',
     '- 如果是科普、知识讲解或特定题材，优先帮用户找到「有画面感的比喻、核心冲突与开头 3 秒钩子」。',
     '- 如果系统附带了「本地资料库参考」或「联网搜索参考资料」，请优先基于这些准确事实来构思，避免编造错误知识。',
     '- 每次回复控制在 150-380 字，重点突出；结尾可以给 1-2 个推进方向供用户选择。',
-    '- 当故事脉络已经清晰时，可提醒用户点击「根据以上对话生成故事大纲」落盘。',
+    '- 当脉络已经清晰时，可提醒用户点击「根据以上对话生成大纲」落盘。',
   ];
 
   const contextLines = [
@@ -177,17 +189,98 @@ export const STORY_SCHEMA_TEXT = `{
   ]
 }`;
 
+export const SCENIC_DIRECTOR_PROMPT = `你是自然纪录片摄影指导。当前项目处于【纯风光无角色模式 (scenic)】，严格遵守以下铁律：
+
+【绝对禁止项】
+- 禁止创建、提取或提及任何角色（characters）、人物、剪影或拟人化形象。
+- 绝对禁止将水滴、光线、岩石、风、雾气、植物等自然现象包装为「角色卡」，它们仅作为镜头中的自然主体与物理运动要素描述。
+
+【必须产出的视觉锚定】
+- 首先锁定全局 visualBible：统一摄影质感、3-5 个核心色板、固定光源方向（同一场景内所有连续镜头保持一致）、焦段建议（大场景与空间过渡优先 50mm 及以上中焦防广角畸变）、大气能见度。
+- 逐镜编写 10 槽位摄影单，从六大纪录片镜型中交替编排节奏（微距细节、高空航拍扫掠、慢动作生态节拍、水下平滑推进、地貌延时、静候凝视镜头）。
+- 严禁使用「唯美、震撼、电影感」等空洞形容词；必须描述具体的物理受力、光线变化（如丁达尔光束穿过晨雾）、主运动与次级运动（水面涟漪、松针轻颤）、精确摄影机运动以及原生环境音景（溪流、风声、鸟鸣）。
+- 对需要无缝衔接的相邻镜头，标记 continuityMode 为 "prev_tail_frame_offset" 或 "first_last_frame"。`;
+
+export function buildExplainerDirectorPrompt(enableVirtualHost: boolean): string {
+  return `你是知识科普视频总导演。当前项目处于【科普解说模式 (explainer)】，画面由「连续旁白 + 视觉隐喻 + 统一风格预设」驱动，无需虚构「教室/办公室/实验室」等传统物理场景。
+
+【工作流程】
+- 旁白脚本优先：按「3秒提问钩子 → 核心论点 → 多个 20-30 词的清晰概念节拍（每段仅讲清 1 个核心点）→ 总结启示」撰写完整解说词。
+- 抽象转具象（隐喻转译）：审查每一句解说词，绝不允许画面停留在抽象概念。将每一句改写为可绘制的具象视觉隐喻（优先运用尺度缩放 Scale、不可见过程推演 Process、直观对比 Comparison）。
+- 风格预设与母题资产：锁定全局 stylePreset（优先推荐高辨识度扁平矢量插画或半调报纸拼贴风格，明确声明非写实摄影）；仅把跨 3 个以上镜头反复出现的核心非人物符号（如星球、分子模型、标志性道具）提取至 visual_motif 资产清单。
+- 角色红线：当前 enableVirtualHost=${String(enableVirtualHost)}。若为 false，严禁输出任何角色或虚拟主持人，且严禁将微观粒子、天体或数据名词拟人化为角色。
+- 混合渲染与标注规范：对于纯数据图表、数学公式推导或精密结构对比镜头，将 renderEngine 标记为 "html_hyperframes" 或 "manim" 并填写 codeRenderSpec；其余视觉隐喻镜头标记为 "ai_ref_to_video" 或 "ai_image_kenburns"，屏幕文字标注严格控制在 3-5 个词以内，画面提示词避免使用易触发安全误拒的敏感年龄词。`;
+}
+
 export function buildStoryMessages(project: Project): ChatMessage[] {
+  const mode = resolveVideoMode(project);
   const isGenerated = project.story.source === 'generated';
   const creativeCtx = buildCreativeContextBlock(project);
   const userInput = [
     isGenerated && project.story.theme ? `主题：${project.story.theme}` : '',
-    project.story.body ? `已有的故事素材：${project.story.body}` : '',
+    project.story.body ? `已有的创作素材：${project.story.body}` : '',
     project.logline ? `一句话简介：${project.logline}` : '',
     creativeCtx,
   ]
     .filter(Boolean)
     .join('\n\n');
+
+  if (mode === 'scenic') {
+    return [
+      {
+        role: 'system',
+        content: [
+          SCENIC_DIRECTOR_PROMPT,
+          '',
+          '本阶段任务：将用户想法整理为自然风光短片视觉节拍脚本。',
+          '- charactersNote 必须返回空字符串 ""（无角色模式禁止编造人物）。',
+          '- scenes 用于记录 2-4 个自然时段/地貌段落（Visual Beats），而非戏剧对话场次。',
+          '',
+          JSON_RULES,
+          '',
+          'JSON 结构：',
+          STORY_SCHEMA_TEXT,
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          platformContext(project),
+          '',
+          userInput || '请创作一段清晨高山峡谷的自然风光视觉节拍大纲。',
+        ].join('\n'),
+      },
+    ];
+  }
+
+  if (mode === 'explainer') {
+    return [
+      {
+        role: 'system',
+        content: [
+          buildExplainerDirectorPrompt(Boolean(project.enableVirtualHost)),
+          '',
+          '本阶段任务：撰写「旁白先行」的科普解说脚本与概念节拍拆分。',
+          '- body 与 narrationScript 填写完整流畅的连续解说词（供单次连续配音使用）。',
+          '- scenes 用于记录 3-6 个概念章节/节拍（Concept Beats），不要虚构教室或实验室物理场景。',
+          `- ${project.enableVirtualHost ? '已开启虚拟讲解员，charactersNote 可简述唯一轻量吉祥物。' : '未开启虚拟讲解员，charactersNote 必须为空字符串 ""。'}`,
+          '',
+          JSON_RULES,
+          '',
+          'JSON 结构（可附加 narrationScript 字段）：',
+          STORY_SCHEMA_TEXT,
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          platformContext(project),
+          '',
+          userInput || '请自拟一个有趣的科学原理科普解说脚本。',
+        ].join('\n'),
+      },
+    ];
+  }
 
   return [
     {
@@ -223,6 +316,7 @@ export function buildStoryMessages(project: Project): ChatMessage[] {
 // ---------------------------------------------------------------------------
 
 export const ASSETS_SCHEMA_TEXT = `{
+  "hasSentientCharacters": true,
   "characters": [
     {
       "slug": "英文小写标识，如 lin-chong，全片唯一",
@@ -306,6 +400,13 @@ export function buildAssetsMessages(project: Project): ChatMessage[] {
           '（如 fins, tail, wings, shell, mechanical parts），不要写人类四肢；human 角色 form 填 human。',
         '- 不要给次要角色写变体，变体只留给主角。',
         '',
+        '【角色本体边界与空值弃权规则（硬红线）】',
+        '- 角色仅限具备自主意识、行动主体性或对白的生物及用户显式指定的拟人化吉祥物。',
+        '- 严禁将水滴、露珠、光线、阳光、岩石、山峰、风、云雾、河流、雪、火焰、分子、粒子、公式、抽象概念列为角色！',
+        '- 若故事中没有具备自主意识的角色，必须将 hasSentientCharacters 设为 false 并返回 "characters": []，绝不可为填满数组而捏造角色。',
+        '- 反例 1（自然风光）：「露珠从松针滑落到青苔岩石，晨光穿透薄雾」→ {"hasSentientCharacters": false, "characters": [], "scenes": [...]}',
+        '- 反例 2（知识科普）：「光子发生量子纠缠，信号在星系间传播」→ {"hasSentientCharacters": false, "characters": [], "scenes": []}',
+        '',
         JSON_RULES,
         '',
         'JSON 结构：',
@@ -332,6 +433,159 @@ export function buildAssetsMessages(project: Project): ChatMessage[] {
               creativeCtx,
             ]
           : []),
+      ].join('\n'),
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// ②.1 纯风光模式（scenic）：视觉圣经 + 宏观环境锚点（Schema 物理移除 characters）
+// ---------------------------------------------------------------------------
+
+export const SCENIC_ASSETS_SCHEMA_TEXT = `{
+  "visualBible": {
+    "styleAnchor": "英文摄影质感锚点，如 35mm documentary cinema, natural film grain",
+    "colorPalette": ["3-5 个锁定主色调，英文或中文"],
+    "lightingDirection": "固定光源方向，如 low golden morning sunlight from upper-left",
+    "lensAndFramingRule": "焦段与构图约束，如 50mm+ mid-telephoto to prevent wide-angle distortion",
+    "atmosphereOrMotifRules": "大气能见度/天气与自然质感规则",
+    "styleExclusionRule": "正向无人物铁律，如 uninhabited untouched natural landscape, documentary cinematography"
+  },
+  "scenes": [
+    {
+      "slug": "英文小写标识，如 alpine-valley",
+      "name": "宏观地貌/环境名，中文",
+      "identity": {
+        "placeType": "地貌类型，中文",
+        "spatialStructure": "地形与空间纵深结构，中文",
+        "summary": "一句话中文概述",
+        "summaryEn": "英文宏观环境描述，直接用于画面提示词"
+      },
+      "fixedElements": ["英文短语，标志性地貌与自然要素，3-5 条"],
+      "lightDirection": "固定光源方向（与 visualBible 保持一致）",
+      "mainColor": "主色调，中文",
+      "timeOfDay": "时段",
+      "weather": "天气",
+      "continuityLocks": [
+        { "label": "锁名", "phrase": "英文短语", "appliesTo": "geography" }
+      ]
+    }
+  ],
+  "visualAssets": [
+    {
+      "category": "environment | style_ref",
+      "name": "环境或风格参考名称",
+      "tag": "@alpine_valley",
+      "visualPrompt": "英文参考画面描述",
+      "isImmutableAnchor": true
+    }
+  ]
+}`;
+
+export function buildScenicAssetsMessages(project: Project): ChatMessage[] {
+  const creativeCtx = buildCreativeContextBlock(project);
+  return [
+    {
+      role: 'system',
+      content: [
+        SCENIC_DIRECTOR_PROMPT,
+        '',
+        '本阶段任务：锁定全片视觉圣经（visualBible）与宏观环境锚点（scenes / visualAssets）。',
+        '注意：本模式的输出 Schema 中不包含 characters 字段，严禁输出任何角色或将水滴/光线/岩石注册为角色。',
+        '',
+        JSON_RULES,
+        '',
+        'JSON 结构：',
+        SCENIC_ASSETS_SCHEMA_TEXT,
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        platformContext(project),
+        '',
+        '视觉节拍脚本：',
+        project.story.body || '（未填）',
+        ...(creativeCtx ? ['', '前期创作共识：', creativeCtx] : []),
+      ].join('\n'),
+    },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// ②.2 科普解说模式（explainer）：风格预设 + 非人物视觉母题（无物理 scenes）
+// ---------------------------------------------------------------------------
+
+export function buildExplainerAssetsMessages(project: Project): ChatMessage[] {
+  const enableHost = Boolean(project.enableVirtualHost);
+  const creativeCtx = buildCreativeContextBlock(project);
+  const hostFieldText = enableHost
+    ? `,
+  "virtualHost": {
+    "slug": "virtual-host",
+    "name": "唯一虚拟讲解员名称",
+    "role": "protagonist",
+    "identity": {
+      "form": "creature",
+      "species": "轻量卡通吉祥物形态",
+      "face": "简洁面部识别特征",
+      "hair": "表面色彩与造型",
+      "bodyType": "简约几何比例",
+      "ageRange": "",
+      "summary": "一句话概述",
+      "summaryEn": "concise English description of the single flat-vector mascot host"
+    },
+    "continuityLocks": [{ "label": "外观锁", "phrase": "flat geometric mascot badge", "appliesTo": "look" }],
+    "variants": []
+  }`
+    : '';
+
+  const schemaText = `{
+  "visualBible": {
+    "styleAnchor": "风格预设锚点，如 flat geometric vector illustration, no outlines, clean editorial shapes",
+    "colorPalette": ["3-5 个高辨识度主色调"],
+    "lightingDirection": "画面明暗与图形对比规则",
+    "lensAndFramingRule": "信息图构图与留白规范",
+    "atmosphereOrMotifRules": "图形语汇与符号统一规范",
+    "styleExclusionRule": "MUST remain flat geometric vector illustration, not photorealistic"
+  },
+  "visualAssets": [
+    {
+      "category": "visual_motif | style_ref | diagram_card",
+      "name": "跨镜头复用的非人物母题名，如 量子纠缠光子对 / 地球尺度球",
+      "tag": "@quantum_pair",
+      "visualPrompt": "英文母题绘制提示词，不含真实人物",
+      "isImmutableAnchor": true
+    }
+  ]${hostFieldText}
+}`;
+
+  return [
+    {
+      role: 'system',
+      content: [
+        buildExplainerDirectorPrompt(enableHost),
+        '',
+        '本阶段任务：锁定全局风格预设（visualBible）与非人物视觉母题清单（visualAssets）。',
+        '严禁虚构教室、办公室、实验室等物理场景（本模式 Schema 中不含物理 scenes 字段）。',
+        enableHost
+          ? '已开启虚拟讲解员开关：仅允许在 virtualHost 中定义唯一 1 个轻量吉祥物；粒子、公式、星球等概念名词必须放入 visualAssets（category="visual_motif"）。'
+          : '未开启虚拟讲解员：本模式 Schema 中不含 characters/virtualHost 字段，严禁生成任何人物或拟人化角色。',
+        '',
+        JSON_RULES,
+        '',
+        'JSON 结构：',
+        schemaText,
+      ].join('\n'),
+    },
+    {
+      role: 'user',
+      content: [
+        platformContext(project),
+        '',
+        '科普解说脚本：',
+        project.narrationScript || project.story.body || '（未填）',
+        ...(creativeCtx ? ['', '前期创作共识：', creativeCtx] : []),
       ].join('\n'),
     },
   ];
@@ -422,6 +676,7 @@ export const SHOTS_SCHEMA_TEXT = `{
 }`;
 
 export function buildShotsMessages(project: Project): ChatMessage[] {
+  const mode = resolveVideoMode(project);
   // slug 用**数组下标**而不是真实 id：id 是随机串，给模型看没有意义，还容易被抄错。
   // 下标在同一轮生成内稳定，模型只要原样回抄即可。
   const scenes = project.scenes
@@ -430,9 +685,173 @@ export function buildShotsMessages(project: Project): ChatMessage[] {
         `- slug: item-${i + 1} | ${s.name} | 固定元素：${s.fixedElements.join(' / ') || '未登记'}`,
     )
     .join('\n');
-  // 锁用「编号 + 名称 + 说明」三栏呈现，而不是 label("phrase") 挤成一行。
-  // 原因：实测模型会去抄那个英文短语，因为夹在引号里看起来更像「该照抄的值」。
-  // 给每条锁一个稳定的编号，并明确要求回传编号，比争「抄标签还是抄短语」可靠得多。
+  const storyScenes = project.story.scenes
+    .map((s, i) => `- index ${i} | ${s.label} | ${s.summary}`)
+    .join('\n');
+  const creativeCtx = buildCreativeContextBlock(project);
+  const bibleBlock = project.visualBible
+    ? [
+        `风格锚点：${project.visualBible.styleAnchor}`,
+        `锁定色板：${project.visualBible.colorPalette.join('、')}`,
+        `固定光源：${project.visualBible.lightingDirection}`,
+        `焦段构图：${project.visualBible.lensAndFramingRule}`,
+        `氛围/图形规则：${project.visualBible.atmosphereOrMotifRules}`,
+        `风格铁律：${project.visualBible.styleExclusionRule}`,
+      ]
+        .filter((line) => !line.endsWith('：'))
+        .join('\n')
+    : '';
+  const visualAssetsBlock = (project.visualAssets ?? [])
+    .map((a) => `- ${a.tag} (${a.category}) | ${a.name} | ${a.visualPrompt}`)
+    .join('\n');
+
+  if (mode === 'scenic') {
+    const scenicShotsSchema = `{
+  "shots": [
+    {
+      "duration": 5,
+      "shotSize": "extreme-wide | wide | full | medium | close-up | extreme-close-up",
+      "cameraPosition": "机位与焦段，如 50mm 中焦，略低角度贴近青苔表面",
+      "cameraMove": "static | push-in | pull-out | pan-left | pan-right | tilt-up | tilt-down | orbit | tracking | crane-up | crane-down | handheld",
+      "startState": "自然主体与初始物理状态（严禁出现人物）",
+      "action": "主物理运动 + 次级环境运动（如水滴滑落、薄雾流动、松针微颤）",
+      "endState": "镜头结束时的自然画面状态",
+      "dialogue": "",
+      "sound": "原生环境音景（溪流、风声、松涛、露珠滴落）",
+      "mood": "画面光影与氛围，如 清冽晨光",
+      "transition": "转场方式",
+      "continuityNote": "与下一镜的光影/运镜衔接方式",
+      "transitionType": "continuation | cut",
+      "continuityMode": "prev_tail_frame_offset | first_last_frame | style_ref_only | cut",
+      "renderEngine": "ai_video | ai_first_last_frame",
+      "sceneSlug": "从可用宏观环境列表中选择 slug，没有则留空字符串",
+      "characterSlugs": [],
+      "activeLockLabels": ["需要生效的环境锁名称"],
+      "activeVariantLabels": [],
+      "offscreenCharacters": [],
+      "referencedAssetTags": ["@alpine_valley"],
+      "sourceSceneIndex": 0
+    }
+  ]
+}`;
+    return [
+      {
+        role: 'system',
+        content: [
+          SCENIC_DIRECTOR_PROMPT,
+          '',
+          '本阶段任务：生成自然风光 10 槽位分镜表。',
+          '- characterSlugs 必须始终为空数组 []，offscreenCharacters 必须始终为空数组 []。',
+          '- 交替使用六大纪录片镜型（微距细节、高空航拍扫掠、慢动作自然节拍、水下平滑推进、地貌延时、静候凝视长镜头）。',
+          '- 严格避免空洞形容词，写明物理受力、主/次运动与环境音景。',
+          '',
+          JSON_RULES,
+          '',
+          'JSON 结构：',
+          scenicShotsSchema,
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          platformContext(project),
+          ...(bibleBlock ? ['', '已锁定的视觉圣经（VisualBible）：', bibleBlock] : []),
+          '',
+          '视觉节拍脚本：',
+          project.story.body || '（未填）',
+          ...(creativeCtx ? ['', '前期创作讨论上下文：', creativeCtx] : []),
+          '',
+          '段落索引（sourceSceneIndex）：',
+          storyScenes || '（未拆段）',
+          '',
+          '可用宏观环境（sceneSlug）：',
+          scenes || '（无固定环境卡，sceneSlug 可留空字符串）',
+          ...(visualAssetsBlock ? ['', '可用环境/风格标签（referencedAssetTags）：', visualAssetsBlock] : []),
+          '',
+          `请拆出大约 ${Math.max(3, Math.round(project.brief.targetDuration / 5))} 个风光镜头，总时长控制在 ${project.brief.targetDuration} 秒左右。`,
+        ].join('\n'),
+      },
+    ];
+  }
+
+  if (mode === 'explainer') {
+    const enableHost = Boolean(project.enableVirtualHost);
+    const hostList = enableHost
+      ? project.characters.map((c, i) => `- slug: item-${i + 1} | 虚拟讲解员：${c.name}`).join('\n')
+      : '';
+    const explainerShotsSchema = `{
+  "shots": [
+    {
+      "duration": 5,
+      "shotSize": "extreme-wide | wide | full | medium | close-up | extreme-close-up",
+      "cameraPosition": "信息图或视觉隐喻构图机位",
+      "cameraMove": "static | push-in | pull-out | pan-left | pan-right | tilt-up | tilt-down | orbit | tracking | crane-up | crane-down | handheld",
+      "startState": "画面起点（具象视觉隐喻，非抽象词，不虚构教室）",
+      "action": "概念推演或图形动效变化",
+      "endState": "本节拍画面定格状态",
+      "dialogue": "本镜对应的连续解说旁白（20-30 词清晰概念节拍）",
+      "narrationText": "与 dialogue 相同的本镜旁白文本",
+      "visualMetaphor": "将抽象概念转译后的具象物理类比/画面隐喻（Scale/Process/Comparison）",
+      "onScreenLabels": ["简短屏幕标注，限制 3-5 词"],
+      "renderEngine": "ai_ref_to_video | ai_image_kenburns | html_hyperframes | manim",
+      "codeRenderSpec": "若 renderEngine 为 html_hyperframes 或 manim 则填写结构化渲染指令，否则为 null",
+      "continuityMode": "style_ref_only | cut",
+      "sound": "轻柔科普配乐或图形弹出音效",
+      "mood": "清晰理性",
+      "transition": "图形转场",
+      "continuityNote": "与下一概念节拍的视觉过渡",
+      "transitionType": "cut",
+      "sceneSlug": "",
+      "characterSlugs": ${enableHost ? '["仅在虚拟讲解员出镜时填写 slug"]' : '[]'},
+      "activeLockLabels": [],
+      "activeVariantLabels": [],
+      "offscreenCharacters": [],
+      "referencedAssetTags": ["@quantum_pair"],
+      "sourceSceneIndex": 0
+    }
+  ]
+}`;
+    return [
+      {
+        role: 'system',
+        content: [
+          buildExplainerDirectorPrompt(enableHost),
+          '',
+          '本阶段任务：将连续旁白拆分为概念节拍分镜表，并为每镜完成抽象概念到具象视觉隐喻的转译。',
+          '- sceneSlug 统一填 ""（科普模式无物理实景）。',
+          enableHost
+            ? '- 仅允许在 characterSlugs 引用已登记的虚拟讲解员，严禁把粒子/星球/公式当角色。'
+            : '- characterSlugs 必须始终为空数组 []，严禁生成任何角色。',
+          '- 每一镜必须填写 narrationText 与 visualMetaphor；数据图表/数学公式镜头可将 renderEngine 设为 "html_hyperframes" 或 "manim" 并填 codeRenderSpec。',
+          '',
+          JSON_RULES,
+          '',
+          'JSON 结构：',
+          explainerShotsSchema,
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: [
+          platformContext(project),
+          ...(bibleBlock ? ['', '已锁定的风格预设（VisualBible）：', bibleBlock] : []),
+          '',
+          '完整连续科普旁白脚本：',
+          project.narrationScript || project.story.body || '（未填）',
+          ...(creativeCtx ? ['', '前期创作讨论上下文：', creativeCtx] : []),
+          '',
+          '概念章节（sourceSceneIndex）：',
+          storyScenes || '（未拆章节）',
+          ...(visualAssetsBlock ? ['', '可用非人物母题标签（referencedAssetTags）：', visualAssetsBlock] : []),
+          ...(hostList ? ['', '可用虚拟讲解员（characterSlugs）：', hostList] : []),
+          '',
+          `请按旁白节奏拆出大约 ${Math.max(4, Math.round(project.brief.targetDuration / 5))} 个概念节拍镜头，总时长约 ${project.brief.targetDuration} 秒。`,
+        ].join('\n'),
+      },
+    ];
+  }
+
+  // ---- 默认 narrative 叙事剧情模式（100% 保留原有逻辑） ----
   const characters = project.characters
     .map((c, i) => {
       const locks =
@@ -459,10 +878,6 @@ export function buildShotsMessages(project: Project): ChatMessage[] {
       ].join('\n');
     })
     .join('\n');
-  const storyScenes = project.story.scenes
-    .map((s, i) => `- index ${i} | ${s.label} | ${s.summary}`)
-    .join('\n');
-  const creativeCtx = buildCreativeContextBlock(project);
 
   return [
     {
@@ -720,6 +1135,25 @@ export function generateAssets(project: Project, ctx: GenerateContext) {
   return generateWithRetry<GeneratedAssets>(
     buildAssetsMessages(project),
     parseAssets,
+    ctx,
+    MAX_TOKENS_BY_TASK.assets,
+  );
+}
+
+export function generateScenicAssets(project: Project, ctx: GenerateContext) {
+  return generateWithRetry<GeneratedScenicAssets>(
+    buildScenicAssetsMessages(project),
+    parseScenicAssets,
+    ctx,
+    MAX_TOKENS_BY_TASK.assets,
+  );
+}
+
+export function generateExplainerAssets(project: Project, ctx: GenerateContext) {
+  const enableHost = Boolean(project.enableVirtualHost);
+  return generateWithRetry<GeneratedExplainerAssets>(
+    buildExplainerAssetsMessages(project),
+    (raw) => parseExplainerAssets(raw, enableHost),
     ctx,
     MAX_TOKENS_BY_TASK.assets,
   );

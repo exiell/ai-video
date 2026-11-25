@@ -5,15 +5,31 @@ import {
   describeFailure,
   discussStory,
   generateAssets,
+  generateExplainerAssets,
+  generateScenicAssets,
   generateShots,
   generateStory,
   generateStyleTags,
 } from '../services/llm/generate';
-import { assetsFromGenerated, shotsFromGenerated, storyFromGenerated } from '../services/llm/mapping';
+import {
+  assetsFromGenerated,
+  shotsFromGenerated,
+  storyFromGenerated,
+  visualAssetsFromGenerated,
+} from '../services/llm/mapping';
+import { routeVideoIntent } from '../services/llm/intentRouter';
+import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+  makeDefaultVisualBible,
+  resolvePipelineProfile,
+  resolveVideoMode,
+} from '../domain/pipeline/profiles';
+import { sanitizeProjectAssets } from '../domain/pipeline/assetSanitizer';
 import { newId } from '../services/storage';
 import { formatRagHitsForPrompt, searchKnowledge } from '../services/rag';
 import { formatWebResultsForPrompt, searchWeb } from '../services/search/webSearch';
-import type { CreativeContext, StoryChatTurn } from '../types/model';
+import type { CreativeContext, IntentRouteResult, Shot, StoryChatTurn, VideoMode } from '../types/model';
 
 /**
  * 生成状态（方案.md v0.6 §3.2 M1/M2）
@@ -73,9 +89,39 @@ interface GenerationState {
   ) => Promise<void>;
   clearStoryChat: () => void;
   setConsensusSummary: (summary: string) => void;
-  /** 一键串联生成：补风格词（如需） → 拆角色与场景 → 生成分镜 */
+  /** 根据输入或当前故事内容自动识别并锁定视频模式（支持手动覆盖） */
+  detectVideoMode: (
+    userInput?: string,
+    options?: { manualOverride?: VideoMode; manualVirtualHost?: boolean; useLlm?: boolean },
+  ) => Promise<IntentRouteResult | null>;
+  /** 串联生成：补风格词（如需） → 拆设定/视觉圣经（按模式短路） → 生成分镜 */
   runFullPipeline: (options?: { startFrom?: PipelineStage }) => Promise<boolean>;
   clearPipeline: () => void;
+}
+
+/** 科普模式旁白先行时间轴回填：按句长/时长顺序计算每镜在整轨旁白中的 [startSec, endSec] */
+function backfillExplainerTimeline(shots: Shot[]): { shots: Shot[]; narrationScript: string } {
+  let cursor = 0;
+  const narrationParts: string[] = [];
+  const nextShots = shots.map((shot) => {
+    const narration = (shot.narrationText ?? shot.dialogue ?? '').trim();
+    if (narration) narrationParts.push(narration);
+    const estFromNarration =
+      narration.length > 0 ? Math.max(3, Math.min(12, Math.round(narration.length / 4.2))) : shot.duration;
+    const duration = shot.duration > 0 ? shot.duration : estFromNarration;
+    const range: [number, number] =
+      shot.narrationTimeRangeSec && shot.narrationTimeRangeSec[1] > shot.narrationTimeRangeSec[0]
+        ? shot.narrationTimeRangeSec
+        : [Number(cursor.toFixed(1)), Number((cursor + duration).toFixed(1))];
+    cursor = range[1];
+    return {
+      ...shot,
+      duration,
+      narrationText: narration || null,
+      narrationTimeRangeSec: range,
+    };
+  });
+  return { shots: nextShots, narrationScript: narrationParts.join('\n') };
 }
 
 function currentCreativeContext(project: { creativeContext?: CreativeContext }): CreativeContext {
@@ -133,6 +179,11 @@ export const useGeneration = create<GenerationState>((set, get) => ({
 
     const story = storyFromGenerated(outcome.data, project.story);
     useAppStore.getState().patchStory(story);
+    if (outcome.data.narrationScript && outcome.data.narrationScript.trim()) {
+      useAppStore.getState().patchProject({ narrationScript: outcome.data.narrationScript.trim() });
+    } else if (resolveVideoMode(project) === 'explainer' && story.body.trim()) {
+      useAppStore.getState().patchProject({ narrationScript: story.body.trim() });
+    }
     set((s) => ({
       feedback: {
         ...s.feedback,
@@ -161,6 +212,129 @@ export const useGeneration = create<GenerationState>((set, get) => ({
     }
 
     set((s) => ({ pending: 'assets', feedback: { ...s.feedback, assets: undefined } }));
+    const mode = resolveVideoMode(project);
+    const profile = resolvePipelineProfile(project);
+    const charEnabled = isCharacterStageEnabled(project);
+
+    // ---- 模式分支 1：纯风光无角色模式（物理跳过角色提取，生成视觉圣经与宏观环境） ----
+    if (mode === 'scenic' && profile.characterPolicy === 'disabled') {
+      const outcome = await generateScenicAssets(project, built.ctx);
+      set({ pending: null });
+      if (!outcome.ok || !outcome.data) {
+        set((s) => ({
+          feedback: {
+            ...s.feedback,
+            assets: {
+              kind: 'error',
+              message: describeFailure(outcome),
+              warnings: outcome.warnings,
+              ...(outcome.detail ? { detail: outcome.detail } : {}),
+              ...(outcome.raw ? { raw: outcome.raw } : {}),
+            },
+          },
+        }));
+        return;
+      }
+      const mappedScenes = assetsFromGenerated({
+        characters: [],
+        scenes: outcome.data.scenes,
+      });
+      const visualAssets = visualAssetsFromGenerated(outcome.data.visualAssets);
+      const sanitized = sanitizeProjectAssets({
+        project,
+        characters: [],
+        visualAssets,
+        shots: project.shots,
+        storyText: project.story.body,
+      });
+      useAppStore.getState().patchProject({
+        characters: [],
+        scenes: mappedScenes.scenes,
+        visualBible: outcome.data.visualBible,
+        visualAssets: sanitized.visualAssets,
+        shots: sanitized.shots,
+        stageStatus: {
+          ...project.stageStatus,
+          characters: 'skipped',
+          scenes: 'done',
+          visualBible: 'done',
+        },
+      });
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          assets: {
+            kind: 'ok',
+            message: `已跳过角色提取，锁定视觉圣经并生成 ${mappedScenes.scenes.length} 个宏观环境、${sanitized.visualAssets.length} 项环境参考。`,
+            warnings: [...outcome.warnings, ...sanitized.warnings],
+            attempts: outcome.attempts,
+          },
+        },
+      }));
+      return;
+    }
+
+    // ---- 模式分支 2：科普解说无实景模式（物理跳过物理场景提取；未开主持人时同步跳过角色） ----
+    if (mode === 'explainer' && profile.scenePolicy === 'abstract_canvas') {
+      const outcome = await generateExplainerAssets(project, built.ctx);
+      set({ pending: null });
+      if (!outcome.ok || !outcome.data) {
+        set((s) => ({
+          feedback: {
+            ...s.feedback,
+            assets: {
+              kind: 'error',
+              message: describeFailure(outcome),
+              warnings: outcome.warnings,
+              ...(outcome.detail ? { detail: outcome.detail } : {}),
+              ...(outcome.raw ? { raw: outcome.raw } : {}),
+            },
+          },
+        }));
+        return;
+      }
+      const rawHostChars =
+        charEnabled && outcome.data.virtualHost
+          ? assetsFromGenerated({ characters: [outcome.data.virtualHost], scenes: [] }).characters
+          : [];
+      const visualAssets = visualAssetsFromGenerated(outcome.data.visualAssets);
+      const sanitized = sanitizeProjectAssets({
+        project,
+        characters: rawHostChars,
+        visualAssets,
+        shots: project.shots,
+        storyText: project.narrationScript || project.story.body,
+      });
+      useAppStore.getState().patchProject({
+        characters: sanitized.characters,
+        scenes: [],
+        visualBible: outcome.data.visualBible,
+        visualAssets: sanitized.visualAssets,
+        shots: sanitized.shots,
+        stageStatus: {
+          ...project.stageStatus,
+          characters: charEnabled ? 'done' : 'skipped',
+          scenes: 'skipped',
+          visualBible: 'done',
+        },
+      });
+      set((s) => ({
+        feedback: {
+          ...s.feedback,
+          assets: {
+            kind: 'ok',
+            message: charEnabled
+              ? `已跳过物理场景，锁定风格预设并生成 ${sanitized.characters.length} 个虚拟讲解员、${sanitized.visualAssets.length} 项视觉母题。`
+              : `已跳过角色与物理场景提取，锁定风格预设并生成 ${sanitized.visualAssets.length} 项非人物视觉母题。`,
+            warnings: [...outcome.warnings, ...sanitized.warnings],
+            attempts: outcome.attempts,
+          },
+        },
+      }));
+      return;
+    }
+
+    // ---- 模式分支 3：叙事剧情模式（保留兼容 + 挂载非生命体纠偏守卫） ----
     const outcome = await generateAssets(project, built.ctx);
     set({ pending: null });
 
@@ -181,17 +355,30 @@ export const useGeneration = create<GenerationState>((set, get) => ({
     }
 
     const mapping = assetsFromGenerated(outcome.data);
-    useAppStore.getState().patchProject({
+    const sanitized = sanitizeProjectAssets({
+      project,
       characters: mapping.characters,
+      visualAssets: project.visualAssets ?? [],
+      shots: project.shots,
+      storyText: project.story.body,
+    });
+    useAppStore.getState().patchProject({
+      characters: sanitized.characters,
       scenes: mapping.scenes,
+      visualAssets: sanitized.visualAssets,
+      stageStatus: {
+        ...project.stageStatus,
+        characters: 'done',
+        scenes: 'done',
+      },
     });
     set((s) => ({
       feedback: {
         ...s.feedback,
         assets: {
           kind: 'ok',
-          message: `已生成 ${mapping.characters.length} 个角色、${mapping.scenes.length} 个场景，并自动写好了连续性锁。`,
-          warnings: outcome.warnings,
+          message: `已生成 ${sanitized.characters.length} 个角色、${mapping.scenes.length} 个场景，并自动写好了连续性锁。`,
+          warnings: [...outcome.warnings, ...sanitized.warnings],
           attempts: outcome.attempts,
         },
       },
@@ -253,12 +440,29 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       ]),
     };
 
-    const { shots, warnings } = shotsFromGenerated(
+    const requireScene = isPhysicalSceneStageEnabled(project);
+    const allowCharacters = isCharacterStageEnabled(project);
+    const { shots: rawShots, warnings } = shotsFromGenerated(
       outcome.data,
       mapping,
       project.story.scenes.map((s) => ({ id: s.id })),
+      { requireScene, allowCharacters },
     );
-    useAppStore.getState().patchProject({ shots });
+
+    const isExplainer = resolveVideoMode(project) === 'explainer';
+    const timeline = isExplainer ? backfillExplainerTimeline(rawShots) : null;
+    const shots = timeline ? timeline.shots : rawShots;
+
+    useAppStore.getState().patchProject({
+      shots,
+      ...(timeline && timeline.narrationScript
+        ? { narrationScript: timeline.narrationScript }
+        : {}),
+      stageStatus: {
+        ...project.stageStatus,
+        shots: 'done',
+      },
+    });
 
     const total = shots.reduce((sum, s) => sum + s.duration, 0);
     set((s) => ({
@@ -457,6 +661,56 @@ export const useGeneration = create<GenerationState>((set, get) => ({
 
   clearPipeline: () => set({ pipeline: null }),
 
+  detectVideoMode: async (userInput, options) => {
+    const project = useAppStore.getState().project;
+    if (!project) return null;
+    const sourceText =
+      userInput?.trim() ||
+      [
+        project.name,
+        project.logline,
+        project.story.theme ?? '',
+        project.story.body,
+        project.creativeContext?.consensusSummary ?? '',
+        ...(project.creativeContext?.storyChat ?? []).slice(-4).map((t) => t.content),
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+    const built = options?.useLlm ? buildGenerateContext() : null;
+    const result = await routeVideoIntent(sourceText, {
+      ...(options?.manualOverride ? { manualOverride: options.manualOverride } : {}),
+      ...(options?.manualVirtualHost !== undefined
+        ? { manualVirtualHost: options.manualVirtualHost }
+        : {}),
+      ...(built && !('error' in built) ? { ctx: built.ctx } : {}),
+    });
+
+    const nextCharEnabled = isCharacterStageEnabled({
+      videoMode: result.mode,
+      enableVirtualHost: result.enableVirtualHost,
+    });
+    const nextSceneEnabled = isPhysicalSceneStageEnabled({
+      videoMode: result.mode,
+      enableVirtualHost: result.enableVirtualHost,
+    });
+
+    useAppStore.getState().patchProject({
+      videoMode: result.mode,
+      enableVirtualHost: result.enableVirtualHost,
+      intentRoute: result,
+      ...(!project.visualBible && result.mode !== 'narrative'
+        ? { visualBible: makeDefaultVisualBible(result.mode) }
+        : {}),
+      stageStatus: {
+        ...project.stageStatus,
+        ...(!nextCharEnabled ? { characters: 'skipped' as const } : {}),
+        ...(!nextSceneEnabled ? { scenes: 'skipped' as const } : {}),
+      },
+    });
+    return result;
+  },
+
   runFullPipeline: async (options) => {
     const initialProject = useAppStore.getState().project;
     if (!initialProject || get().pending || get().pipeline?.running) return false;
@@ -524,7 +778,7 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       completed.push('style');
     }
 
-    // 第 2 步：携带故事与对话上下文生成角色与场景
+    // 第 2 步：按 PipelineProfile 执行资产阶段（无角色/无实景模式物理短路）
     if (startFrom === 'style' || startFrom === 'assets') {
       const p2 = useAppStore.getState().project;
       if (!p2) return false;
@@ -532,25 +786,125 @@ export const useGeneration = create<GenerationState>((set, get) => ({
         pending: 'assets',
         pipeline: { running: true, currentStage: 'assets', completed: [...completed] },
       });
-      const assetsOutcome = await generateAssets(p2, built.ctx);
-      if (!assetsOutcome.ok || !assetsOutcome.data) {
-        set({
-          pending: null,
-          pipeline: {
-            running: false,
-            currentStage: null,
-            completed: [...completed],
-            failedStage: 'assets',
-            error: describeFailure(assetsOutcome),
+      const mode2 = resolveVideoMode(p2);
+      const profile2 = resolvePipelineProfile(p2);
+      const charEnabled2 = isCharacterStageEnabled(p2);
+
+      if (mode2 === 'scenic' && profile2.characterPolicy === 'disabled') {
+        const scenicOutcome = await generateScenicAssets(p2, built.ctx);
+        if (!scenicOutcome.ok || !scenicOutcome.data) {
+          set({
+            pending: null,
+            pipeline: {
+              running: false,
+              currentStage: null,
+              completed: [...completed],
+              failedStage: 'assets',
+              error: describeFailure(scenicOutcome),
+            },
+          });
+          return false;
+        }
+        const mappedScenes = assetsFromGenerated({
+          characters: [],
+          scenes: scenicOutcome.data.scenes,
+        });
+        const visualAssets = visualAssetsFromGenerated(scenicOutcome.data.visualAssets);
+        const sanitized = sanitizeProjectAssets({
+          project: p2,
+          characters: [],
+          visualAssets,
+          shots: p2.shots,
+          storyText: p2.story.body,
+        });
+        useAppStore.getState().patchProject({
+          characters: [],
+          scenes: mappedScenes.scenes,
+          visualBible: scenicOutcome.data.visualBible,
+          visualAssets: sanitized.visualAssets,
+          stageStatus: {
+            ...p2.stageStatus,
+            characters: 'skipped',
+            scenes: 'done',
+            visualBible: 'done',
           },
         });
-        return false;
+      } else if (mode2 === 'explainer' && profile2.scenePolicy === 'abstract_canvas') {
+        const explainerOutcome = await generateExplainerAssets(p2, built.ctx);
+        if (!explainerOutcome.ok || !explainerOutcome.data) {
+          set({
+            pending: null,
+            pipeline: {
+              running: false,
+              currentStage: null,
+              completed: [...completed],
+              failedStage: 'assets',
+              error: describeFailure(explainerOutcome),
+            },
+          });
+          return false;
+        }
+        const rawHost =
+          charEnabled2 && explainerOutcome.data.virtualHost
+            ? assetsFromGenerated({
+                characters: [explainerOutcome.data.virtualHost],
+                scenes: [],
+              }).characters
+            : [];
+        const visualAssets = visualAssetsFromGenerated(explainerOutcome.data.visualAssets);
+        const sanitized = sanitizeProjectAssets({
+          project: p2,
+          characters: rawHost,
+          visualAssets,
+          shots: p2.shots,
+          storyText: p2.narrationScript || p2.story.body,
+        });
+        useAppStore.getState().patchProject({
+          characters: sanitized.characters,
+          scenes: [],
+          visualBible: explainerOutcome.data.visualBible,
+          visualAssets: sanitized.visualAssets,
+          stageStatus: {
+            ...p2.stageStatus,
+            characters: charEnabled2 ? 'done' : 'skipped',
+            scenes: 'skipped',
+            visualBible: 'done',
+          },
+        });
+      } else {
+        const assetsOutcome = await generateAssets(p2, built.ctx);
+        if (!assetsOutcome.ok || !assetsOutcome.data) {
+          set({
+            pending: null,
+            pipeline: {
+              running: false,
+              currentStage: null,
+              completed: [...completed],
+              failedStage: 'assets',
+              error: describeFailure(assetsOutcome),
+            },
+          });
+          return false;
+        }
+        const mapping = assetsFromGenerated(assetsOutcome.data);
+        const sanitized = sanitizeProjectAssets({
+          project: p2,
+          characters: mapping.characters,
+          visualAssets: p2.visualAssets ?? [],
+          shots: p2.shots,
+          storyText: p2.story.body,
+        });
+        useAppStore.getState().patchProject({
+          characters: sanitized.characters,
+          scenes: mapping.scenes,
+          visualAssets: sanitized.visualAssets,
+          stageStatus: {
+            ...p2.stageStatus,
+            characters: 'done',
+            scenes: 'done',
+          },
+        });
       }
-      const mapping = assetsFromGenerated(assetsOutcome.data);
-      useAppStore.getState().patchProject({
-        characters: mapping.characters,
-        scenes: mapping.scenes,
-      });
       completed.push('assets');
     }
 
@@ -616,13 +970,33 @@ export const useGeneration = create<GenerationState>((set, get) => ({
       shotsOutcome.data,
       shotSlugMapping,
       p3.story.scenes.map((s) => ({ id: s.id })),
+      {
+        requireScene: isPhysicalSceneStageEnabled(p3),
+        allowCharacters: isCharacterStageEnabled(p3),
+      },
     );
-    useAppStore.getState().patchProject({ shots: shotMapping.shots });
+    const isExplainer3 = resolveVideoMode(p3) === 'explainer';
+    const timeline3 = isExplainer3 ? backfillExplainerTimeline(shotMapping.shots) : null;
+    useAppStore.getState().patchProject({
+      shots: timeline3 ? timeline3.shots : shotMapping.shots,
+      ...(timeline3 && timeline3.narrationScript
+        ? { narrationScript: timeline3.narrationScript }
+        : {}),
+      stageStatus: {
+        ...p3.stageStatus,
+        shots: 'done',
+      },
+    });
     completed.push('shots');
 
     const finalProject = useAppStore.getState().project;
+    const finalMode = resolveVideoMode(finalProject);
     const summary = finalProject
-      ? `已连续生成：${finalProject.characters.length} 个角色、${finalProject.scenes.length} 个场景、${finalProject.shots.length} 个镜头。`
+      ? finalMode === 'scenic'
+        ? `已连续生成：视觉圣经与 ${finalProject.scenes.length} 个宏观环境、${finalProject.shots.length} 个风光镜头（角色阶段已跳过）。`
+        : finalMode === 'explainer'
+          ? `已连续生成：风格预设、${(finalProject.visualAssets ?? []).length} 项视觉母题、${finalProject.shots.length} 个科普节拍镜头${finalProject.enableVirtualHost ? `（含 ${finalProject.characters.length} 个虚拟讲解员）` : '（角色与物理场景已跳过）'}。`
+          : `已连续生成：${finalProject.characters.length} 个角色、${finalProject.scenes.length} 个场景、${finalProject.shots.length} 个镜头。`
       : '全部生成完成。';
 
     set({

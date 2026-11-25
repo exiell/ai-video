@@ -12,6 +12,14 @@ import type {
   StoryScene,
   Variant,
 } from '../../types/model';
+import {
+  SHOT_CONTINUITY_MODES,
+  SHOT_RENDER_ENGINES,
+  VIDEO_MODES,
+  VISUAL_ASSET_CATEGORIES,
+  type VisualAsset,
+  type VisualBible,
+} from '../../domain/pipeline/profiles';
 import { CHARACTER_FORMS, SCHEMA_VERSION } from '../../types/model';
 import type { VideoClipRecord, VideoJobRecord } from '../../types/video';
 
@@ -518,8 +526,48 @@ function normalizeScene(value: unknown, now: string): SceneCard | null {
   };
 }
 
+function normalizeVisualAsset(value: unknown): VisualAsset | null {
+  if (!isRecord(value)) return null;
+  const name = text(value.name).trim();
+  const rawTag = text(value.tag).trim();
+  return {
+    id: text(value.id) || newId('va'),
+    category: oneOf(value.category, VISUAL_ASSET_CATEGORIES, 'visual_motif'),
+    name: name || '未命名视觉资产',
+    tag: rawTag || `@${(name || 'asset').toLowerCase().replace(/\s+/g, '_')}`,
+    visualPrompt: text(value.visualPrompt),
+    referenceImageUrls: textArray(value.referenceImageUrls),
+    isImmutableAnchor: Boolean(value.isImmutableAnchor),
+  };
+}
+
+function normalizeVisualBible(value: unknown): VisualBible | undefined {
+  if (!isRecord(value)) return undefined;
+  return {
+    styleAnchor: text(value.styleAnchor),
+    colorPalette: textArray(value.colorPalette),
+    lightingDirection: text(value.lightingDirection),
+    lensAndFramingRule: text(value.lensAndFramingRule),
+    atmosphereOrMotifRules: text(value.atmosphereOrMotifRules),
+    styleExclusionRule: text(value.styleExclusionRule),
+  };
+}
+
 function normalizeShot(value: unknown, index: number): Shot | null {
   if (!isRecord(value)) return null;
+  const rawRange = value.narrationTimeRangeSec;
+  const narrationTimeRangeSec: [number, number] | null | undefined =
+    Array.isArray(rawRange) &&
+    rawRange.length === 2 &&
+    typeof rawRange[0] === 'number' &&
+    Number.isFinite(rawRange[0]) &&
+    typeof rawRange[1] === 'number' &&
+    Number.isFinite(rawRange[1])
+      ? [rawRange[0], rawRange[1]]
+      : rawRange === null
+        ? null
+        : undefined;
+
   return {
     ...(value as unknown as Shot),
     id: text(value.id) || newId('shot'),
@@ -542,6 +590,15 @@ function normalizeShot(value: unknown, index: number): Shot | null {
     activeLockIds: textArray(value.activeLockIds),
     offscreenCharacters: textArray(value.offscreenCharacters),
     sourceSceneId: text(value.sourceSceneId),
+    renderEngine: oneOf(value.renderEngine, SHOT_RENDER_ENGINES, 'ai_video'),
+    ...(value.continuityMode !== undefined
+      ? { continuityMode: oneOf(value.continuityMode, SHOT_CONTINUITY_MODES, 'cut') }
+      : {}),
+    ...(narrationTimeRangeSec !== undefined ? { narrationTimeRangeSec } : {}),
+    ...(Array.isArray(value.onScreenLabels) ? { onScreenLabels: textArray(value.onScreenLabels) } : {}),
+    ...(Array.isArray(value.referencedAssetTags)
+      ? { referencedAssetTags: textArray(value.referencedAssetTags) }
+      : {}),
   };
 }
 
@@ -600,6 +657,16 @@ export function normalizeProject(input: unknown): Project {
     shots: asRecordArray(raw.shots)
       .map((item, index) => normalizeShot(item, index))
       .filter((item): item is Shot => item !== null),
+    videoMode: oneOf(raw.videoMode, VIDEO_MODES, 'narrative'),
+    enableVirtualHost: Boolean(raw.enableVirtualHost),
+    ...(normalizeVisualBible(raw.visualBible) ? { visualBible: normalizeVisualBible(raw.visualBible) } : {}),
+    ...(Array.isArray(raw.visualAssets)
+      ? {
+          visualAssets: asRecordArray(raw.visualAssets)
+            .map(normalizeVisualAsset)
+            .filter((item): item is VisualAsset => item !== null),
+        }
+      : {}),
   };
 }
 

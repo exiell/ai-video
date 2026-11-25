@@ -42,6 +42,10 @@ import {
 } from '../domain/image/prompts';
 import { deleteAsset, estimateUsage, listAssets, listAssetsFor, saveAssets } from '../services/storage';
 import {
+  isCharacterStageEnabled,
+  isPhysicalSceneStageEnabled,
+} from '../domain/pipeline/profiles';
+import {
   missingBeforeFrames,
   framePrereqMessage,
 } from '../domain/image/order';
@@ -534,6 +538,10 @@ export const useImage = create<ImageState>((set, get) => ({
   generateAllCharacterSheets: async () => {
     const project = useAppStore.getState().project;
     if (!project || get().batch) return;
+    if (!isCharacterStageEnabled(project)) {
+      set({ batchSummary: '当前模式已关闭角色阶段，已自动跳过角色形象图生成。' });
+      return;
+    }
     const characters = project.characters;
     if (characters.length === 0) {
       set({ batchSummary: '还没有角色，先去「角色设定」建一个。' });
@@ -567,6 +575,10 @@ export const useImage = create<ImageState>((set, get) => ({
   generateAllScenePlates: async () => {
     const project = useAppStore.getState().project;
     if (!project || get().batch) return;
+    if (!isPhysicalSceneStageEnabled(project)) {
+      set({ batchSummary: '当前科普模式无需物理场景板，已自动跳过。' });
+      return;
+    }
     const scenes = project.scenes;
     if (scenes.length === 0) {
       set({ batchSummary: '还没有场景，先去「场景设定」建一个。' });
